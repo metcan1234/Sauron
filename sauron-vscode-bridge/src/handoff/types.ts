@@ -1,3 +1,8 @@
+export interface HandoffVerification {
+	command: string
+	cwd?: string
+}
+
 export interface SauronHandoff {
 	version?: number
 	id?: string
@@ -8,7 +13,17 @@ export interface SauronHandoff {
 	sessionId?: string
 	createdAt?: string
 	autoStart?: boolean
+	autoChain?: boolean
 	complexityHint?: "low" | "medium" | "high"
+	projectType?: "corporate-web" | "electron-core" | "bridge-extension" | "monorepo-stack" | "generic"
+	pipelineId?: string
+	pipelinePhase?: number
+	pipelineTotalPhases?: number
+	parentHandoffId?: string
+	verification?: HandoffVerification
+	webBrief?: Record<string, unknown>
+	scaffoldPath?: string
+	qualityGates?: string[]
 	costContext?: {
 		coreModelTier?: string
 		optimizerEnabled?: boolean

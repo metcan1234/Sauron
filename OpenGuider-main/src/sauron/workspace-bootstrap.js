@@ -2,6 +2,8 @@ const fs = require("fs");
 const path = require("path");
 const { seedSauronRules } = require("./handoff");
 const { seedWebDevRules } = require("./web-studio/web-dev-rules");
+const { seedClinerulesPacks } = require("./clinerules-packs");
+const { detectWorkspaceLayout } = require("./workspace-detector");
 const { syncFinOpsConfigToWorkspace } = require("./finops/workspace-config");
 const { BRIDGE_EXTENSION_ID, CLINE_EXTENSION_IDS } = require("./workspace-setup");
 
@@ -55,6 +57,9 @@ async function bootstrapWorkspace(workspacePath, settings = {}) {
 
   ensureSauronDir(resolvedPath);
 
+  const layout = detectWorkspaceLayout(resolvedPath);
+  const projectType = settings.projectType || layout.suggestedProjectType;
+
   const finopsResult = await syncFinOpsConfigToWorkspace({
     ...settings,
     workspacePath: resolvedPath,
@@ -62,15 +67,19 @@ async function bootstrapWorkspace(workspacePath, settings = {}) {
 
   const rulesResult = seedSauronRules(resolvedPath);
   const webDevRulesResult = seedWebDevRules(resolvedPath);
+  const packsResult = seedClinerulesPacks(resolvedPath, projectType);
   const extensionsPath = writeExtensionsRecommendations(resolvedPath);
 
   return {
     ok: true,
     workspacePath: resolvedPath,
+    projectType,
+    layout: layout.layout,
     finopsConfigPath: finopsResult.configPath || null,
     rulesSeeded: rulesResult.seeded,
     webDevRulesSeeded: webDevRulesResult.seeded,
     webDevRulesPath: webDevRulesResult.path || null,
+    clinerulesPacksSeeded: packsResult.seeded || [],
     extensionsPath,
   };
 }

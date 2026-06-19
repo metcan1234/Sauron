@@ -6,6 +6,7 @@ export interface ClineCapabilities {
 	canDetectActiveTask: boolean
 	canAddToInput: boolean
 	canStartTask: boolean
+	canSyncCredentials: boolean
 }
 
 export function probeClineCapabilities(cline: ClineAPI): ClineCapabilities {
@@ -14,6 +15,7 @@ export function probeClineCapabilities(cline: ClineAPI): ClineCapabilities {
 		canDetectActiveTask: typeof cline.hasActiveTask === "function",
 		canAddToInput: typeof cline.addToInput === "function",
 		canStartTask: typeof cline.startNewTask === "function",
+		canSyncCredentials: typeof cline.syncProviderCredentials === "function",
 	}
 }
 

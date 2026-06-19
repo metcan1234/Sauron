@@ -21,6 +21,22 @@ test("probeClineCapabilities detects marketplace-style partial API", () => {
 	assert.equal(caps.canAddToInput, true)
 	assert.equal(caps.canDetectActiveTask, true)
 	assert.equal(caps.canRouteModel, false)
+	assert.equal(caps.canSyncCredentials, false)
+})
+
+test("probeClineCapabilities detects credential sync on fork API", () => {
+	const cline = {
+		startNewTask: async () => {},
+		sendMessage: async () => {},
+		pressPrimaryButton: async () => {},
+		hasActiveTask: () => false,
+		addToInput: async () => {},
+		pressSecondaryButton: async () => {},
+		syncProviderCredentials: async () => ({ synced: [] }),
+	} satisfies ClineAPI
+
+	const caps = probeClineCapabilities(cline)
+	assert.equal(caps.canSyncCredentials, true)
 })
 
 test("safeHasActiveTask returns false when API missing", () => {

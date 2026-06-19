@@ -38,6 +38,7 @@ export async function applyClineModelBeforeHandoff(
 		workspaceRoot,
 		optimizer,
 		handoff.id,
+		handoff.projectType,
 	)
 
 	const planSelection = resolveClineAgent("low", optimizer.agentMatrix, {

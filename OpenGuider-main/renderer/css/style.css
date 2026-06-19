@@ -247,6 +247,49 @@ html, body {
   padding: 10px 10px;
   user-select: none;
 }
+.mode-badge.is-clickable {
+  cursor: pointer;
+}
+.mode-badge.is-clickable:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.mode-badge.is-guide {
+  color: #f6a27a;
+  border-color: rgba(198, 90, 58, 0.55);
+}
+.capture-screen-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: #000;
+  color: var(--text);
+  font-size: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.capture-screen-btn:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.screen-pending-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  color: var(--accent);
+  border: 1px solid rgba(198, 90, 58, 0.35);
+  border-radius: 10px;
+  padding: 2px 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.screen-pending-badge.hidden {
+  display: none;
+}
 
 .mode-select {
   width: 112px;
@@ -3084,6 +3127,20 @@ kbd {
 .handoff-history-meta {
   color: var(--text-dim);
   font-size: 11px;
+}
+
+.build-pipeline-panel {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.build-pipeline-meta {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 4px;
 }
 
 .workspace-btn.has-pending-handoff::after {

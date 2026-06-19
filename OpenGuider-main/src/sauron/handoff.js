@@ -1,12 +1,18 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
-const { spawn, execFileSync } = require("child_process");
 const {
   mergeCostOptimizerConfig,
   computeComplexityHint,
 } = require("./finops/cost-optimizer-config");
+const {
+  launchVSCode,
+  focusVSCodeWorkspace,
+  resolveVSCodeCommand,
+} = require("./vscode-launcher");
 const { loadBrief } = require("./web-studio/brief-schema");
+const { normalizeProjectType } = require("./clinerules-packs");
+const { detectWorkspaceLayout } = require("./workspace-detector");
 
 const SAURON_RULES_FILENAME = "sauron-workspace.md";
 const HANDOFF_DIR = ".sauron";
@@ -228,32 +234,34 @@ function buildTaskSummary(snapshot, options = {}) {
   return truncated.slice(0, handoffMaxChars);
 }
 
-function buildHandoffPayload(sessionSnapshot, workspacePath, handoffId = generateHandoffId(), settings = {}) {
+function buildHandoffPayload(sessionSnapshot, workspacePath, handoffId = generateHandoffId(), settings = {}, overrides = {}) {
   const optimizer = mergeCostOptimizerConfig(settings);
   const briefResult = workspacePath ? loadBrief(workspacePath) : { ok: false };
   const webBrief = briefResult.ok ? briefResult.brief : null;
+  const layout = workspacePath ? detectWorkspaceLayout(workspacePath) : { suggestedProjectType: "generic" };
   const taskSummary = buildTaskSummary(sessionSnapshot, {
     includeTranscript: optimizer.routing.includeTranscript,
     handoffMaxChars: optimizer.routing.handoffMaxChars,
     webBrief,
   });
-  const complexityHint = webBrief
-    ? "high"
-    : computeComplexityHint(taskSummary, optimizer.routing.complexityKeywords);
+  const complexityHint = overrides.complexityHint
+    || (webBrief ? "high" : computeComplexityHint(taskSummary, optimizer.routing.complexityKeywords));
 
   const payload = {
     version: 2,
     id: handoffId,
     source: "sauron-core",
     workspacePath,
-    taskSummary,
-    goal: sessionSnapshot?.goalIntent
+    taskSummary: overrides.taskSummary || taskSummary,
+    goal: overrides.goal
+      || sessionSnapshot?.goalIntent
       || sessionSnapshot?.activePlan?.goal
       || sessionSnapshot?.browserExecution?.goal
       || (webBrief ? `Build corporate website for ${webBrief.companyName}` : ""),
-    sessionId: sessionSnapshot?.sessionId || "",
+    sessionId: overrides.sessionId || sessionSnapshot?.sessionId || "",
     createdAt: new Date().toISOString(),
-    autoStart: true,
+    autoStart: overrides.autoStart !== undefined ? Boolean(overrides.autoStart) : true,
+    autoChain: overrides.autoChain !== undefined ? Boolean(overrides.autoChain) : false,
     complexityHint,
     costContext: {
       coreModelTier: optimizer.coreModelTier,
@@ -261,6 +269,19 @@ function buildHandoffPayload(sessionSnapshot, workspacePath, handoffId = generat
       mode: optimizer.mode,
     },
   };
+
+  if (overrides.pipelineId) payload.pipelineId = overrides.pipelineId;
+  if (overrides.pipelinePhase) payload.pipelinePhase = overrides.pipelinePhase;
+  if (overrides.pipelineTotalPhases) payload.pipelineTotalPhases = overrides.pipelineTotalPhases;
+  if (overrides.parentHandoffId) payload.parentHandoffId = overrides.parentHandoffId;
+  if (overrides.verification) payload.verification = overrides.verification;
+
+  const projectType = normalizeProjectType(
+    overrides.projectType || (webBrief ? "corporate-web" : layout.suggestedProjectType),
+  );
+  if (projectType !== "generic") {
+    payload.projectType = projectType;
+  }
 
   if (webBrief) {
     payload.projectType = "corporate-web";
@@ -330,35 +351,6 @@ function seedSauronRules(workspacePath) {
   fs.mkdirSync(rulesDir, { recursive: true });
   fs.writeFileSync(rulesPath, SAURON_RULES_CONTENT, "utf8");
   return { seeded: true, path: rulesPath };
-}
-
-function resolveVSCodeCommand() {
-  if (process.platform === "win32") {
-    const candidates = [
-      path.join(process.env.LOCALAPPDATA || "", "Programs", "Microsoft VS Code", "bin", "code.cmd"),
-      path.join(process.env.ProgramFiles || "", "Microsoft VS Code", "bin", "code.cmd"),
-      path.join(process.env["ProgramFiles(x86)"] || "", "Microsoft VS Code", "bin", "code.cmd"),
-    ];
-    for (const candidate of candidates) {
-      if (candidate && fs.existsSync(candidate)) {
-        return candidate;
-      }
-    }
-    try {
-      const result = execFileSync("where", ["code"], {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      });
-      const first = result.trim().split(/\r?\n/).find(Boolean);
-      if (first && fs.existsSync(first)) {
-        return first;
-      }
-    } catch {
-      // where failed — fall through to error below
-    }
-    return null;
-  }
-  return "code";
 }
 
 function rejectPendingHandoffs(workspacePath) {
@@ -485,59 +477,6 @@ function listHandoffHistory(workspacePath, options = {}) {
 
   items.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   return items.slice(0, limit);
-}
-
-function launchVSCode(workspacePath, options = {}) {
-  if (!workspacePath || !fs.existsSync(workspacePath)) {
-    throw new Error("Workspace path is invalid or does not exist.");
-  }
-
-  const codeCmd = resolveVSCodeCommand();
-  if (!codeCmd) {
-    throw new Error(
-      "VS Code CLI (code) not found. Install VS Code and enable \"Shell Command: Install 'code' command in PATH\".",
-    );
-  }
-
-  const newWindow = options.newWindow !== false;
-
-  return new Promise((resolve, reject) => {
-    const launchArgs = newWindow ? ["-n", workspacePath] : [workspacePath];
-
-    if (process.platform === "win32") {
-      const child = spawn("cmd.exe", ["/c", "start", "", codeCmd, ...launchArgs], {
-        detached: true,
-        stdio: "ignore",
-        windowsHide: true,
-      });
-      child.on("error", reject);
-      child.unref();
-      resolve({ codeCmd, focused: true, newWindow });
-      return;
-    }
-
-    const child = spawn(codeCmd, launchArgs, {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: true,
-    });
-    child.on("error", reject);
-    child.unref();
-    resolve({ codeCmd, focused: false, newWindow });
-  });
-}
-
-function focusVSCodeWorkspace(workspacePath) {
-  if (!workspacePath || !fs.existsSync(workspacePath)) {
-    throw new Error("Workspace path is invalid or does not exist.");
-  }
-
-  const codeCmd = resolveVSCodeCommand();
-  if (!codeCmd) {
-    throw new Error("VS Code CLI (code) not found.");
-  }
-
-  return launchVSCode(workspacePath, { newWindow: false });
 }
 
 module.exports = {

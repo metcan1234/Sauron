@@ -15,6 +15,7 @@ const {
 const path   = require("path");
 const fs = require("fs");
 const { createStore }     = require("./src/store");
+const { getPreloadPath, getRendererDir } = require("./src/app-paths");
 const { SecureStore, SECRET_KEYS } = require("./src/secure-store");
 const { captureAllScreens } = require("./src/screenshot");
 const { streamAIResponse, parsePointTag, fetchOllamaModels } = require("./src/ai/index");
@@ -73,6 +74,10 @@ const { formatStructuredUserError } = require("./src/ai/structured");
 const { configureFinOpsContext } = require("./src/sauron/finops/llm-tracker");
 const { getUsageSummary, getUsageTimeSeries } = require("./src/sauron/finops/usage-tracker");
 const { syncFinOpsConfigToWorkspace } = require("./src/sauron/finops/workspace-config");
+const {
+  writeCredentialRequest,
+  getCredentialSyncStatus,
+} = require("./src/sauron/cline-credential-bridge");
 const { syncAgentMatrixFromSettings } = require("./src/sauron/finops/agent-matrix");
 const { createLogger, createRequestContext, initializeLogger } = require("./src/logger");
 const { PerformanceMetrics } = require("./src/performance-metrics");
@@ -91,6 +96,7 @@ const { registerWorkspaceIpc } = require("./src/ipc/workspace-ipc");
 const { registerFinOpsIpc } = require("./src/ipc/finops-ipc");
 const { registerBrowserIpc } = require("./src/ipc/browser-ipc");
 const { registerWebStudioIpc } = require("./src/ipc/web-studio-ipc");
+const { registerBuildPipelineIpc } = require("./src/ipc/build-pipeline-ipc");
 const { createWindowManager } = require("./src/main/window-manager");
 const { createTrayMenu } = require("./src/main/tray-menu");
 
@@ -153,8 +159,8 @@ function ensureWindowManager() {
     fs,
     nativeImage,
     appLogger,
-    preloadPath: path.join(__dirname, "preload.js"),
-    rendererDir: path.join(__dirname, "renderer"),
+    preloadPath: getPreloadPath(),
+    rendererDir: getRendererDir(),
     constants: {
       PANEL_WIDTH,
       PANEL_HEIGHT,
@@ -418,7 +424,7 @@ async function maybeAutoBackupChatSessions(trigger = "manual") {
     }
     const payload = exportAllSessionsJson(store);
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const filePath = path.join(folderPath, `openguider-chats-${trigger}-${stamp}.json`);
+    const filePath = path.join(folderPath, `sauron-chats-${trigger}-${stamp}.json`);
     fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf8");
     appLogger.info("chat-backup-created", { trigger, filePath });
     return filePath;
@@ -1050,7 +1056,8 @@ async function speakAssistantResponse(text, settings, sender, { shouldAbort } = 
 
 async function handleOrchestratorResult(result, settings, sender) {
   if (result?.pointer?.shouldPoint && result.pointer.coordinate) {
-    showPointer(result.pointer);
+    const persistent = result?.session?.status === "waiting_user";
+    showPointer({ ...result.pointer, persistent });
   } else {
     hideCursorOverlay();
   }
@@ -1133,6 +1140,7 @@ function registerModularIpcHandlers() {
     updatePointerCalibration,
     updateWidgetState,
     broadcastAgentState,
+    broadcastSessionSnapshot,
     showPointer,
     wrapUserFacingError,
   });
@@ -1163,6 +1171,8 @@ function registerModularIpcHandlers() {
     writeHandoff,
     launchVSCode,
     runSauronDoctor,
+    writeCredentialRequest,
+    getCredentialSyncStatus,
   });
 
   registerWebStudioIpc({
@@ -1170,6 +1180,15 @@ function registerModularIpcHandlers() {
     shell,
     store,
     debugLog,
+  });
+
+  registerBuildPipelineIpc({
+    ipcMain,
+    store,
+    debugLog,
+    appLogger,
+    getRuntimeSettings,
+    panelWindow,
   });
 
   registerBrowserIpc({
@@ -1246,6 +1265,13 @@ function setupIPC() {
     } catch (err) {
       appLogger.warn("finops-config-sync-failed", { error: err?.message || err });
     }
+    try {
+      await writeCredentialRequest(settingsToBroadcast.workspacePath, null, {
+        settings: settingsToBroadcast,
+      });
+    } catch (err) {
+      appLogger.warn("cline-credential-request-failed", { error: err?.message || err });
+    }
     return {
       ok: true,
       warnings: guardedInput.warnings,
@@ -1300,11 +1326,12 @@ function setupIPC() {
   });
 
   // ── Screenshot ───────────────────────────────────────────────────────────
-  ipcMain.handle("capture-screenshot", async () => {
+  ipcMain.handle("capture-screenshot", async (_event, options = {}) => {
     const startedAt = Date.now();
-    debugLog("ipc:capture-screenshot");
+    const forceFresh = Boolean(options?.forceFresh);
+    debugLog("ipc:capture-screenshot", { forceFresh });
     try {
-      const result = await captureAllScreens({ includeTimings: true });
+      const result = await captureAllScreens({ includeTimings: true, forceFresh, maxAgeMs: forceFresh ? 0 : 900 });
       recordPerformanceMetric("ipc.capture-screenshot", startedAt, {
         ok: true,
         meta: {
@@ -1468,7 +1495,7 @@ app.whenReady().then(async () => {
   registerCrashTracking();
   debugLog("app:ready start");
   store = createStore();
-  secureStore = new SecureStore({ safeStorage, serviceName: "OpenGuider" });
+  secureStore = new SecureStore({ safeStorage, serviceName: "Sauron" });
   configureFinOpsContext({
     getSettings: () => store.store,
     getWindows: getFinOpsAlertWindows,

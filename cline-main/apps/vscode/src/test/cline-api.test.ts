@@ -271,4 +271,41 @@ describe("ClineAPI Core Functionality", () => {
 			sinon.assert.called(mockController.postStateToWebview)
 		})
 	})
+
+	describe("getTaskState / clearTask / getLastTaskSummary", () => {
+		it("should return null task state when no active task", () => {
+			mockController.task = undefined
+			should.equal(api.getTaskState(), null)
+		})
+
+		it("should return active task state", () => {
+			mockController.task = { taskId: "task-abc" }
+			const state = api.getTaskState()
+			should.exist(state)
+			state!.active.should.be.true()
+			state!.taskId!.should.equal("task-abc")
+		})
+
+		it("should clear task and store last summary", async () => {
+			mockController.task = {
+				taskId: "task-done",
+				messageStateHandler: {
+					getClineMessages: () => [
+						{ say: "text", text: "Implemented feature X successfully." },
+					],
+				},
+			}
+
+			const result = await api.clearTask()
+			result.cleared.should.be.true()
+			sinon.assert.called(mockController.clearTask)
+			api.getLastTaskSummary()!.should.equal("Implemented feature X successfully.")
+		})
+
+		it("should return cleared false when no task", async () => {
+			mockController.task = undefined
+			const result = await api.clearTask()
+			result.cleared.should.be.false()
+		})
+	})
 })

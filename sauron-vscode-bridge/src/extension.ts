@@ -8,12 +8,13 @@ import {
 } from "./cline-capabilities"
 import { cleanupOldHandoffArtifacts } from "./handoff/cleanup"
 import {
-	getLatestPendingHandoff,
+	getNextPendingHandoff,
 	listPendingHandoffs,
 	markHandoffConsumed,
 	markHandoffRejected,
 	readHandoffFile,
 } from "./handoff/discovery"
+import { setLastConsumedHandoff } from "./handoff/task-complete"
 import {
 	buildPromptFromHandoffForWorkspace,
 	HANDOFF_REJECT_LABEL,
@@ -24,6 +25,7 @@ import {
 	resolveWorkspaceRootFromHandoff,
 } from "./handoff/handleIncomingHandoff"
 import { applyClineModelBeforeHandoff } from "./cost-optimizer/apply"
+import { syncCredentialsForWorkspace } from "./credentials/sync"
 import type { HandoffUserChoice } from "./handoff/types"
 import { readFinOpsConfig } from "./usage/config"
 import { startCostMonitor } from "./usage/monitor"
@@ -109,10 +111,24 @@ export async function handleIncomingHandoffWithActiveTask(
 	}
 
 	const finopsConfig = await readFinOpsConfig(workspaceRoot)
+	await syncCredentialsForWorkspace(workspaceRoot, cline).catch(() => ({ ok: false, synced: [] }))
 	await logCostOptimizerHint(workspaceRoot, handoff, finopsConfig).catch(() => {})
 	await applyClineModelBeforeHandoff(cline, handoff, finopsConfig, workspaceRoot).catch(() => {})
 
-	const action = resolveHandoffAction(safeHasActiveTask(cline), handoff.autoStart, userChoice)
+	const hasActive = safeHasActiveTask(cline)
+	if (hasActive && handoff.autoChain && typeof cline.clearTask === "function") {
+		await cline.clearTask()
+		vscode.window.showInformationMessage(
+			"Önceki Cline görevi tamamlandı — pipeline sonraki faz otomatik yükleniyor.",
+		)
+	}
+
+	const action = resolveHandoffAction(
+		safeHasActiveTask(cline),
+		handoff.autoStart,
+		userChoice,
+		handoff.autoChain,
+	)
 	if (action === "waitForUser") {
 		const choice = await promptForActiveTaskChoice()
 		return handleIncomingHandoffWithActiveTask(cline, fullPath, choice)
@@ -132,6 +148,7 @@ export async function handleIncomingHandoffWithActiveTask(
 	if (delivery === "clipboard") {
 		await copyHandoffToClipboard(prompt)
 		await markHandoffConsumed(fullPath)
+		setLastConsumedHandoff(handoff, fullPath)
 		vscode.window.showInformationMessage(
 			"Sauron görev özeti panoya kopyalandı. Cline sidebar'ına yapıştırıp gönderin.",
 		)
@@ -139,6 +156,7 @@ export async function handleIncomingHandoffWithActiveTask(
 	}
 
 	await markHandoffConsumed(fullPath)
+	setLastConsumedHandoff(handoff, fullPath)
 	if (delivery === "startNewTask") {
 		vscode.window.showInformationMessage("Sauron'dan gelen görev Cline'a yüklendi.")
 	} else {
@@ -160,12 +178,12 @@ async function processWorkspace(workspaceRoot: string): Promise<void> {
 			return
 		}
 
-		const latest = await getLatestPendingHandoff(workspaceRoot)
-		if (!latest) {
+		const next = await getNextPendingHandoff(workspaceRoot)
+		if (!next) {
 			return
 		}
 
-		await handleIncomingHandoffWithActiveTask(cline, latest.fullPath)
+		await handleIncomingHandoffWithActiveTask(cline, next.fullPath)
 		await cleanupOldHandoffArtifacts(workspaceRoot)
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error)

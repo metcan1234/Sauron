@@ -26,6 +26,8 @@ function registerWorkspaceIpc({
   writeHandoff,
   launchVSCode,
   runSauronDoctor,
+  writeCredentialRequest,
+  getCredentialSyncStatus,
 }) {
   ipcMain.handle("pick-workspace-folder", async () => {
     debugLog("ipc:pick-workspace-folder");
@@ -210,6 +212,13 @@ function registerWorkspaceIpc({
       };
       const payload = buildHandoffPayload(enrichedSnapshot, workspacePath, undefined, runtimeSettings);
       await bootstrapWorkspace(workspacePath, runtimeSettings);
+      if (writeCredentialRequest) {
+        try {
+          await writeCredentialRequest(workspacePath, null, { settings: runtimeSettings });
+        } catch (credError) {
+          appLogger.warn("handoff-credential-request-failed", { error: credError?.message || credError });
+        }
+      }
       const written = writeHandoff(workspacePath, payload);
       const launchResult = await launchVSCode(workspacePath, { newWindow: true });
 
@@ -228,6 +237,39 @@ function registerWorkspaceIpc({
       return {
         ok: false,
         error: error?.message || "Failed to open workspace.",
+      };
+    }
+  });
+
+  ipcMain.handle("get-cline-sync-status", async () => {
+    try {
+      const runtimeSettings = await getRuntimeSettings();
+      const workspacePath = String(store.get("workspacePath") || "").trim();
+      return {
+        ok: true,
+        ...getCredentialSyncStatus(runtimeSettings, workspacePath),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error?.message || "Failed to read Cline sync status.",
+      };
+    }
+  });
+
+  ipcMain.handle("sync-cline-credentials", async () => {
+    try {
+      const runtimeSettings = await getRuntimeSettings();
+      const workspacePath = String(store.get("workspacePath") || "").trim();
+      if (!workspacePath) {
+        return { ok: false, error: "Workspace path is not configured." };
+      }
+      const result = writeCredentialRequest(workspacePath, null, { settings: runtimeSettings });
+      return result;
+    } catch (error) {
+      return {
+        ok: false,
+        error: error?.message || "Failed to queue Cline credential sync.",
       };
     }
   });

@@ -142,6 +142,7 @@ class Sidecar extends EventEmitter {
         ...envOverrides,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
     });
 
     // Pipe output to logger

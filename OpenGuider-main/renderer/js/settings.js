@@ -19,9 +19,35 @@ function showToast(msg, isError) {
   toastTimer = setTimeout(() => toast.classList.add("hidden"), 3000);
 }
 
+async function refreshClineSyncStatus() {
+  const statusEl = document.getElementById("clineSyncStatus");
+  if (!statusEl) {
+    return;
+  }
+  try {
+    const status = await window.sauron.invoke("get-cline-sync-status");
+    if (!status?.ok) {
+      statusEl.textContent = status?.error || "Senkron durumu okunamadı.";
+      return;
+    }
+    if (!status.hasWorkspace) {
+      statusEl.textContent = "Önce Workspace sekmesinde klasör seçin.";
+      return;
+    }
+    if (!status.ready) {
+      statusEl.textContent = "AI Agents sekmesinde en az bir provider anahtarı girin.";
+      return;
+    }
+    const providers = Array.isArray(status.configuredProviders) ? status.configuredProviders.join(", ") : "";
+    statusEl.textContent = `Hazır: ${providers}${status.pendingRequest ? " · bekleyen senkron isteği var" : ""}`;
+  } catch (error) {
+    statusEl.textContent = error?.message || "Senkron durumu okunamadı.";
+  }
+}
+
 async function init() {
   applyI18nToDocument();
-  settings = await window.openguider.invoke("get-settings");
+  settings = await window.sauron.invoke("get-settings");
 
   // Provider dropdown
   activeProvider = settings.aiProvider || "gemini";
@@ -124,24 +150,37 @@ async function init() {
   updateExecutionModeUi();
 
   document.getElementById("btn-save").addEventListener("click",   saveSettings);
+  document.getElementById("btn-sync-cline")?.addEventListener("click", async () => {
+    try {
+      const result = await window.sauron.invoke("sync-cline-credentials");
+      if (!result?.ok) {
+        showToast(result?.error || "Cline senkron isteği oluşturulamadı", true);
+        return;
+      }
+      showToast(`Cline senkron isteği hazır (${(result.configuredProviders || []).join(", ")})`);
+      await refreshClineSyncStatus();
+    } catch (error) {
+      showToast(error?.message || "Cline senkron başarısız", true);
+    }
+  });
   document.getElementById("btn-reset-all").addEventListener("click", resetAllSettings);
-  document.getElementById("btn-cancel").addEventListener("click", () => window.openguider.invoke("close-settings"));
-  document.getElementById("btn-close").addEventListener("click",  () => window.openguider.invoke("close-settings"));
+  document.getElementById("btn-cancel").addEventListener("click", () => window.sauron.invoke("close-settings"));
+  document.getElementById("btn-close").addEventListener("click",  () => window.sauron.invoke("close-settings"));
   document.getElementById("btn-refresh-metrics").addEventListener("click", refreshMetrics);
   document.getElementById("btn-reset-metrics").addEventListener("click", resetMetrics);
 
   // Plugin UI
   const agentStatusText = document.getElementById("browserAgentStatusText");
-  window.openguider.invoke("get-browser-agent-status").then((statusStr) => {
+  window.sauron.invoke("get-browser-agent-status").then((statusStr) => {
     if (agentStatusText) agentStatusText.textContent = statusStr;
   }).catch(() => {});
   
-  window.openguider.on("browser-agent-status-changed", (newStatus) => {
+  window.sauron.on("browser-agent-status-changed", (newStatus) => {
     if (agentStatusText) agentStatusText.textContent = newStatus;
   });
   
   const progressEl = document.getElementById("agent-download-progress");
-  window.openguider.on("browser-agent-download-progress", (data) => {
+  window.sauron.on("browser-agent-download-progress", (data) => {
     if (!progressEl) return;
     progressEl.classList.remove("hidden");
     if (data.event === "progress") {
@@ -157,7 +196,7 @@ async function init() {
 
   document.getElementById("btn-restart-agent")?.addEventListener("click", async () => {
     if (agentStatusText) agentStatusText.textContent = "restarting...";
-    await window.openguider.invoke("restart-browser-agent");
+    await window.sauron.invoke("restart-browser-agent");
   });
   
   document.getElementById("btn-download-agent")?.addEventListener("click", async () => {
@@ -166,11 +205,11 @@ async function init() {
       progressEl.textContent = "Starting download...";
       progressEl.style.color = "var(--accent)";
     }
-    await window.openguider.invoke("download-browser-agent");
+    await window.sauron.invoke("download-browser-agent");
   });
 
   document.getElementById("btn-browse-workspace")?.addEventListener("click", async () => {
-    const result = await window.openguider.invoke("pick-workspace-folder");
+    const result = await window.sauron.invoke("pick-workspace-folder");
     if (result?.ok && result.path) {
       document.getElementById("workspacePath").value = result.path;
       showToast("Workspace folder selected");
@@ -178,7 +217,7 @@ async function init() {
   });
 
   document.getElementById("btn-browse-backup")?.addEventListener("click", async () => {
-    const result = await window.openguider.invoke("pick-chat-backup-folder");
+    const result = await window.sauron.invoke("pick-chat-backup-folder");
     if (result?.ok && result.path) {
       document.getElementById("chatBackupPath").value = result.path;
       showToast("Yedek klasörü seçildi");
@@ -187,7 +226,7 @@ async function init() {
 
   document.getElementById("btn-backup-now")?.addEventListener("click", async () => {
     const pathValue = document.getElementById("chatBackupPath")?.value.trim();
-    const result = await window.openguider.invoke("backup-chat-sessions", { folderPath: pathValue || undefined });
+    const result = await window.sauron.invoke("backup-chat-sessions", { folderPath: pathValue || undefined });
     if (result?.ok) {
       showToast(`Yedek oluşturuldu: ${result.path}`);
     } else if (!result?.canceled) {
@@ -196,7 +235,7 @@ async function init() {
   });
 
   document.getElementById("btn-import-backup")?.addEventListener("click", async () => {
-    const result = await window.openguider.invoke("import-chat-sessions", { mode: "merge" });
+    const result = await window.sauron.invoke("import-chat-sessions", { mode: "merge" });
     if (result?.ok) {
       showToast(`İçe aktarıldı (${result.importedCount || 0} sohbet)`);
     } else if (!result?.canceled) {
@@ -210,7 +249,7 @@ async function init() {
       return;
     }
     try {
-      const prerequisites = await window.openguider.invoke("check-workspace-prerequisites");
+      const prerequisites = await window.sauron.invoke("check-workspace-prerequisites");
       const bridgeOk = Boolean(prerequisites?.bridgeExtension);
       const clineOk = Boolean(prerequisites?.clineExtension);
       if (bridgeOk && clineOk) {
@@ -237,7 +276,7 @@ async function init() {
       statusEl.textContent = "Bridge kuruluyor…";
     }
     try {
-      const result = await window.openguider.invoke("install-workspace-stack", { force: true });
+      const result = await window.sauron.invoke("install-workspace-stack", { force: true });
       if (result?.ok) {
         if (statusEl) {
           statusEl.textContent = "Bridge kuruldu";
@@ -254,6 +293,7 @@ async function init() {
   });
 
   void refreshWorkspaceStackStatus();
+  void refreshClineSyncStatus();
 
   function renderDoctorResults(result) {
     const summaryEl = document.getElementById("doctor-summary");
@@ -287,7 +327,7 @@ async function init() {
       summaryEl.textContent = "Tanı çalışıyor…";
     }
     try {
-      const result = await window.openguider.invoke("run-sauron-doctor");
+      const result = await window.sauron.invoke("run-sauron-doctor");
       renderDoctorResults(result);
       await refreshWorkspaceStackStatus();
     } catch (error) {
@@ -303,7 +343,7 @@ async function init() {
   bindPluginCards();
   bindShortcutRecordButtons();
   bindFinOpsControls();
-  window.openguider.on("finops-budget-alert", (payload) => {
+  window.sauron.on("finops-budget-alert", (payload) => {
     showToast(payload?.message || "AI bütçe uyarısı", true);
   });
   await refreshMetrics();
@@ -513,7 +553,7 @@ function renderFinOpsAnalyticsChart(series = []) {
 
 async function refreshFinOpsAnalytics() {
   try {
-    const analytics = await window.openguider.invoke("get-finops-analytics", { days: 7 });
+    const analytics = await window.sauron.invoke("get-finops-analytics", { days: 7 });
     if (analytics?.ok) {
       renderFinOpsAnalyticsChart(analytics.series || []);
     }
@@ -602,7 +642,7 @@ function bindFinOpsControls() {
 
 async function refreshFinOpsSummary() {
   try {
-    const summary = await window.openguider.invoke("get-finops-summary");
+    const summary = await window.sauron.invoke("get-finops-summary");
     const spentEl = document.getElementById("finopsTotalSpentTl");
     const hintEl = document.getElementById("finopsSummaryHint");
     const breakdownEl = document.getElementById("finopsBreakdown");
@@ -707,7 +747,7 @@ async function refreshMetrics() {
   const output = document.getElementById("metrics-output");
   if (!output) return;
   try {
-    const snapshot = await window.openguider.invoke("get-performance-metrics");
+    const snapshot = await window.sauron.invoke("get-performance-metrics");
     output.textContent = formatMetricsSnapshot(snapshot);
   } catch (error) {
     output.textContent = "Failed to load metrics.";
@@ -717,7 +757,7 @@ async function refreshMetrics() {
 
 async function resetMetrics() {
   try {
-    await window.openguider.invoke("reset-performance-metrics");
+    await window.sauron.invoke("reset-performance-metrics");
     await refreshMetrics();
     showToast("Telemetry metrics reset");
   } catch (error) {
@@ -909,7 +949,7 @@ async function saveSettings() {
     browserAgentEnabled:     document.getElementById("browserAgentEnabled").checked,
     browserHeadless:         document.getElementById("browserHeadless").checked,
     awareAssistanceEnabled:  document.getElementById("awareAssistanceEnabled").checked,
-    includeScreenshotByDefault: true, // Always true — golden rule
+    includeScreenshotByDefault: false,
     workspacePath:           document.getElementById("workspacePath").value.trim(),
     finopsTotalBudgetTl:     Number(document.getElementById("finopsTotalBudgetTl")?.value) || 0,
     finopsHardBudgetEnabled: document.getElementById("finopsHardBudgetEnabled")?.checked === true,
@@ -933,12 +973,12 @@ async function saveSettings() {
   };
 
   try {
-    const result = await window.openguider.invoke("save-settings", newSettings);
+    const result = await window.sauron.invoke("save-settings", newSettings);
     if (result?.warnings?.length) {
       showToast(result.warnings[0], true);
     }
     showToast("✓ Settings saved");
-    setTimeout(() => window.openguider.invoke("close-settings"), 800);
+    setTimeout(() => window.sauron.invoke("close-settings"), 800);
   } catch (err) {
     showToast("Save failed: " + err.message, true);
   }
@@ -949,7 +989,7 @@ async function resetAllSettings() {
   if (!confirmed) return;
 
   try {
-    await window.openguider.invoke("reset-settings");
+    await window.sauron.invoke("reset-settings");
     showToast("✓ Factory defaults restored");
     setTimeout(() => window.location.reload(), 400);
   } catch (err) {

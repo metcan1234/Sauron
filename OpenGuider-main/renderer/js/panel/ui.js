@@ -22,6 +22,8 @@ export function queryPanelDom(doc = document) {
     panelRoot: doc.querySelector(".panel"),
     agentStatus: doc.getElementById("agent-status"),
     assistantModeBadge: doc.getElementById("assistant-mode-badge"),
+    btnCaptureScreen: doc.getElementById("btn-capture-screen"),
+    screenPendingBadge: doc.getElementById("screen-pending-badge"),
     modeBar: doc.getElementById("mode-bar"),
     modeBarPlugin: doc.getElementById("mode-bar-plugin"),
     modeBarTrust: doc.getElementById("mode-bar-trust"),
@@ -69,6 +71,9 @@ export function queryPanelDom(doc = document) {
     workspaceStatusDismiss: doc.getElementById("workspace-status-dismiss"),
     handoffHistoryPanel: doc.getElementById("handoff-history-panel"),
     handoffHistoryList: doc.getElementById("handoff-history-list"),
+    buildPipelinePanel: doc.getElementById("build-pipeline-panel"),
+    buildPipelineMeta: doc.getElementById("build-pipeline-meta"),
+    buildPipelineAdvance: doc.getElementById("build-pipeline-advance"),
     chatDrawerOverlay: doc.getElementById("chat-drawer-overlay"),
     chatDrawerClose: doc.getElementById("chat-drawer-close"),
     chatDrawerSearch: doc.getElementById("chat-drawer-search"),
@@ -812,6 +817,23 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     });
   }
 
+  function renderBuildPipeline(status = {}) {
+    const pipeline = status?.pipeline;
+    if (!dom.buildPipelinePanel || !dom.buildPipelineMeta) {
+      return;
+    }
+    if (!pipeline || pipeline.status === "completed") {
+      dom.buildPipelinePanel.classList.add("hidden");
+      return;
+    }
+    dom.buildPipelinePanel.classList.remove("hidden");
+    const est = pipeline.totalEstimatedCostTl ? ` · ~${pipeline.totalEstimatedCostTl} TL` : "";
+    dom.buildPipelineMeta.textContent = `${pipeline.label || pipeline.templateId} — faz ${pipeline.currentPhase}/${pipeline.totalPhases}${est}`;
+    if (dom.buildPipelineAdvance) {
+      dom.buildPipelineAdvance.classList.toggle("hidden", !status.pendingComplete);
+    }
+  }
+
   function showOnboarding() {
     if (dom.onboardingOverlay) {
       dom.onboardingOverlay.classList.remove("hidden");
@@ -999,6 +1021,56 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     });
     dom.finopsBadge.classList.toggle("is-warning", remainingPct <= 20);
     dom.finopsBadge.classList.toggle("is-danger", remainingPct <= 5);
+  }
+
+  function renderScreenshotPreviewStrip(screenshots, onClear) {
+    if (!dom.attachmentPreviewStrip) {
+      return;
+    }
+    const screenItems = Array.isArray(screenshots)
+      ? screenshots.map((screen, index) => ({
+          type: "image",
+          base64Jpeg: screen.base64Jpeg,
+          name: screen.label || `Ekran ${index + 1}`,
+        }))
+      : [];
+    if (screenItems.length === 0) {
+      dom.attachmentPreviewStrip.innerHTML = "";
+      dom.attachmentPreviewStrip.classList.add("hidden");
+      return;
+    }
+    renderAttachmentPreviewStrip(screenItems, onClear ? () => onClear() : null);
+  }
+
+  function updateScreenPendingBadge(screenCount) {
+    if (!dom.screenPendingBadge) {
+      return;
+    }
+    const count = Number(screenCount) || 0;
+    if (count <= 0) {
+      dom.screenPendingBadge.classList.add("hidden");
+      dom.screenPendingBadge.textContent = "";
+      return;
+    }
+    dom.screenPendingBadge.classList.remove("hidden");
+    dom.screenPendingBadge.textContent = t("screenPendingBadge", { count });
+  }
+
+  function normalizePanelAssistantMode(mode) {
+    if (mode === "guide" || mode === "planning") {
+      return "guide";
+    }
+    return "assistant";
+  }
+
+  function renderAssistantModeBadge(mode) {
+    if (!dom.assistantModeBadge) {
+      return;
+    }
+    const normalized = normalizePanelAssistantMode(mode);
+    dom.assistantModeBadge.textContent = normalized === "guide" ? t("modeGuide") : t("modeAssistant");
+    dom.assistantModeBadge.dataset.mode = normalized;
+    dom.assistantModeBadge.classList.toggle("is-guide", normalized === "guide");
   }
 
   function renderAttachmentPreviewStrip(attachments, onRemove) {
@@ -1212,6 +1284,7 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     showWorkspaceStatus,
     hideWorkspaceStatus,
     renderHandoffHistory,
+    renderBuildPipeline,
     showOnboarding,
     hideOnboarding,
     closeArtifactPanel,
@@ -1222,6 +1295,9 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     promptDialog,
     refreshFinOpsBadge,
     renderAttachmentPreviewStrip,
+    renderScreenshotPreviewStrip,
+    updateScreenPendingBadge,
+    renderAssistantModeBadge,
     renderFinOpsBadge,
     confirmDialog,
     showTypingIndicator,

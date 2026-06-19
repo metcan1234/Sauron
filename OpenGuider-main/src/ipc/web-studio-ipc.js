@@ -1,10 +1,7 @@
 const { saveBrief, loadBrief, defaultBrief, normalizeBrief } = require("../sauron/web-studio/brief-schema");
 const { scaffoldNextjs } = require("../sauron/web-studio/scaffold-nextjs");
 const { detectNextProject } = require("../sauron/web-studio/project-status");
-const {
-  generateQualityChecklist,
-  exportChecklistMarkdown,
-} = require("../sauron/web-studio/quality-checklist");
+const { detectWebIntent } = require("../sauron/web-studio/web-intent");
 
 function registerWebStudioIpc({
   ipcMain,
@@ -67,6 +64,10 @@ function registerWebStudioIpc({
       markdown: exportChecklistMarkdown(items),
       items,
     };
+  });
+
+  ipcMain.handle("detect-web-intent", (_event, { text } = {}) => {
+    return detectWebIntent(String(text || ""));
   });
 
   ipcMain.handle("open-web-preview", async (_event, { workspacePath, port } = {}) => {

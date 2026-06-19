@@ -2,7 +2,7 @@ const { captureUsageFromStreamEvent } = require("../sauron/finops/token-counter"
 const { recordLlmUsage, prepareLlmCall, BudgetExceededError } = require("../sauron/finops/llm-tracker");
 const { streamDeepSeek } = require("./deepseek");
 
-const DEFAULT_SYSTEM_PROMPT = `You are Sauron Core (formerly OpenGuider), a helpful AI companion that lives in the Windows system tray.
+const DEFAULT_SYSTEM_PROMPT = `You are Sauron, a helpful AI companion that lives in the Windows system tray.
 You can see the user's screen when they share it. Keep replies concise unless asked to elaborate.
 Be direct and conversational. When the user asks about something on screen, reference what you see.
 

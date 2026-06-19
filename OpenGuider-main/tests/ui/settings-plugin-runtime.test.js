@@ -35,7 +35,7 @@ test("plugin runtime buttons do not enter shortcut recording mode", async () => 
   };
   global.clearTimeout = () => {};
 
-  window.openguider = {
+  window.sauron = {
     invoke: async (channel) => {
       invokedChannels.push(channel);
       if (channel === "get-settings") {

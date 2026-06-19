@@ -125,7 +125,7 @@ const ripple2 = document.getElementById("ripple2");
 
 let hideTimer = null;
 
-function showCursorAt(x, y, labelText) {
+function showCursorAt(x, y, labelText, options = {}) {
   clearTimeout(hideTimer);
 
   // Place instantly off-screen first time (no transition flash)
@@ -155,23 +155,24 @@ function showCursorAt(x, y, labelText) {
     ripple2.classList.add("animate");
   }, 680);
 
-  // Auto-hide after 5.5s
-  hideTimer = setTimeout(hideCursor, 5500);
+  if (!options.persistent) {
+    hideTimer = setTimeout(hideCursor, 5500);
+  }
 }
 
 function hideCursor() {
   cursor.classList.remove("visible");
 }
 
-window.openguider.on("show-cursor-at", (parsed) => {
+window.sauron.on("show-cursor-at", (parsed) => {
   if (!parsed) return;
   // Fallback to coordinate.x if scaledX isn't set via IPC
   const x = typeof parsed.scaledX === "number" ? parsed.scaledX : (parsed.coordinate?.x || 0);
   const y = typeof parsed.scaledY === "number" ? parsed.scaledY : (parsed.coordinate?.y || 0);
-  showCursorAt(x, y, parsed.label);
+  showCursorAt(x, y, parsed.label, { persistent: Boolean(parsed.persistent) });
 });
 
-window.openguider.on("hide-cursor", hideCursor);
+window.sauron.on("hide-cursor", hideCursor);
 </script>
 </body>
 </html>

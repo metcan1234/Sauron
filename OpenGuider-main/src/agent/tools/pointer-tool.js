@@ -84,6 +84,7 @@ function emitPointerTool({ pointer, screen, cursorOverlayWindow, pointerCalibrat
   const overlayBounds = cursorOverlayWindow.getBounds();
   const payload = {
     ...pointer,
+    persistent: Boolean(pointer?.persistent),
     scaledX: typeof scaled?.x === "number" ? scaled.x - overlayBounds.x : undefined,
     scaledY: typeof scaled?.y === "number" ? scaled.y - overlayBounds.y : undefined,
     screenNumber: Number(pointer?.screenNumber || 0) || null,

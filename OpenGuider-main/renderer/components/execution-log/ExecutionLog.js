@@ -6,7 +6,7 @@
  * Usage: new ExecutionLog(containerEl)
  */
 
-/* global openguider */
+/* global window */
 
 class ExecutionLog {
   /**
@@ -23,7 +23,8 @@ class ExecutionLog {
   // ── IPC ───────────────────────────────────────────────────────────────────
 
   _bindIpc() {
-    openguider.on('execution:substep-progress', (payload) => {
+    const api = window.sauron || window.openguider;
+    api.on('execution:substep-progress', (payload) => {
       const event = payload?.event || 'substep_start';
       const id = String(payload?.stepNumber || payload?.stepId || Date.now());
       const existing = this._entries.find((entry) => entry.id === id);
@@ -58,7 +59,7 @@ class ExecutionLog {
     });
 
     // New step is pending — add a spinner entry
-    openguider.on('execution:step-pending', (payload) => {
+    api.on('execution:step-pending', (payload) => {
       const { step, description, riskScore } = payload;
       this._upsert({
         id:          step.id,
@@ -73,7 +74,7 @@ class ExecutionLog {
     });
 
     // Step completed — update entry
-    openguider.on('execution:step-complete', (result) => {
+    api.on('execution:step-complete', (result) => {
       const { stepId, success, screenshot, message, error } = result;
       this._upsert({
         id:          stepId,
@@ -85,7 +86,7 @@ class ExecutionLog {
     });
 
     // Aborted — mark any pending entries as aborted
-    openguider.on('execution:aborted', () => {
+    api.on('execution:aborted', () => {
       for (const entry of this._entries) {
         if (entry.status === 'pending') {
           entry.status = 'aborted';

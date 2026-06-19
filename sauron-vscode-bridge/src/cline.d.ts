@@ -26,4 +26,13 @@ export interface ClineAPI {
 	setActiveModel?(selection: ActiveModelSelection): Promise<void>
 	getPlanModeModel?(): ActiveModelSelection
 	setPlanModeModel?(selection: ActiveModelSelection): Promise<void>
+	syncProviderCredentials?(creds: {
+		geminiApiKey?: string
+		deepSeekApiKey?: string
+		openAiApiKey?: string
+		ollamaBaseUrl?: string
+	}): Promise<{ synced: string[] }>
+	getTaskState?(): { active: boolean; taskId?: string; startedAt?: string } | null
+	clearTask?(): Promise<{ cleared: boolean }>
+	getLastTaskSummary?(): string | null
 }

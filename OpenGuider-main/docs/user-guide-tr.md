@@ -1,4 +1,4 @@
-# OpenGuider / Sauron Core — Kullanıcı Rehberi (TR)
+# Sauron — Kullanıcı Rehberi (TR)
 
 ## Başlangıç
 

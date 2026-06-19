@@ -1,21 +1,19 @@
-# OpenGuider
+# Sauron
 
-Download [here](https://mo-tunn.github.io/OpenGuider/)
+Download from [GitHub Releases](https://github.com/metcan1234/Sauron/releases/latest)
 
 
 
 <p align="center">
-  <img src="./renderer/assets/logo.png" alt="OpenGuider logo" width="150">
+  <img src="./renderer/assets/logo.png" alt="Sauron logo" width="150">
 </p>
 
-![Landing Deploy](https://img.shields.io/github/actions/workflow/status/mo-tunn/OpenGuider/deploy-landing.yml?branch=main&label=landing%20deploy)
-![Release Build](https://img.shields.io/github/actions/workflow/status/mo-tunn/OpenGuider/release-build.yml?label=release%20build)
-![Tests](https://img.shields.io/github/actions/workflow/status/mo-tunn/OpenGuider/multi-platform-test.yml?branch=main&label=tests)
-![Latest Release](https://img.shields.io/github/v/release/mo-tunn/OpenGuider?label=latest%20release)
-![License](https://img.shields.io/github/license/mo-tunn/OpenGuider)
-[![Buy Me a Coffe](https://img.shields.io/badge/Buy%20me%20a-coffe-ff813f?logo=buymeacoffee&logoColor=white)](https://ppr.ist/2ndBJ4YRz)
+![Release Build](https://img.shields.io/github/actions/workflow/status/metcan1234/Sauron/release-build.yml?label=release%20build)
+![Tests](https://img.shields.io/github/actions/workflow/status/metcan1234/Sauron/multi-platform-test.yml?branch=main&label=tests)
+![Latest Release](https://img.shields.io/github/v/release/metcan1234/Sauron?label=latest%20release)
+![License](https://img.shields.io/github/license/metcan1234/Sauron)
 
-OpenGuider is an Electron desktop AI assistant designed to help you complete real UI tasks on your machine.
+Sauron is an Electron desktop AI assistant designed to help you complete real UI tasks on your machine.
 
 It combines chat, planning, screenshot context, pointer hints, optional voice features, and a growing plugin system in one desktop workflow.
 
@@ -24,7 +22,7 @@ It combines chat, planning, screenshot context, pointer hints, optional voice fe
 - Turkish guide: [OpenGuider - Configuration (TR)](https://mo-tunn.github.io/OpenGuider/docs/OpenGuider%20-%20Configuration%28TR%29.pdf)
 - English guide: [OpenGuider - Configuration (EN)](https://mo-tunn.github.io/OpenGuider/docs/OpenGuider%20-%20Configuration%20%28EN%29%20.pdf)
 
-## What OpenGuider Does
+## What Sauron Does
 
 - Converts your goal into a step-by-step execution plan.
 - Uses screenshot context to reason about what is currently on screen.
@@ -48,7 +46,7 @@ It combines chat, planning, screenshot context, pointer hints, optional voice fe
 
 ### 1) Multi-Provider AI Layer
 
-OpenGuider supports:
+Sauron supports:
 
 - Claude
 - OpenAI
@@ -65,7 +63,7 @@ Why this matters:
 
 ### 2) Planning and Task Orchestration
 
-Instead of only returning plain text responses, OpenGuider can:
+Instead of only returning plain text responses, Sauron can:
 
 - build a structured plan,
 - track current step,
@@ -76,7 +74,7 @@ This makes the app useful for real multi-step operations, not just simple Q/A.
 
 ### 3) Screen-Aware Guidance
 
-OpenGuider can reason with screenshot context to produce actionable guidance:
+Sauron can reason with screenshot context to produce actionable guidance:
 
 - identify likely UI regions,
 - map instructions to on-screen targets,
@@ -101,7 +99,7 @@ You can run chat-only, voice-only, or hybrid flows depending on your setup.
 
 ### 5) Plugin System and Browser Automation
 
-OpenGuider now has a plugin layer so specialized workspaces can plug into the desktop assistant over time.
+Sauron now has a plugin layer so specialized workspaces can plug into the desktop assistant over time.
 
 Today, the first live plugin is the Browser plugin. It uses `browser-use` under the hood and can:
 
@@ -111,31 +109,26 @@ Today, the first live plugin is the Browser plugin. It uses `browser-use` under 
 - pause for approval on risky actions,
 - or continue in autopilot mode when you want it to run automatically.
 
-This matters because browser automation is now a feature inside a broader plugin system, not a one-off hardcoded mode. More plugins can be added later without changing the overall OpenGuider workflow.
+This matters because browser automation is now a feature inside a broader plugin system, not a one-off hardcoded mode. More plugins can be added later without changing the overall Sauron workflow.
 
 ## Live Preview
 
 <p align="center">
-  <img src="./tutorial.gif" alt="OpenGuider tutorial" width="360">
+  <img src="./tutorial.gif" alt="Sauron tutorial" width="360">
 </p>
 
 ## Downloads
 
-- Landing page: [https://mo-tunn.github.io/OpenGuider/](https://mo-tunn.github.io/OpenGuider/)
-- Latest release: [https://github.com/mo-tunn/OpenGuider/releases/latest](https://github.com/mo-tunn/OpenGuider/releases/latest)
-- Windows installer: [OpenGuider-windows-setup-latest.exe](https://github.com/mo-tunn/OpenGuider/releases/latest/download/OpenGuider-windows-setup-latest.exe)
-- macOS installer (DMG): [OpenGuider-macos-installer-latest.dmg](https://github.com/mo-tunn/OpenGuider/releases/latest/download/OpenGuider-macos-installer-latest.dmg)
-- Linux installer: [OpenGuider-linux-latest.zip](https://github.com/mo-tunn/OpenGuider/releases/latest/download/OpenGuider-linux-latest.zip)
+- Latest release: [https://github.com/metcan1234/Sauron/releases/latest](https://github.com/metcan1234/Sauron/releases/latest)
+- Windows installer: `Sauron-{version}-win-x64.exe` (from release assets)
 
 ## Installation
 
 ### Option A: Download Prebuilt App (Recommended)
 
-1. Open the latest release page: [https://github.com/mo-tunn/OpenGuider/releases/latest](https://github.com/mo-tunn/OpenGuider/releases/latest)
+1. Open the latest release page: [https://github.com/metcan1234/Sauron/releases/latest](https://github.com/metcan1234/Sauron/releases/latest)
 2. Download your platform artifact:
-   - Windows: `OpenGuider-windows-setup-latest.exe`
-   - macOS: `OpenGuider-macos-installer-latest.dmg`
-   - Linux: `OpenGuider-linux-latest.zip`
+   - Windows: `Sauron-{version}-win-x64.exe`
 3. Extract and run the app.
 4. If you want browser automation, open `Settings -> Plugins`.
 5. In the Browser plugin card, click `Download Runtime` once.
@@ -224,7 +217,7 @@ After your main provider works, add backups for reliability:
 - Secondary provider for fallback.
 - Local Ollama profile for offline/private runs.
 
-## How To Use OpenGuider Effectively
+## How To Use Sauron Effectively
 
 For best results, write goals in this format:
 
@@ -252,7 +245,7 @@ Good example:
 
 ## Security and Data Handling
 
-OpenGuider is designed as a local-first desktop app. This section explains what data is stored, what may be sent to external providers, and how to operate safely.
+Sauron is designed as a local-first desktop app. This section explains what data is stored, what may be sent to external providers, and how to operate safely.
 
 ### Data Stored Locally
 
@@ -263,7 +256,7 @@ OpenGuider is designed as a local-first desktop app. This section explains what 
 
 ### Data Sent to External Services
 
-Depending on your configuration, OpenGuider may send:
+Depending on your configuration, Sauron may send:
 
 - prompts and conversation context to your selected LLM provider,
 - voice audio/text to selected STT/TTS providers,
@@ -282,7 +275,7 @@ Important:
 
 ### Operational Security Best Practices
 
-- Use a dedicated provider API key for OpenGuider (do not reuse high-privilege keys).
+- Use a dedicated provider API key for Sauron (do not reuse high-privilege keys).
 - Rotate API keys periodically.
 - Never commit `.env` or key files to Git.
 - Prefer local model usage (Ollama) for highly sensitive workflows.
@@ -290,13 +283,13 @@ Important:
 
 ### Privacy and Compliance Notes
 
-- OpenGuider is open-source, so security behavior is auditable.
+- Sauron is open-source, so security behavior is auditable.
 - Compliance posture depends on your selected providers and their data policies.
 - If your team has strict requirements, define an approved provider/model list and disable non-approved endpoints.
 
 ## Support and Contribution
 
-If you want to support OpenGuider by contributing code, docs, tests, or design updates, this section is for you.
+If you want to support Sauron by contributing code, docs, tests, or design updates, this section is for you.
 
 ### Branching Strategy for Contributors
 
@@ -393,16 +386,14 @@ flowchart LR
 - API keys are persisted via OS-protected secure storage (`keytar`) when available.
 - If keychain is unavailable, encrypted fallback storage is used through Electron safe storage.
 - Renderer runs with `contextIsolation: true` and `nodeIntegration: false`.
-- Application data is stored in Electron `userData` path under a stable app identity (`OpenGuider`) so updates keep local settings/history.
+- Application data is stored in Electron `userData` path under a stable app identity (`Sauron`) so updates keep local settings/history.
 
 ## GitHub Release Automation
 
 1. Push a semantic version tag (example: `v0.2.0`).
 2. GitHub Actions runs `.github/workflows/release-build.yml`.
 3. Installers are attached to the release:
-   - `OpenGuider-windows-setup-latest.exe`
-   - `OpenGuider-macos-installer-latest.dmg`
-   - `OpenGuider-linux-latest.zip`
+   - `Sauron-{version}-win-x64.exe`
 
 ## License
 
@@ -419,4 +410,4 @@ If you create a derivative project, keep these Apache 2.0 basics:
 
 ## Acknowledgement
 
-OpenGuider was originally inspired by Clicky.
+Sauron was originally inspired by Clicky.

@@ -28,7 +28,14 @@
     <div class="settings-tab-section active" data-tab-content="agents">
       <div class="settings-section">
         <h3>AI Agents</h3>
-        <p class="settings-lead">Sauron Core ve Cline için model seçimi otomatik yapılır. Sadece API anahtarlarını girin — Gemini (Core), DeepSeek (Cline ana), OpenAI (Cline escalation), Ollama (isteğe bağlı yerel fallback).</p>
+        <p class="settings-lead">Sauron Core ve Cline için model seçimi otomatik yapılır. API anahtarlarını buraya girin — Bridge açık workspace'te Cline'a otomatik senkronlar (fork Cline gerekir).</p>
+
+        <div class="form-group">
+          <label>Cline senkron durumu</label>
+          <div class="hint" id="clineSyncStatus">Workspace seçilmedi veya anahtar yok.</div>
+          <button class="btn btn-secondary" id="btn-sync-cline" type="button" style="margin-top:8px;">Cline'a senkronla</button>
+          <span class="hint" style="display:block;margin-top:6px;">VS Code açıkken Bridge bu isteği okuyup Cline SecretStorage'a yazar. Anahtarlar workspace JSON'una yazılmaz.</span>
+        </div>
 
         <div class="form-group">
           <label>Gemini API Key <span class="hint-inline">(zorunlu)</span></label>
@@ -56,8 +63,8 @@
 
         <div class="form-group">
           <details id="clineSetupDetails">
-            <summary style="cursor:pointer;font-weight:600;">Cline kurulumu (anahtarları bir kez kopyala)</summary>
-            <p class="hint" style="margin-top:8px;">Cline extension'da aynı anahtarları ilgili provider'lara girin. Detaylı adımlar: <code>docs/agent-setup-cline.md</code></p>
+            <summary style="cursor:pointer;font-weight:600;">Cline kurulumu (otomatik senkron)</summary>
+            <p class="hint" style="margin-top:8px;">Kaydettiğiniz anahtarlar workspace handoff veya "Cline'a senkronla" ile Bridge üzerinden Cline'a aktarılır. Detay: <code>docs/agent-setup-cline.md</code></p>
             <ul class="hint" style="margin:8px 0 0 16px;">
               <li>DeepSeek → Cline DeepSeek provider veya OpenAI-compatible</li>
               <li>Gemini → Cline Gemini provider</li>

@@ -46,12 +46,18 @@ export async function computeDailySpendTl(workspaceRoot: string): Promise<number
 export async function shouldDowngradeOneTier(
 	workspaceRoot: string,
 	optimizer: CostOptimizerConfig | undefined,
+	projectType?: string,
 ): Promise<boolean> {
 	if (!optimizer?.enabled || !optimizer.budgetGovernor?.enabled) {
 		return false
 	}
 
-	const dailyBudget = Number(optimizer.budgetGovernor.dailyBudgetTl) || 0
+	const projectBudgets = (optimizer as { projectBudgets?: Record<string, { dailyBudgetTl?: number }> })
+		.projectBudgets
+	const projectBudget = projectType && projectBudgets?.[projectType]?.dailyBudgetTl
+	const dailyBudget = Number(projectBudget) > 0
+		? Number(projectBudget)
+		: Number(optimizer.budgetGovernor.dailyBudgetTl) || 0
 	if (dailyBudget <= 0) {
 		return false
 	}
@@ -84,12 +90,13 @@ export async function resolveBudgetDowngrade(
 	workspaceRoot: string,
 	optimizer: CostOptimizerConfig | undefined,
 	handoffId?: string,
+	projectType?: string,
 ): Promise<boolean> {
 	if (handoffId && wasDowngradeApplied(handoffId)) {
 		return false
 	}
 
-	const shouldDowngrade = await shouldDowngradeOneTier(workspaceRoot, optimizer)
+	const shouldDowngrade = await shouldDowngradeOneTier(workspaceRoot, optimizer, projectType)
 	if (shouldDowngrade && handoffId) {
 		markDowngradeApplied(handoffId)
 	}

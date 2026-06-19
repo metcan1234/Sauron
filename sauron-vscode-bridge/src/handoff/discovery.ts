@@ -61,6 +61,37 @@ export async function getLatestPendingHandoff(workspaceRoot: string): Promise<Pe
 	return pending[0] ?? null
 }
 
+export async function getNextPendingHandoff(workspaceRoot: string): Promise<PendingHandoffFile | null> {
+	const pending = await listPendingHandoffs(workspaceRoot)
+	if (pending.length === 0) {
+		return null
+	}
+
+	const withPhase = await Promise.all(
+		pending.map(async (item) => {
+			try {
+				const parsed = await readHandoffFile(item.fullPath)
+				return {
+					item,
+					pipelinePhase: Number(parsed.pipelinePhase) || 9999,
+					createdAt: parsed.createdAt || item.createdAt,
+				}
+			} catch {
+				return { item, pipelinePhase: 9999, createdAt: item.createdAt }
+			}
+		}),
+	)
+
+	withPhase.sort((a, b) => {
+		if (a.pipelinePhase !== b.pipelinePhase) {
+			return a.pipelinePhase - b.pipelinePhase
+		}
+		return Date.parse(a.createdAt) - Date.parse(b.createdAt)
+	})
+
+	return withPhase[0]?.item ?? null
+}
+
 export async function readHandoffFile(fullPath: string): Promise<SauronHandoff> {
 	const raw = await fs.readFile(fullPath, "utf8")
 	return JSON.parse(raw) as SauronHandoff

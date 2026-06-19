@@ -21,6 +21,7 @@ function registerAiIpc({
   updatePointerCalibration,
   updateWidgetState,
   broadcastAgentState,
+  broadcastSessionSnapshot,
   showPointer,
   wrapUserFacingError,
 }) {
@@ -47,6 +48,9 @@ function registerAiIpc({
         requestId: requestContext.requestId,
       });
       const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
+      if (result?.session) {
+        broadcastSessionSnapshot(result.session);
+      }
       return { ...handled, requestId: requestContext.requestId };
     } catch (err) {
       appLogger.error(`ipc:${channel} failed`, {
@@ -78,6 +82,9 @@ function registerAiIpc({
         requestId: requestContext.requestId,
       });
       const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
+      if (result?.session) {
+        broadcastSessionSnapshot(result.session);
+      }
       recordPerformanceMetric("ipc.start-goal-session", startedAt, {
         ok: true,
         meta: { requestId: requestContext.requestId, imageCount: images?.length || 0 },
@@ -113,6 +120,9 @@ function registerAiIpc({
         requestId: requestContext.requestId,
       });
       const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
+      if (result?.session) {
+        broadcastSessionSnapshot(result.session);
+      }
       recordPerformanceMetric("ipc.submit-user-message", startedAt, {
         ok: true,
         meta: { requestId: requestContext.requestId, imageCount: images?.length || 0 },
@@ -129,12 +139,12 @@ function registerAiIpc({
     }
   });
 
-  ipcMain.handle("mark-step-done", (event) => runOrchestratorHandler("mark-step-done", event, (opts) => taskOrchestrator.markStepDone(opts)));
-  ipcMain.handle("request-step-help", (event) => runOrchestratorHandler("request-step-help", event, (opts) => taskOrchestrator.requestStepHelp(opts)));
-  ipcMain.handle("recheck-current-step", (event) => runOrchestratorHandler("recheck-current-step", event, (opts) => taskOrchestrator.recheckCurrentStep(opts)));
-  ipcMain.handle("skip-current-step", (event) => runOrchestratorHandler("skip-current-step", event, (opts) => taskOrchestrator.skipCurrentStep(opts)));
-  ipcMain.handle("previous-step", (event) => runOrchestratorHandler("previous-step", event, (opts) => taskOrchestrator.previousStep(opts)));
-  ipcMain.handle("regenerate-current-step", (event) => runOrchestratorHandler("regenerate-current-step", event, (opts) => taskOrchestrator.regenerateCurrentStep(opts)));
+  ipcMain.handle("mark-step-done", (event, payload) => runOrchestratorHandler("mark-step-done", event, (opts) => taskOrchestrator.markStepDone({ ...opts, images: payload?.images })));
+  ipcMain.handle("request-step-help", (event, payload) => runOrchestratorHandler("request-step-help", event, (opts) => taskOrchestrator.requestStepHelp({ ...opts, images: payload?.images })));
+  ipcMain.handle("recheck-current-step", (event, payload) => runOrchestratorHandler("recheck-current-step", event, (opts) => taskOrchestrator.recheckCurrentStep({ ...opts, images: payload?.images })));
+  ipcMain.handle("skip-current-step", (event, payload) => runOrchestratorHandler("skip-current-step", event, (opts) => taskOrchestrator.skipCurrentStep({ ...opts, images: payload?.images })));
+  ipcMain.handle("previous-step", (event, payload) => runOrchestratorHandler("previous-step", event, (opts) => taskOrchestrator.previousStep({ ...opts, images: payload?.images })));
+  ipcMain.handle("regenerate-current-step", (event, payload) => runOrchestratorHandler("regenerate-current-step", event, (opts) => taskOrchestrator.regenerateCurrentStep({ ...opts, images: payload?.images })));
 
   ipcMain.handle("send-message", async (event, { text, images, history, fastMode, skipUserPersist, regenerate }) => {
     const requestContext = createRequestContext("send-message");

@@ -35,7 +35,7 @@ test("settings aware tab loads saved state and persists the toggle", async () =>
   };
   global.clearTimeout = () => {};
 
-  window.openguider = {
+  window.sauron = {
     invoke: async (channel, payload) => {
       if (channel === "get-settings") {
         return {

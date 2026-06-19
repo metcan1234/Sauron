@@ -70,6 +70,25 @@ function applyActModeModel(
 }
 
 export function createClineAPI(sidebarController: Controller): ClineAPI {
+	let lastTaskSummary: string | null = null
+
+	function captureTaskSummary(): string | null {
+		const task = sidebarController.task
+		if (!task) {
+			return null
+		}
+		const messages = task.messageStateHandler.getClineMessages()
+		const assistantMessages = messages
+			.filter((msg) => msg.say === "text" || msg.say === "completion_result")
+			.map((msg) => String(msg.text || "").trim())
+			.filter(Boolean)
+		if (assistantMessages.length === 0) {
+			return `Task ${task.taskId} completed`
+		}
+		const last = assistantMessages[assistantMessages.length - 1]
+		return last.length > 500 ? `${last.slice(0, 497)}...` : last
+	}
+
 	const api: ClineAPI = {
 		startNewTask: async (task?: string, images?: string[]) => {
 			await sidebarController.clearTask()
@@ -171,6 +190,65 @@ export function createClineAPI(sidebarController: Controller): ClineAPI {
 			}
 			await sidebarController.postStateToWebview()
 		},
+
+		syncProviderCredentials: async (creds: {
+			geminiApiKey?: string
+			deepSeekApiKey?: string
+			openAiApiKey?: string
+			ollamaBaseUrl?: string
+		}) => {
+			const current = sidebarController.stateManager.getApiConfiguration()
+			const updates: Partial<ApiConfiguration> = {}
+			const synced: string[] = []
+
+			if (creds.geminiApiKey) {
+				updates.geminiApiKey = creds.geminiApiKey
+				synced.push("gemini")
+			}
+			if (creds.deepSeekApiKey) {
+				updates.deepSeekApiKey = creds.deepSeekApiKey
+				synced.push("deepseek")
+			}
+			if (creds.openAiApiKey) {
+				updates.openAiApiKey = creds.openAiApiKey
+				synced.push("openai")
+			}
+			if (creds.ollamaBaseUrl) {
+				updates.ollamaBaseUrl = creds.ollamaBaseUrl
+				synced.push("ollama")
+			}
+
+			if (Object.keys(updates).length === 0) {
+				return { synced: [] }
+			}
+
+			sidebarController.stateManager.setApiConfiguration({ ...current, ...updates })
+			await sidebarController.postStateToWebview()
+			return { synced }
+		},
+
+		getTaskState: () => {
+			const task = sidebarController.task
+			if (!task) {
+				return null
+			}
+			return {
+				active: true,
+				taskId: task.taskId,
+			}
+		},
+
+		clearTask: async () => {
+			if (!sidebarController.task) {
+				return { cleared: false }
+			}
+			lastTaskSummary = captureTaskSummary()
+			await sidebarController.clearTask()
+			await sidebarController.postStateToWebview()
+			return { cleared: true }
+		},
+
+		getLastTaskSummary: () => lastTaskSummary,
 	}
 
 	return api

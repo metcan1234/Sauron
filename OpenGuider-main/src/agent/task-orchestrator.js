@@ -15,6 +15,16 @@ const { IntentRouter } = require("../core/intent-router");
 
 const logger = createLogger("task-orchestrator");
 const DECISION_TIMEOUT_MS = 120_000;
+const SCREEN_CAPTURE_REQUIRED_MSG = "Sonraki adım için önce Ekran Al butonuna basın, ardından Tamamladım'a tıklayın.";
+
+function hasUsableScreenshots(images) {
+  return Array.isArray(images) && images.length > 0;
+}
+
+function isGuideAssistantMode(settings = {}) {
+  const mode = settings?.assistantMode;
+  return mode === "guide" || mode === "planning";
+}
 
 /** @typedef {'guide'|'hitl'|'auto'} ExecutionMode */
 
@@ -91,23 +101,31 @@ class TaskOrchestrator {
   }
 
   async resolveScreenshots(images) {
-    if (Array.isArray(images) && images.length > 0) {
+    if (hasUsableScreenshots(images)) {
       this.sessionManager.setLastScreenshots(images);
       return images;
     }
 
     const existing = this.sessionManager.getSession().lastScreenshots;
-    if (existing && existing.length > 0) {
+    if (hasUsableScreenshots(existing)) {
       return existing;
     }
 
-    const captured = await captureScreenTool({
-      captureAllScreens: this.captureAllScreens,
-      forceFresh: false,
-      maxAgeMs: 900,
-    });
-    this.sessionManager.setLastScreenshots(captured);
-    return captured;
+    return [];
+  }
+
+  buildScreenshotRequiredResult(step = null) {
+    const snapshot = this.sessionManager.getSnapshot();
+    const message = SCREEN_CAPTURE_REQUIRED_MSG;
+    this.sessionManager.setStatus("waiting_user");
+    this.sessionManager.addMessage({ role: "assistant", content: message });
+    return {
+      assistantMessage: message,
+      pointer: null,
+      session: this.sessionManager.getSnapshot(),
+      userInputRequest: step ? requestUserInputTool({ step }) : null,
+      requiresScreenshot: true,
+    };
   }
 
   buildStepMessage(step, pointer) {
@@ -244,13 +262,10 @@ class TaskOrchestrator {
     }
 
     this.sessionManager.setStatus("executing");
-    const images = forceFreshCapture
-      ? await captureScreenTool({
-          captureAllScreens: this.captureAllScreens,
-          forceFresh: true,
-          maxAgeMs: 0,
-        })
-      : await this.resolveScreenshots(snapshot.lastScreenshots);
+    const images = await this.resolveScreenshots(snapshot.lastScreenshots);
+    if (!hasUsableScreenshots(images)) {
+      return this.buildScreenshotRequiredResult(step);
+    }
     this.sessionManager.setLastScreenshots(images);
 
     let preprocessingContext = { ocrResult: null, windowInfo: null, matchedElements: [] };
@@ -362,6 +377,20 @@ class TaskOrchestrator {
     logger.info("start-goal-session", { requestId, textLength: text?.length || 0, imageCount: images?.length || 0 });
     this.sessionManager.addMessage({ role: "user", content: text });
     this.sessionManager.setGoalIntent(text);
+
+    if (isGuideAssistantMode(settings)) {
+      const nextImages = await this.resolveScreenshots(images);
+      if (!hasUsableScreenshots(nextImages)) {
+        return this.buildScreenshotRequiredResult();
+      }
+      return this._startGuideModeSession({
+        text,
+        images: nextImages,
+        settings,
+        signal,
+      });
+    }
+
     const executionMode = normalizeExecutionMode(settings?.executionMode);
 
     if (executionMode === "hitl" || executionMode === "auto") {
@@ -877,6 +906,8 @@ class TaskOrchestrator {
         content: evaluation.assistantResponse || "Great, that step is done. Moving to the next one.",
       });
 
+      this.sessionManager.setLastScreenshots([]);
+
       return this.guideCurrentStep({
         settings,
         signal,
@@ -938,14 +969,10 @@ class TaskOrchestrator {
     }
 
     this.sessionManager.setStatus("evaluating");
-    const images = forceFreshCapture
-      ? await captureScreenTool({
-          captureAllScreens: this.captureAllScreens,
-          forceFresh: true,
-          maxAgeMs: 0,
-        })
-      : await this.resolveScreenshots(snapshot.lastScreenshots);
-
+    const images = await this.resolveScreenshots(snapshot.lastScreenshots);
+    if (!hasUsableScreenshots(images)) {
+      return this.buildScreenshotRequiredResult(step);
+    }
     this.sessionManager.setLastScreenshots(images);
     let evaluation;
     try {
@@ -1001,11 +1028,15 @@ class TaskOrchestrator {
     return this.startGoalSession({ text, images, settings, signal });
   }
 
-  async markStepDone({ settings, signal, requestId }) {
+  async markStepDone({ settings, signal, requestId, images }) {
     logger.info("mark-step-done", { requestId });
     const snapshot = this.sessionManager.getSnapshot();
     const plan = snapshot.activePlan;
     const step = getCurrentStep(plan);
+
+    if (hasUsableScreenshots(images)) {
+      this.sessionManager.setLastScreenshots(images);
+    }
 
     if (
       plan &&
@@ -1023,11 +1054,12 @@ class TaskOrchestrator {
         content: "I manually confirmed that step and moved to the next one.",
       });
 
+      this.sessionManager.setLastScreenshots([]);
+
       return this.guideCurrentStep({
         settings,
         userNote: "Manual confirmation accepted.",
         signal,
-        forceFreshCapture: true,
         forcePointing: true,
       });
     }
@@ -1035,12 +1067,11 @@ class TaskOrchestrator {
     return this.evaluateCurrentStep({
       settings,
       userNote: "The user marked the current step as done.",
-      forceFreshCapture: true,
       signal,
     });
   }
 
-  async requestStepHelp({ settings, signal, requestId }) {
+  async requestStepHelp({ settings, signal, requestId, images }) {
     logger.info("request-step-help", { requestId });
     const snapshot = this.sessionManager.getSnapshot();
     const plan = snapshot.activePlan;
@@ -1054,6 +1085,10 @@ class TaskOrchestrator {
       };
     }
 
+    if (hasUsableScreenshots(images)) {
+      this.sessionManager.setLastScreenshots(images);
+    }
+
     this.sessionManager.addMessage({
       role: "assistant",
       content: `Let's focus on "${step.title}" again.`,
@@ -1063,12 +1098,11 @@ class TaskOrchestrator {
       settings,
       userNote: "The user asked for more help.",
       signal,
-      forceFreshCapture: true,
       forcePointing: true,
     });
   }
 
-  async recheckCurrentStep({ settings, signal, requestId }) {
+  async recheckCurrentStep({ settings, signal, requestId, images }) {
     logger.info("recheck-current-step", { requestId });
     const snapshot = this.sessionManager.getSnapshot();
     const originalGoal = (snapshot.goalIntent || "").trim();
@@ -1089,16 +1123,16 @@ class TaskOrchestrator {
     this.sessionManager.setGoalIntent(goalText);
 
     this.sessionManager.setStatus("planning");
-    const images = await captureScreenTool({
-      captureAllScreens: this.captureAllScreens,
-      forceFresh: true,
-      maxAgeMs: 0,
-    });
-    this.sessionManager.setLastScreenshots(images);
+    const planningSnapshot = this.sessionManager.getSnapshot();
+    const resolvedImages = await this.resolveScreenshots(images || planningSnapshot.lastScreenshots);
+    if (!hasUsableScreenshots(resolvedImages)) {
+      return this.buildScreenshotRequiredResult(getCurrentStep(planningSnapshot.activePlan));
+    }
+    this.sessionManager.setLastScreenshots(resolvedImages);
 
     const rebuiltPlan = await planGoal({
       goal: goalText,
-      images,
+      images: resolvedImages,
       sessionSnapshot: this.sessionManager.getSnapshot(),
       settings,
       signal,
@@ -1229,7 +1263,7 @@ class TaskOrchestrator {
     };
   }
 
-  async regenerateCurrentStep({ settings, signal, requestId }) {
+  async regenerateCurrentStep({ settings, signal, requestId, images }) {
     logger.info("regenerate-current-step", { requestId });
     const snapshot = this.sessionManager.getSnapshot();
     const plan = snapshot.activePlan;
@@ -1241,6 +1275,9 @@ class TaskOrchestrator {
         session: snapshot,
       };
     }
+    if (hasUsableScreenshots(images)) {
+      this.sessionManager.setLastScreenshots(images);
+    }
     this.sessionManager.addMessage({
       role: "assistant",
       content: `Regenerating guidance for "${step.title}".`,
@@ -1249,12 +1286,11 @@ class TaskOrchestrator {
       settings,
       userNote: "Regenerate this step with refreshed guidance.",
       signal,
-      forceFreshCapture: true,
       forcePointing: true,
     });
   }
 
-  async previousStep({ settings, signal, requestId }) {
+  async previousStep({ settings, signal, requestId, images }) {
     logger.info("previous-step", { requestId });
     const snapshot = this.sessionManager.getSnapshot();
     const plan = snapshot.activePlan;
@@ -1264,6 +1300,10 @@ class TaskOrchestrator {
         pointer: null,
         session: snapshot,
       };
+    }
+
+    if (hasUsableScreenshots(images)) {
+      this.sessionManager.setLastScreenshots(images);
     }
 
     this.sessionManager.goToPreviousStep();
@@ -1280,12 +1320,11 @@ class TaskOrchestrator {
       settings,
       userNote: "User requested previous step.",
       signal,
-      forceFreshCapture: true,
       forcePointing: true,
     });
   }
 
-  async skipCurrentStep({ settings, signal, requestId }) {
+  async skipCurrentStep({ settings, signal, requestId, images }) {
     logger.info("skip-current-step", { requestId });
     const snapshot = this.sessionManager.getSnapshot();
     const plan = snapshot.activePlan;
@@ -1303,6 +1342,11 @@ class TaskOrchestrator {
       return this.finishPlanWithMessage(`Skipped "${step.title}". All steps are now complete.`);
     }
 
+    this.sessionManager.setLastScreenshots([]);
+    if (hasUsableScreenshots(images)) {
+      this.sessionManager.setLastScreenshots(images);
+    }
+
     this.sessionManager.addMessage({
       role: "assistant",
       content: `Skipped "${step.title}". Moving to the next step.`,
@@ -1312,7 +1356,6 @@ class TaskOrchestrator {
       settings,
       userNote: "User skipped the current step.",
       signal,
-      forceFreshCapture: true,
       forcePointing: true,
     });
   }

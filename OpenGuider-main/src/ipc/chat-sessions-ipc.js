@@ -215,7 +215,7 @@ function registerChatSessionsIpc({
       }
       const payload = exportAllSessionsJson(store);
       const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const filePath = path.join(targetDir, `openguider-chats-${stamp}.json`);
+      const filePath = path.join(targetDir, `sauron-chats-${stamp}.json`);
       fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf8");
       return { ok: true, path: filePath };
     } catch (error) {

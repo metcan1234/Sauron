@@ -6,8 +6,8 @@ This fork keeps Sauron-specific changes isolated to the public extension API. Ha
 
 | File | Change |
 |------|--------|
-| [`apps/vscode/src/exports/cline.d.ts`](apps/vscode/src/exports/cline.d.ts) | Added `hasActiveTask()`, `addToInput()`, `ActiveTaskMetrics`, `getActiveTaskMetrics()`, `getActiveModel()`, `setActiveModel()`, `getPlanModeModel()`, `setPlanModeModel()` |
-| [`apps/vscode/src/exports/index.ts`](apps/vscode/src/exports/index.ts) | Implemented the methods above; metrics reuse `getApiMetrics()`; act/plan model switching updates API configuration |
+| [`apps/vscode/src/exports/cline.d.ts`](apps/vscode/src/exports/cline.d.ts) | Added `hasActiveTask()`, `addToInput()`, `ActiveTaskMetrics`, `getActiveTaskMetrics()`, `getActiveModel()`, `setActiveModel()`, `getPlanModeModel()`, `setPlanModeModel()`, `syncProviderCredentials()`, `getTaskState()`, `clearTask()`, `getLastTaskSummary()` |
+| [`apps/vscode/src/exports/index.ts`](apps/vscode/src/exports/index.ts) | Implemented the methods above; metrics reuse `getApiMetrics()`; act/plan model switching updates API configuration; `syncProviderCredentials` merges non-empty provider keys; task lifecycle APIs for Sauron pipeline auto-chain |
 
 ## Removed Phase 1 hooks (no longer needed)
 
@@ -42,4 +42,4 @@ npm test
 
 ## Expected diff size
 
-About 90 lines across two files in `apps/vscode/src/exports/` (handoff API + FinOps metrics + agent model routing).
+About 150 lines across two files in `apps/vscode/src/exports/` (handoff API + FinOps metrics + agent model routing + credential sync + task lifecycle).

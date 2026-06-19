@@ -1,5 +1,6 @@
 import { createChatHistoryController } from "./chat-history.js";
 import { createWebStudioController } from "./web-studio.js";
+import { createSelfBuildStudioController } from "./self-build-studio.js";
 import { applyI18nToDocument, t } from "../i18n/index.js";
 import { createMessagingController } from "./messaging.js";
 import { createPlanView } from "./plan-view.js";
@@ -13,7 +14,7 @@ const MODE_BAR_HIDE_DELAY_MS = 150;
 
 function createPanelLogger() {
   return (...args) => {
-    console.log("[OpenGuider][panel]", ...args);
+    console.log("[Sauron][panel]", ...args);
   };
 }
 
@@ -127,7 +128,7 @@ function createStepApprovalController({ dom, log, win = window }) {
 }
 
 export function createPanelController({
-  api = window.openguider,
+  api = window.sauron || window.openguider,
   doc = document,
   win = window,
 } = {}) {
@@ -138,9 +139,10 @@ export function createPanelController({
   const ui = createPanelUI({ api, doc, dom, log, state });
   const planView = createPlanView({ doc, dom });
   const stepApproval = createStepApprovalController({ dom, log, win });
-  const messaging = createMessagingController({ api, doc, dom, log, state, ui });
-  const chatHistory = createChatHistoryController({ api, doc, dom, log, ui, state, win });
   const webStudio = createWebStudioController({ api, ui, win, doc });
+  const selfBuildStudio = createSelfBuildStudioController({ api, ui, doc });
+  const messaging = createMessagingController({ api, doc, dom, log, state, ui, webStudio });
+  const chatHistory = createChatHistoryController({ api, doc, dom, log, ui, state, win });
   const tts = createTtsPlaybackController({ api, log, state, win });
   const ptt = createPttController({ api, dom, log, messaging, state, ui, win });
   let lastBrowserExecutionSnapshot = null;
@@ -152,12 +154,31 @@ export function createPanelController({
   const HANDOFF_HISTORY_REFRESH_MS = 30000;
   let handoffHistoryRefreshTimer = null;
 
+  async function refreshBuildPipeline() {
+    try {
+      const status = await api.invoke("get-build-pipeline-status");
+      ui.renderBuildPipeline(status);
+      if (status?.pendingComplete && status?.pipeline?.status === "active") {
+        const advanced = await api.invoke("advance-build-pipeline");
+        if (advanced?.ok && advanced.action === "next-phase") {
+          ui.showToast(`Faz ${advanced.pipeline?.currentPhase}/${advanced.pipeline?.totalPhases} handoff yazıldı`);
+        } else if (advanced?.ok && advanced.action === "completed") {
+          ui.showToast("Üretim hattı tamamlandı");
+        }
+        await refreshBuildPipeline();
+      }
+    } catch (error) {
+      log("build pipeline refresh error", error);
+    }
+  }
+
   async function refreshHandoffHistory() {
     try {
       const result = await api.invoke("list-handoff-history", { limit: 10 });
       if (result?.ok) {
         ui.renderHandoffHistory(result.items || []);
       }
+      await refreshBuildPipeline();
     } catch (error) {
       log("handoff history refresh error", error);
     }
@@ -407,6 +428,46 @@ export function createPanelController({
     dom.btnPlanCancel.disabled = !enabled;
   }
 
+  function normalizeAssistantMode(mode) {
+    if (mode === "guide" || mode === "planning") {
+      return "guide";
+    }
+    return "assistant";
+  }
+
+  async function invokePlanAction(channel) {
+    const images = state.getPendingScreenshots();
+    if (channel === "mark-step-done" && (!images || images.length === 0)) {
+      ui.showToast("Tamamladım için önce Ekran Al butonuna basın.", true);
+      return;
+    }
+    try {
+      await api.invoke(channel, images?.length ? { images } : {});
+      if (images?.length) {
+        state.setPendingScreenshots(null);
+        ui.renderScreenshotPreviewStrip(null);
+        ui.updateScreenPendingBadge(0);
+      }
+    } catch (error) {
+      log(`ipc:${channel} error`, error);
+      ui.showToast(error?.message || "Plan işlemi başarısız", true);
+    }
+  }
+
+  async function toggleAssistantMode() {
+    const current = normalizeAssistantMode(state.getSetting("assistantMode"));
+    const nextMode = current === "guide" ? "assistant" : "guide";
+    state.setSetting("assistantMode", nextMode);
+    ui.renderAssistantModeBadge(nextMode);
+    updatePlanActionVisibility(nextMode, state.getSessionSnapshot());
+    try {
+      await api.invoke("save-settings", { assistantMode: nextMode });
+    } catch (error) {
+      log("ipc:save-settings assistantMode error", error);
+    }
+    ui.showToast(nextMode === "guide" ? "Rehber modu: ekran + adım adım yönlendirme" : "Asistan modu: hızlı sohbet");
+  }
+
   function updatePlanActionVisibility(_assistantMode, sessionSnapshot = null) {
     if (!dom.panelActions) {
       return;
@@ -635,13 +696,33 @@ export function createPanelController({
     if (stopBtn) {
       stopBtn.addEventListener("click", messaging.cancelMessage);
     }
-    dom.btnPlanPrev.addEventListener("click", () => api.invoke("previous-step"));
-    dom.btnPlanDone.addEventListener("click", () => api.invoke("mark-step-done"));
-    dom.btnPlanSkip.addEventListener("click", () => api.invoke("skip-current-step"));
-    dom.btnPlanHelp.addEventListener("click", () => api.invoke("request-step-help"));
-    dom.btnPlanRegenerate.addEventListener("click", () => api.invoke("regenerate-current-step"));
-    dom.btnPlanRecheck.addEventListener("click", () => api.invoke("recheck-current-step"));
+    dom.btnPlanPrev.addEventListener("click", () => invokePlanAction("previous-step"));
+    dom.btnPlanDone.addEventListener("click", () => invokePlanAction("mark-step-done"));
+    dom.btnPlanSkip.addEventListener("click", () => invokePlanAction("skip-current-step"));
+    dom.btnPlanHelp.addEventListener("click", () => invokePlanAction("request-step-help"));
+    dom.btnPlanRegenerate.addEventListener("click", () => invokePlanAction("regenerate-current-step"));
+    dom.btnPlanRecheck.addEventListener("click", () => invokePlanAction("recheck-current-step"));
     dom.btnPlanCancel.addEventListener("click", () => api.invoke("cancel-active-plan"));
+
+    if (dom.btnCaptureScreen) {
+      dom.btnCaptureScreen.addEventListener("click", () => messaging.captureScreenshot());
+    }
+    if (dom.assistantModeBadge) {
+      dom.assistantModeBadge.addEventListener("click", () => toggleAssistantMode());
+    }
+
+    const pipelineAdvanceBtn = doc.getElementById("build-pipeline-advance");
+    if (pipelineAdvanceBtn) {
+      pipelineAdvanceBtn.addEventListener("click", async () => {
+        const result = await api.invoke("advance-build-pipeline");
+        if (result?.ok) {
+          await refreshBuildPipeline();
+          await refreshHandoffHistory();
+        } else {
+          ui.showToast(result?.error || "Faz ilerletilemedi", true);
+        }
+      });
+    }
 
     dom.modelSelect.addEventListener("change", async () => {
       const selectedModel = dom.modelSelect.value;
@@ -807,15 +888,20 @@ export function createPanelController({
       ui.buildModelSelector();
       ui.updateProviderDot();
       applyShortcutTitles();
-      const assistantMode = nextSettings?.assistantMode === "planning" ? "fast" : (nextSettings?.assistantMode || "fast");
+      const assistantMode = normalizeAssistantMode(nextSettings?.assistantMode);
       state.setSetting("assistantMode", assistantMode);
+      ui.renderAssistantModeBadge(assistantMode);
       updatePlanActionVisibility(assistantMode);
-      state.setIncludeScreen(nextSettings?.includeScreenshotByDefault !== false);
+      state.setIncludeScreen(nextSettings?.includeScreenshotByDefault === true);
     });
 
     api.on("finops-budget-alert", (payload) => {
       const message = payload?.message || "AI bütçe uyarısı";
       ui.showToast(message, payload?.level === "exhausted" || payload?.level === "warning");
+    });
+
+    api.on("pipeline-updated", (payload) => {
+      ui.renderBuildPipeline(payload);
     });
 
     api.on("browser-agent-status-changed", (status) => {
@@ -837,10 +923,10 @@ export function createPanelController({
       injectBrowserExecutionNotice(lastBrowserExecutionSnapshot, snapshot?.browserExecution || null);
       lastBrowserExecutionSnapshot = snapshot?.browserExecution || null;
       messaging.syncSession(snapshot);
-      planView.renderPlan(null);
+      planView.renderPlan(snapshot?.activePlan || null);
       syncBrowserExecution(snapshot?.browserExecution || null);
       ui.renderAgentState(snapshot?.status === "executing" ? "idle" : (snapshot?.status || "idle"));
-      updatePlanActionVisibility("fast", snapshot);
+      updatePlanActionVisibility(normalizeAssistantMode(state.getSetting("assistantMode")), snapshot);
       updatePlanActionButtons(snapshot);
       void chatHistory.refreshSessionList();
       void ui.refreshFinOpsBadge();
@@ -856,8 +942,8 @@ export function createPanelController({
     api.on("plan-updated", (plan) => {
       log("ipc:plan-updated received");
       state.setActivePlan(plan || null);
-      planView.renderPlan(null);
-      updatePlanActionVisibility("fast", {
+      planView.renderPlan(plan || null);
+      updatePlanActionVisibility(normalizeAssistantMode(state.getSetting("assistantMode")), {
         activePlan: plan || null,
         browserExecution: state.getBrowserExecution(),
       });
@@ -903,27 +989,19 @@ export function createPanelController({
     ui.buildModelSelector();
     ui.updateProviderDot();
     ui.renderConversation(session?.messages || []);
-    planView.renderPlan(null);
+    planView.renderPlan(session?.activePlan || null);
     lastBrowserExecutionSnapshot = session?.browserExecution || null;
     syncBrowserExecution(session?.browserExecution || null);
     ui.renderAgentState(session?.status === "executing" ? "idle" : (session?.status || "idle"));
     applyShortcutTitles();
     updatePlanActionButtons(session);
-    state.setSetting("assistantMode", "fast");
-    state.setSetting("planningModeEnabled", false);
-    updatePlanActionVisibility("fast", session);
-    if (session?.activePlan) {
-      await api.invoke("cancel-active-plan", { silent: true });
-    }
-    if (settings?.assistantMode === "planning") {
-      await api.invoke("save-settings", {
-        assistantMode: "fast",
-        planningModeEnabled: false,
-      });
-    }
+    const assistantMode = normalizeAssistantMode(settings?.assistantMode);
+    state.setSetting("assistantMode", assistantMode);
+    ui.renderAssistantModeBadge(assistantMode);
+    updatePlanActionVisibility(assistantMode, session);
     dom.sendBtn.disabled = false;
     dom.pttBtn.disabled = false;
-    state.setIncludeScreen(settings?.includeScreenshotByDefault !== false);
+    state.setIncludeScreen(settings?.includeScreenshotByDefault === true);
     bindEvents();
     chatHistory.bindEvents();
     setupIPCListeners();

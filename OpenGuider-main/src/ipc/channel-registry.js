@@ -1,0 +1,46 @@
+const PRELOAD_ON_CHANNELS = [
+  "ai-chunk",
+  "ai-done",
+  "ai-error",
+  "push-to-talk-start",
+  "push-to-talk-stop",
+  "tts-start",
+  "tts-done",
+  "show-cursor-at",
+  "hide-cursor",
+  "settings-changed",
+  "tts-webspeech",
+  "tts-webspeech-stop",
+  "tts-google",
+  "state-change",
+  "widget-ready",
+  "session-updated",
+  "plan-updated",
+  "agent-state-changed",
+  "pointer-updated",
+  "execution:step-pending",
+  "execution:step-complete",
+  "execution:aborted",
+  "execution:substep-progress",
+  "browser-agent-status-changed",
+  "browser-agent-download-progress",
+  "finops-budget-alert",
+  "pipeline-updated",
+];
+
+const PRELOAD_SEND_CHANNELS = [
+  "show-cursor-at",
+  "hide-cursor",
+  "stop-tts",
+  "panel-ready",
+  "widget-loaded",
+  "update-widget-state",
+  "execution:step-decision",
+  "execution:trust-override",
+  "execution:retry-step",
+];
+
+module.exports = {
+  PRELOAD_ON_CHANNELS,
+  PRELOAD_SEND_CHANNELS,
+};

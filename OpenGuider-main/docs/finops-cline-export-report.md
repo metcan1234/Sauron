@@ -2,7 +2,7 @@
 
 ## Durum (Faz 4A — uygulandı)
 
-Cline fork public API'sine `getActiveTaskMetrics()` eklendi. Bridge, görev tamamlandığında workspace `.sauron/usage/logs.jsonl` dosyasına `operation: "cline-task"` kaydı yazar. OpenGuider Settings özeti aynı dosyadan Core + Cline toplamını okur.
+Cline fork public API'sine `getActiveTaskMetrics()` eklendi. Bridge, görev tamamlandığında workspace `.sauron/usage/logs.jsonl` dosyasına `operation: "cline-task"` kaydı yazar. Sauron Settings özeti aynı dosyadan Core + Cline toplamını okur.
 
 ## Bileşenler
 

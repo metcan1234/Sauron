@@ -1,5 +1,67 @@
 # Changelog
 
+## 1.4.2 — 2026-06-19
+
+### Changed
+- Uygulama adı **Sauron** olarak yeniden markalandı (`productName`, installer, kısayol, UI)
+- `appId`: `com.sauron.desktop`; çıktı: `Sauron-{version}-win-x64.exe`
+- Renderer birincil API: `window.sauron` (`window.openguider` alias korunur)
+- Chat yedek dosyaları: `sauron-chats-*.json`; SecureStore service: `Sauron`
+
+## 1.4.1 — 2026-06-19
+
+### Fixed
+- **Hayalet CMD pencereleri:** VS Code doğrudan `Code.exe` ile açılır; `cmd /c start` kaldırıldı
+- Çift VS Code launch (pipeline + focus) tek çağrıya indirildi; 3 sn debounce
+- Python browser sidecar: `windowsHide: true`
+- Preload IPC: `pipeline-updated` kanalı allowlist'e eklendi (`channel-registry.js`)
+
+### Added
+- `vscode-launcher.js` — merkezi VS Code başlatıcı
+- `app-paths.js` — paketlenmiş uygulama yolu çözümleme
+- Bridge VSIX `extraResources` ile NSIS paketine gömülür
+- `predist:win`, `scripts/pre-dist-check.js`, `scripts/build-windows-release.ps1`
+- `waitForBridgeApi()` panel bootstrap race koruması
+- `asarUnpack`: keytar, onnxruntime-node
+- `afterPack` electron-builder hook bağlandı
+
+### Tests
+- `vscode-launcher.test.js`, `channel-registry.test.js`
+
+## 1.4.0 — 2026-06-19
+
+### Added
+- **Cline Self-Build Engine:** Fazlı build pipeline (corporate-web, self-improve, bridge, monorepo)
+- **Self-Build Studio:** Panel wizard (🔧) + pipeline başlatma
+- Handoff genişletme: `projectType`, `pipelineId/Phase`, `autoChain`, `verification`
+- ClineRules paketleri: electron-dev, bridge-dev, self-improve
+- Cline fork API: `getTaskState`, `clearTask`, `getLastTaskSummary`
+- Bridge: `cline-task-complete.json` artifact, handoff kuyruğu, prompt enrichment
+- Proje-tipi FinOps bütçe profilleri
+- IPC: `start-build-pipeline`, `advance-build-pipeline`, `run-workspace-command`, `detect-web-intent`
+- Chat → Web Studio CTA; Üretim Hattı panel kartı
+
+### Tests
+- `build-pipeline.test.js`, `clinerules-packs.test.js`, `workspace-detector.test.js`
+- Bridge: `task-complete.test.ts`, `handoff-prompt.test.ts`
+
+## 1.3.0 — 2026-06-19
+
+### Added
+- **Rehber modu:** Panel toggle (Asistan / Rehber), `start-goal-session` plan + turuncu imleç + Tamamladım akışı
+- **Ekran Al butonu:** Manuel ekran görüntüsü önizlemesi; otomatik capture varsayılan kapalı (maliyet kontrolü)
+- **Cline API senkronu:** Şifreli sidecar + Bridge + Cline fork `syncProviderCredentials`
+- Settings: Cline senkron durumu ve "Cline'a senkronla" butonu
+- IPC: `get-cline-sync-status`, `sync-cline-credentials`; plan IPC'leri `images` kabul eder
+
+### Changed
+- Orchestrator: adım ilerletme için kullanıcı ekran görüntüsü zorunlu; otomatik `captureScreenTool` kaldırıldı
+- Rehber modunda intent router browser plugin'e yönlendirmez
+- İmleç `waiting_user` durumunda süresiz görünür
+
+### Tests
+- `cline-credential-bridge.test.js`
+
 ## 1.2.0 — 2026-06-19
 
 ### Added

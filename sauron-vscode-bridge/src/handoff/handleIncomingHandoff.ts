@@ -1,4 +1,5 @@
 import path from "path"
+import fs from "fs/promises"
 import { compactHandoffPrompt } from "../cost-optimizer/compact-handoff"
 import { appendUsageRecord } from "../usage/export"
 import { readFinOpsConfig } from "../usage/config"
@@ -8,14 +9,41 @@ import type { HandoffAction, HandoffUserChoice, SauronHandoff } from "./types"
 export const HANDOFF_REPLACE_LABEL = "Mevcut görevi bitir, yenisini başlat"
 export const HANDOFF_REJECT_LABEL = "Yeni görevi reddet, mevcut göreve devam et"
 
+const CLINERULES_BY_PROJECT_TYPE: Record<string, string[]> = {
+	"corporate-web": ["sauron-web-dev.md"],
+	"electron-core": ["sauron-electron-dev.md", "sauron-self-improve.md"],
+	"bridge-extension": ["sauron-bridge-dev.md"],
+	"monorepo-stack": ["sauron-electron-dev.md", "sauron-bridge-dev.md"],
+}
+
+function buildProjectTypeHints(handoff: SauronHandoff): string[] {
+	const hints: string[] = []
+	if (handoff.projectType) {
+		const files = CLINERULES_BY_PROJECT_TYPE[handoff.projectType] || []
+		if (files.length) {
+			hints.push(`Follow project rules: ${files.map((f) => `.clinerules/${f}`).join(", ")}`)
+		}
+	}
+	if (handoff.pipelineId && handoff.pipelinePhase) {
+		const total = handoff.pipelineTotalPhases ? ` / ${handoff.pipelineTotalPhases}` : ""
+		hints.push(`Pipeline phase ${handoff.pipelinePhase}${total} (${handoff.pipelineId})`)
+	}
+	if (handoff.verification?.command) {
+		hints.push(`When done, run verification: \`${handoff.verification.command}\``)
+	}
+	return hints
+}
+
 export function buildPromptFromHandoff(handoff: SauronHandoff): string {
 	const summary = String(handoff.taskSummary || handoff.goal || "").trim()
 	if (!summary) {
 		return ""
 	}
+	const hints = buildProjectTypeHints(handoff)
 	return [
 		"[Sauron Core handoff]",
 		summary,
+		...hints,
 		"",
 		"Continue this task in the shared workspace. Follow .clinerules/sauron-workspace.md.",
 	].join("\n")
@@ -32,11 +60,17 @@ export async function buildPromptFromHandoffForWorkspace(
 
 	const config = await readFinOpsConfig(workspaceRoot)
 	const optimizer = config.costOptimizer
-	if (!optimizer?.enabled) {
-		return basePrompt
+	const compacted = optimizer?.enabled
+		? compactHandoffPrompt(basePrompt, optimizer)
+		: basePrompt
+
+	try {
+		await fs.access(path.join(workspaceRoot, ".clinerules", "sauron-workspace.md"))
+	} catch {
+		// workspace rules optional
 	}
 
-	return compactHandoffPrompt(basePrompt, optimizer)
+	return compacted
 }
 
 export async function logCostOptimizerHint(
@@ -73,8 +107,12 @@ export function resolveHandoffAction(
 	hasActiveTask: boolean,
 	autoStart: boolean | undefined,
 	userChoice?: HandoffUserChoice,
+	autoChain?: boolean,
 ): HandoffAction {
 	if (hasActiveTask) {
+		if (autoChain) {
+			return "startNewTask"
+		}
 		if (userChoice === "startReplace") {
 			return "startNewTask"
 		}

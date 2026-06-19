@@ -14,6 +14,12 @@ export interface ActiveModelSelection {
 	modelId: string
 }
 
+export interface TaskState {
+	active: boolean
+	taskId?: string
+	startedAt?: string
+}
+
 export interface ClineAPI {
 	/**
 	 * Starts a new task with an optional initial message and images.
@@ -73,4 +79,29 @@ export interface ClineAPI {
 	 * Switches act-mode provider/model before starting or continuing a task.
 	 */
 	setActiveModel(selection: ActiveModelSelection): Promise<void>
+
+	/**
+	 * Merges provider API keys / Ollama URL into Cline secret storage.
+	 */
+	syncProviderCredentials(creds: {
+		geminiApiKey?: string
+		deepSeekApiKey?: string
+		openAiApiKey?: string
+		ollamaBaseUrl?: string
+	}): Promise<{ synced: string[] }>
+
+	/**
+	 * Returns active task metadata, or null when no task is running.
+	 */
+	getTaskState(): TaskState | null
+
+	/**
+	 * Clears the active in-memory task without starting a new one.
+	 */
+	clearTask(): Promise<{ cleared: boolean }>
+
+	/**
+	 * Short summary of the most recently completed/cleared task.
+	 */
+	getLastTaskSummary(): string | null
 }

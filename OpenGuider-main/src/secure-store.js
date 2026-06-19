@@ -21,7 +21,7 @@ try {
 }
 
 class SecureStore {
-  constructor({ safeStorage, serviceName = "OpenGuider" }) {
+  constructor({ safeStorage, serviceName = "Sauron" }) {
     this.safeStorage = safeStorage;
     this.serviceName = serviceName;
     this.fallbackStore = new ElectronStore({

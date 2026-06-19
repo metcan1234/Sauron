@@ -175,6 +175,13 @@ function runSauronDoctor(store) {
 
   pushCheck(checks, checkBridgeVsix());
 
+  pushCheck(checks, {
+    id: "cline-fork-apis",
+    status: "warn",
+    message: "Self-Build pipeline tam otomasyon için Cline fork gerekir (getTaskState, clearTask, syncProviderCredentials)",
+    fixHint: "cline-main fork derleyin; Marketplace Cline yalnızca kısmi handoff destekler.",
+  });
+
   const workspacePath = String(store?.get?.("workspacePath") || "").trim();
   pushCheck(checks, checkSauronDir(workspacePath));
 

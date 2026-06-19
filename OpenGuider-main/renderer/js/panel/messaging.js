@@ -7,6 +7,7 @@ export function createMessagingController({
   log,
   state,
   ui,
+  webStudio,
 }) {
   let syncQueue = Promise.resolve();
   let currentAbortController = null;
@@ -90,18 +91,122 @@ export function createMessagingController({
     log("ipc:capture-screenshot invoke");
 
     try {
-      const screens = await api.invoke("capture-screenshot");
+      const screens = await api.invoke("capture-screenshot", { forceFresh: true });
       state.setPendingScreenshots(screens);
-      ui.showToast(`📷 ${screens.length} ekran yakalandı — sonraki mesaja eklenecek`);
+      ui.renderScreenshotPreviewStrip(screens, () => {
+        state.setPendingScreenshots(null);
+        ui.renderScreenshotPreviewStrip(null);
+        ui.updateScreenPendingBadge(0);
+      });
+      ui.updateScreenPendingBadge(screens?.length || 0);
+      ui.showToast(`📷 ${screens.length} ekran yakalandı — gönderimde veya Tamamladım ile kullanılacak`);
     } catch (error) {
       ui.showToast("Ekran görüntüsü alınamadı: " + error.message, true);
       log("ipc:capture-screenshot error", error);
     }
   }
 
+  function isGuideMode() {
+    const mode = state.getSetting("assistantMode") || "assistant";
+    return mode === "guide" || mode === "planning";
+  }
+
+  function collectImagesForSend() {
+    let images = state.getPendingScreenshots();
+    const attachmentPayload = buildAttachmentPayload(state.getPendingAttachments());
+    if (attachmentPayload.images.length > 0) {
+      images = [...(images || []), ...attachmentPayload.images];
+    }
+    return { images, attachmentPayload };
+  }
+
+  async function sendGuideMessage(text, options = {}) {
+    const skipUserPersist = Boolean(options.skipUserPersist);
+    const { images } = collectImagesForSend();
+
+    if (!images?.length) {
+      ui.showToast("Rehber modunda önce Ekran Al butonuna basın.", true);
+      return;
+    }
+
+    state.setPendingScreenshots(null);
+    state.clearPendingAttachments();
+    ui.renderAttachmentPreviewStrip([], null);
+    ui.renderScreenshotPreviewStrip(null);
+    ui.updateScreenPendingBadge(0);
+    ui.hideErrorBanner();
+    dom.textInput.value = "";
+    dom.textInput.style.height = "auto";
+    state.setStreaming(true);
+
+    const stopBtn = doc.getElementById("stop-btn");
+    dom.sendBtn.classList.add("hidden");
+    if (stopBtn) stopBtn.classList.remove("hidden");
+    dom.sendBtn.disabled = true;
+    ui.renderAgentState("thinking");
+
+    currentAbortController = new AbortController();
+    requestTimeoutId = window.setTimeout(() => {
+      if (state.isStreaming()) {
+        log("ai:start-goal-session timeout 120s triggered");
+        cancelMessage();
+        ui.showToast("İstek zaman aşımına uğradı", true);
+      }
+    }, 120000);
+
+    let typingId = null;
+    try {
+      if (!skipUserPersist) {
+        ui.appendUserMessage(text);
+        state.addConversationMessage({ role: "user", content: text });
+      }
+      typingId = ui.showTypingIndicator();
+      await api.invoke("start-goal-session", { text, images });
+    } catch (error) {
+      onAIError(error.message);
+    } finally {
+      if (requestTimeoutId) {
+        clearTimeout(requestTimeoutId);
+        requestTimeoutId = null;
+      }
+      if (typingId !== null) {
+        ui.removeTypingIndicator(typingId);
+      }
+      state.setStreaming(false);
+      dom.sendBtn.classList.remove("hidden");
+      const stopBtn = doc.getElementById("stop-btn");
+      if (stopBtn) stopBtn.classList.add("hidden");
+      dom.sendBtn.disabled = false;
+      ui.renderAgentState("idle");
+    }
+  }
+
   function trimLocalHistory() {
     if (state.getConversationHistory().length > MAX_STORED_MESSAGES) {
       state.replaceConversationHistory(state.getConversationHistory().slice(-MAX_STORED_MESSAGES));
+    }
+  }
+
+  async function maybeSuggestWebStudio(rawText) {
+    if (!rawText || isGuideMode() || !webStudio?.openWizard) {
+      return;
+    }
+    try {
+      const intent = await api.invoke("detect-web-intent", { text: rawText });
+      if (!intent?.suggestWebStudio) {
+        return;
+      }
+      const open = await ui.confirmDialog({
+        title: "Web Studio",
+        message: "Kurumsal site için Web Studio (🌐) butonunu kullanın. Şimdi açılsın mı?",
+        confirmLabel: "Web Studio aç",
+        cancelLabel: "Sohbete devam",
+      });
+      if (open) {
+        await webStudio.openWizard();
+      }
+    } catch (error) {
+      log("detect-web-intent error", error);
     }
   }
 
@@ -118,25 +223,24 @@ export function createMessagingController({
       return;
     }
 
+    if (isGuideMode()) {
+      await sendGuideMessage(text, options);
+      return;
+    }
+
+    void maybeSuggestWebStudio(rawText);
+
     const skipUserPersist = Boolean(options.skipUserPersist);
     const regenerate = Boolean(options.regenerate);
 
-    let images = state.getPendingScreenshots();
-    if (attachmentPayload.images.length > 0) {
-      images = [...(images || []), ...attachmentPayload.images];
-    }
-    if (state.getIncludeScreen() && !images) {
-      try {
-        log("ipc:capture-screenshot invoke auto");
-        images = await api.invoke("capture-screenshot");
-      } catch (error) {
-        log("ipc:capture-screenshot auto error", error);
-      }
-    }
+    const { images: collectedImages } = collectImagesForSend();
+    let images = collectedImages;
 
     state.setPendingScreenshots(null);
     state.clearPendingAttachments();
     ui.renderAttachmentPreviewStrip([], null);
+    ui.renderScreenshotPreviewStrip(null);
+    ui.updateScreenPendingBadge(0);
     ui.hideErrorBanner();
     dom.textInput.value = "";
     dom.textInput.style.height = "auto";
@@ -441,6 +545,8 @@ export function createMessagingController({
   return {
     appendStreamChunk,
     captureScreenshot,
+    collectImagesForSend,
+    isGuideMode,
     syncSession,
     onAIDone,
     onAIError,

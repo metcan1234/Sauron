@@ -1,5 +1,11 @@
 import * as vscode from "vscode"
 import type { ActiveTaskMetrics, ClineAPI } from "../cline"
+import {
+	buildTaskCompleteArtifact,
+	getLastConsumedHandoff,
+	resolveTaskSummary,
+	writeTaskCompleteArtifact,
+} from "../handoff/task-complete"
 import { readFinOpsConfig } from "./config"
 import { exportTaskMetricsIfNew } from "./export"
 
@@ -34,6 +40,15 @@ async function pollWorkspace(
 
 	if (state.hadActiveTask && !hasActiveTask && state.lastMetrics) {
 		await exportTaskMetricsIfNew(workspaceRoot, state.lastMetrics, config)
+		if (cline) {
+			const summary = resolveTaskSummary(cline, state.lastMetrics)
+			const artifact = buildTaskCompleteArtifact(
+				getLastConsumedHandoff(),
+				state.lastMetrics,
+				summary,
+			)
+			await writeTaskCompleteArtifact(workspaceRoot, artifact).catch(() => {})
+		}
 		state.lastMetrics = null
 	}
 

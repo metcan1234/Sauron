@@ -18,6 +18,7 @@
     <div class="header-actions">
       <button class="icon-btn" id="btn-chat-history" data-i18n="chatHistory" data-i18n-attr="title" title="Sohbet geçmişi">☰</button>
       <button class="icon-btn" id="btn-web-studio" data-i18n="webStudio" data-i18n-attr="title" title="Web Studio">🌐</button>
+      <button class="icon-btn" id="btn-self-build" title="Self-Build Studio">🔧</button>
       <button class="icon-btn hidden" id="btn-web-preview" data-i18n="webPreview" data-i18n-attr="title" title="Önizleme">👁</button>
       <button class="icon-btn workspace-btn" id="btn-workspace" data-i18n="workspace" data-i18n-attr="title" title="Çalışma Kısmı">⌘</button>
       <button class="icon-btn" id="btn-settings" data-i18n="settings" data-i18n-attr="title" title="Ayarlar">⚙</button>
@@ -82,6 +83,11 @@
       <strong>Handoff geçmişi</strong>
       <ul class="handoff-history-list" id="handoff-history-list"></ul>
     </div>
+    <div class="build-pipeline-panel hidden" id="build-pipeline-panel">
+      <strong id="build-pipeline-title">Üretim Hattı</strong>
+      <div class="build-pipeline-meta" id="build-pipeline-meta"></div>
+      <button class="workspace-status-btn ghost hidden" id="build-pipeline-advance" type="button">Sonraki fazı başlat</button>
+    </div>
     <div class="workspace-status-actions">
       <button class="workspace-status-btn" id="workspace-status-focus" type="button">VS Code'a git</button>
       <button class="workspace-status-btn ghost" id="workspace-status-dismiss" type="button" data-i18n="dismiss">Kapat</button>
@@ -103,7 +109,9 @@
   <div class="input-area">
     <div class="attachment-preview-strip hidden" id="attachment-preview-strip"></div>
     <div class="input-row">
-      <span class="mode-badge" id="assistant-mode-badge" title="Sohbet, rehberlik ve asistanlık">Asistan</span>
+      <button class="capture-screen-btn" id="btn-capture-screen" type="button" data-i18n="captureScreen" data-i18n-attr="title" title="Ekran Al">📷</button>
+      <span class="mode-badge is-clickable" id="assistant-mode-badge" title="Mod değiştir: Asistan / Rehber">Asistan</span>
+      <span class="screen-pending-badge hidden" id="screen-pending-badge" title="Gönderimde ekran görüntüsü eklenecek"></span>
       <textarea class="text-input" id="text-input" data-i18n-placeholder="askPlaceholder" placeholder="Bana bir şey sor…" rows="1"></textarea>
       <button class="ptt-btn" id="ptt-btn" data-i18n="holdToTalk" data-i18n-attr="title" title="Konuşmak için basılı tut">⏺
         <span class="waveform" id="waveform" style="display:none">
@@ -232,6 +240,46 @@
       <button class="confirm-btn ghost" id="ws-btn-back" type="button" data-i18n="planBack">Geri</button>
       <button class="confirm-btn" id="ws-btn-next" type="button" data-i18n="webStudioNext">İleri</button>
       <button class="confirm-btn primary hidden" id="ws-btn-finish" type="button" data-i18n="webStudioFinish">Oluştur ve Cline'a gönder</button>
+    </div>
+  </div>
+</div>
+
+<div class="web-studio-overlay hidden" id="self-build-overlay" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="web-studio-modal">
+    <div class="web-studio-header">
+      <h3>Self-Build Studio</h3>
+      <button class="icon-btn" id="sbs-btn-close" type="button">✕</button>
+    </div>
+    <div class="web-studio-step" data-sbs-step="0">
+      <h4>Hedef</h4>
+      <label class="ws-label">Üretim hattı
+        <select class="form-input" id="sbs-pipeline-id">
+          <option value="self-improve-feature-v1">Kendini geliştir (Sauron)</option>
+          <option value="bridge-agent-v1">Bridge agent</option>
+          <option value="corporate-web-v1">Kurumsal web (pipeline)</option>
+          <option value="monorepo-stack-v1">Tam stack (monorepo rehberi)</option>
+        </select>
+      </label>
+    </div>
+    <div class="web-studio-step hidden" data-sbs-step="1">
+      <h4>Görev</h4>
+      <label class="ws-label">Kısa açıklama<textarea class="form-input" id="sbs-task-description" rows="3" placeholder="Ne yapılacak?"></textarea></label>
+      <label class="ws-label">Maliyet profili
+        <select class="form-input" id="sbs-cost-profile">
+          <option value="economy">Ekonomi</option>
+          <option value="balanced" selected>Dengeli</option>
+          <option value="performance">Performans</option>
+        </select>
+      </label>
+    </div>
+    <div class="web-studio-step hidden" data-sbs-step="2">
+      <h4>Özet</h4>
+      <div id="sbs-summary" class="web-studio-summary"></div>
+    </div>
+    <div class="web-studio-actions">
+      <button class="confirm-btn ghost" id="sbs-btn-back" type="button">Geri</button>
+      <button class="confirm-btn" id="sbs-btn-next" type="button">İleri</button>
+      <button class="confirm-btn primary hidden" id="sbs-btn-finish" type="button">Pipeline başlat</button>
     </div>
   </div>
 </div>

@@ -10,7 +10,7 @@ test("execution log renders a finished substep even when no start event was rece
 
   global.window = dom.window;
   global.document = dom.window.document;
-  global.openguider = {
+  global.window.sauron = {
     on(channel, cb) {
       listeners.set(channel, cb);
       return () => listeners.delete(channel);
@@ -42,7 +42,7 @@ test("execution log renders a finished substep even when no start event was rece
   } finally {
     delete global.window;
     delete global.document;
-    delete global.openguider;
+    delete global.window?.sauron;
     dom.window.close();
   }
 });

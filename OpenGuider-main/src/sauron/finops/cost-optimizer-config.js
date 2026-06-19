@@ -47,12 +47,21 @@ function mergeTierModels(overrides = {}) {
   return merged;
 }
 
+const DEFAULT_PROJECT_BUDGETS = {
+  "corporate-web": { dailyBudgetTl: 15, defaultTier: "economy" },
+  "electron-core": { dailyBudgetTl: 25, defaultTier: "balanced" },
+  "bridge-extension": { dailyBudgetTl: 10, defaultTier: "economy" },
+  "monorepo-stack": { dailyBudgetTl: 30, defaultTier: "balanced" },
+  generic: { dailyBudgetTl: 0, defaultTier: "economy" },
+};
+
 function buildDefaultCostOptimizerConfig() {
   return {
     enabled: true,
     mode: "balanced",
     coreModelTier: "economy",
     models: { ...DEFAULT_TIER_MODELS },
+    projectBudgets: { ...DEFAULT_PROJECT_BUDGETS },
     routing: {
       defaultTier: "economy",
       handoffMaxChars: 4000,
@@ -90,6 +99,7 @@ function mergeCostOptimizerConfig(settings = {}) {
     mode,
     coreModelTier,
     models: mergeTierModels(settings.finopsOptimizerModels),
+    projectBudgets: { ...defaults.projectBudgets },
     routing: {
       ...defaults.routing,
       handoffMaxChars,
@@ -146,13 +156,21 @@ function computeComplexityHint(text, keywords = DEFAULT_COMPLEXITY_KEYWORDS) {
   return "low";
 }
 
+function resolveProjectBudget(projectType, optimizer) {
+  const key = String(projectType || "generic").trim();
+  const budgets = optimizer?.projectBudgets || DEFAULT_PROJECT_BUDGETS;
+  return budgets[key] || budgets.generic || { dailyBudgetTl: 0, defaultTier: "economy" };
+}
+
 module.exports = {
   DEFAULT_TIER_MODELS,
   DEFAULT_COMPLEXITY_KEYWORDS,
+  DEFAULT_PROJECT_BUDGETS,
   buildDefaultCostOptimizerConfig,
   mergeCostOptimizerConfig,
   mergeTierModels,
   mapProviderIdToCore,
   resolveCoreModelOverlay,
+  resolveProjectBudget,
   computeComplexityHint,
 };

@@ -1,8 +1,8 @@
 # Cline Agent Setup (4-Agent Matrix)
 
-Sauron Core otomatik olarak modelleri seçer; Cline extension'da aynı API anahtarlarını **bir kez** ilgili provider'lara girmeniz gerekir. Sauron anahtarları Cline'a otomatik enjekte etmez.
+Sauron Core otomatik olarak modelleri seçer. v1.3.0+ ile API anahtarları **Bridge üzerinden Cline fork'a otomatik senkronlanır**. v1.4.0+ ile **Build Pipeline** fazlı handoff zinciri ve `autoChain` (fork `clearTask` gerekir) desteklenir.
 
-## Hızlı kurulum (~5 dakika)
+## Hızlı kurulum (~3 dakika)
 
 1. Sauron Settings → **AI Agents** sekmesinde anahtarları kaydedin:
    - Gemini API Key (Google AI Studio)
@@ -10,9 +10,9 @@ Sauron Core otomatik olarak modelleri seçer; Cline extension'da aynı API anaht
    - OpenAI API Key (platform.openai.com)
    - Ollama URL (isteğe bağlı, varsayılan `http://localhost:11434`)
 
-2. VS Code'da Cline sidebar'ı açın → **Settings / API Configuration**.
+2. Workspace path seçin → **Cline'a senkronla** (veya ⌘ Çalışma Kısmı handoff).
 
-3. Aşağıdaki eşleştirmeyi yapın:
+3. VS Code + Sauron Bridge açıkken Cline fork anahtarları SecretStorage'a yazar.
 
 | Sauron agent | Cline provider | Model (otomatik hedef) |
 |--------------|----------------|------------------------|

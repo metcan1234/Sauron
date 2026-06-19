@@ -1,14 +1,14 @@
 /**
  * StepApprovalCard.js
  * Self-contained UI component that renders the step approval dialog.
- * No framework — plain DOM. Reads from / writes to window.openguider IPC.
+ * No framework — plain DOM. Reads from / writes to window.sauron IPC.
  *
  * Constructor: new StepApprovalCard(container, sectionEl)
  *   container  — the DOM element to render the card inside
  *   sectionEl  — wrapper element that is shown/hidden
  */
 
-/* global openguider */
+/* global window */
 
 class StepApprovalCard {
   /**
@@ -29,17 +29,18 @@ class StepApprovalCard {
   // ── IPC subscription ──────────────────────────────────────────────────────
 
   _bindGlobal() {
+    const api = window.sauron || window.openguider;
     // Listen for pending steps
-    this._unsubscribe = openguider.on('execution:step-pending', (payload) => {
+    this._unsubscribe = api.on('execution:step-pending', (payload) => {
       this._show(payload);
     });
 
     // Hide card when step completes
-    openguider.on('execution:step-complete', () => {
+    api.on('execution:step-complete', () => {
       this._hide();
     });
 
-    openguider.on('execution:aborted', () => {
+    api.on('execution:aborted', () => {
       this._hide();
     });
 
@@ -171,7 +172,8 @@ class StepApprovalCard {
     // Trust override checkbox
     this._container.querySelector('#trust-toggle-cb').addEventListener('change', (e) => {
       if (e.target.checked) {
-        openguider.send('execution:trust-override', {
+        const api = window.sauron || window.openguider;
+        api.send('execution:trust-override', {
           taskId: this._taskId || step.taskId || step.id,
           newTrustLevel: 'autopilot',
         });
@@ -193,7 +195,8 @@ class StepApprovalCard {
     }
     this._decisionSentStepId = stepId;
     console.log('[step-approval] send execution:step-decision', { stepId, decision });
-    openguider.send('execution:step-decision', {
+    const api = window.sauron || window.openguider;
+    api.send('execution:step-decision', {
       taskId: this._taskId || undefined,
       stepId,
       decision,

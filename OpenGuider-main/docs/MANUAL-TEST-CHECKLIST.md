@@ -1,4 +1,39 @@
-# Manuel Test Checklist — v1.2
+# Manuel Test Checklist — v1.4.2
+
+## CMD + Windows EXE (v1.4.2)
+
+- [ ] ⌘ Çalışma Kısmı → VS Code açılır, **görünür cmd.exe penceresi yok**
+- [ ] "VS Code'a git" → ek cmd penceresi açılmaz (debounce)
+- [ ] Pipeline başlat → tek VS Code odak, çift cmd yok
+- [ ] `npm run predist:win` syntax + test + Bridge VSIX kontrolü geçer
+- [ ] `npm run pack` → `release/win-unpacked/Sauron.exe` başlar
+- [ ] `npm run dist:win` → `release/Sauron-1.4.2-win-x64.exe` kurulumu
+- [ ] Kurulu EXE: masaüstü kısayolu **Sauron**; Bridge VSIX `resources/bridge/` içinden kurulur
+- [ ] Panel: `pipeline-updated` IPC ile Üretim Hattı kartı güncellenir
+- [ ] Panel açılışında preload API timeout banner'ı görünmez (normal boot)
+
+## Self-Build Pipeline (v1.4)
+
+- [ ] 🔧 Self-Build Studio → pipeline başlat → faz 1 handoff
+- [ ] Cline görev bitince `.sauron/cline-task-complete.json` oluşur
+- [ ] Üretim Hattı kartı faz ilerlemesini gösterir
+- [ ] Sonraki faz handoff otomatik yazılır (fork + autoChain)
+- [ ] Kurumsal site pipeline → `npm run build` doğrulama fazı
+- [ ] Self-improve pipeline → Sauron `npm test` fazı
+
+## Rehber + Ekran Al (v1.3)
+
+- [ ] Sohbet gönderince otomatik ekran alınmıyor
+- [ ] Ekran Al → önizleme → gönder → vision/pointer çalışıyor
+- [ ] Mod: Rehber + ekran + soru → plan paneli + turuncu imleç
+- [ ] Tamamladım öncesi ekran yoksa uyarı
+- [ ] Ekran Al → Tamamladım → sonraki adım
+
+## Cline senkron (v1.3)
+
+- [ ] Settings → 3 provider key kaydet → Cline'a senkronla
+- [ ] Handoff öncesi `.sauron/cline-credential-request.json` oluşur (secret yok)
+- [ ] Bridge + Cline fork → provider key'ler Cline'da görünür
 
 ## Web Studio (v1.2)
 
