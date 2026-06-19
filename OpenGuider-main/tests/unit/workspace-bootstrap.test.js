@@ -21,6 +21,8 @@ test("bootstrapWorkspace writes finops config, rules, and extension recommendati
     assert.equal(result.ok, true);
     assert.equal(fs.existsSync(path.join(workspace, ".sauron", "finops-config.json")), true);
     assert.equal(fs.existsSync(path.join(workspace, ".clinerules", "sauron-workspace.md")), true);
+    assert.equal(fs.existsSync(path.join(workspace, ".clinerules", "sauron-web-dev.md")), true);
+    assert.equal(result.webDevRulesSeeded, true);
     assert.equal(fs.existsSync(path.join(workspace, ".vscode", "extensions.json")), true);
 
     const extensions = JSON.parse(

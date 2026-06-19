@@ -75,6 +75,7 @@ const schema = {
   chatSessionsV1: { type: ["object", "null"], default: null },
   workspacePath: { type: "string", default: "" },
   finopsTotalBudgetTl: { type: "number", default: 0 },
+  finopsHardBudgetEnabled: { type: "boolean", default: false },
   finopsUsdToTl: { type: "number", default: 34.5 },
   finopsDefaultPricePerMillionTl: { type: "number", default: 50 },
   finopsLastAlertDate: { type: "string", default: "" },

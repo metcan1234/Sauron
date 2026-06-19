@@ -5,6 +5,14 @@ const { checkPreCallBudgetAlert, maybePostCallBudgetAlert } = require("./budget-
 const { resolveCoreModelOverlay } = require("./cost-optimizer-config");
 const { resolveAgentForCore } = require("./agent-matrix");
 
+class BudgetExceededError extends Error {
+  constructor(message, alert = null) {
+    super(message || "AI budget exceeded.");
+    this.name = "BudgetExceededError";
+    this.alert = alert;
+  }
+}
+
 const OVERLAY_SKIP_OPERATIONS = new Set(["handoff-summary"]);
 
 let budgetContext = {
@@ -99,7 +107,10 @@ async function prepareLlmCall(settings = {}, options = {}) {
     ...budgetContext.getSettings(),
     ...settings,
   };
-  await checkPreCallBudgetAlert(liveSettings, budgetContext.getWindows);
+  const alert = await checkPreCallBudgetAlert(liveSettings, budgetContext.getWindows);
+  if (alert?.blocked) {
+    throw new BudgetExceededError(alert.message, alert);
+  }
 
   if (OVERLAY_SKIP_OPERATIONS.has(operation)) {
     return liveSettings;
@@ -126,6 +137,7 @@ async function prepareLlmCall(settings = {}, options = {}) {
 }
 
 module.exports = {
+  BudgetExceededError,
   configureFinOpsContext,
   recordLlmUsage,
   prepareLlmCall,

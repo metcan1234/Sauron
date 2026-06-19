@@ -20,11 +20,11 @@ Cline fork public API'sine `getActiveTaskMetrics()` eklendi. Bridge, görev tama
 2. Cline görevi biter → bridge son metrikleri yazar
 3. Core Settings → FinOps sekmesi `get-finops-summary` ile toplam + kırılım gösterir
 
-## Faz 4B–E (henüz yapılmadı)
+## Faz 4B–E (tamamlandı — v1.1.0)
 
-- **4B:** Kurulum script, vsix paketleme, sauron-doctor
-- **4C:** Browser plugin FinOps, E2E smoke, handoff status panel
-- **4D:** Analitik dashboard, context tier, hard budget limit
+- **4B:** Kurulum script (`install-sauron-stack.ps1`), sauron-doctor
+- **4C:** Browser plugin FinOps, handoff history panel, E2E smoke tests
+- **4D:** Analitik dashboard, hard budget limit, `get-finops-analytics`
 - **4E:** ADR belgeleri, CI pipeline, openrouterMaxTokens UI
 
 ## Manuel smoke (Faz 4A)

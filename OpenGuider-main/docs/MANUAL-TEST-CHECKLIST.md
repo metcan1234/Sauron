@@ -1,4 +1,13 @@
-# Manuel Test Checklist — v1.0
+# Manuel Test Checklist — v1.2
+
+## Web Studio (v1.2)
+
+- [ ] "Kurumsal site yap" → browser plugin'e gitmez
+- [ ] Web Studio wizard → brief kaydedilir
+- [ ] Scaffold → Next.js dosyaları workspace'te (15+ dosya)
+- [ ] `.sauron/web-brief.json` ve `web-quality-checklist.md` oluşur
+- [ ] Oluştur ve Cline'a gönder → handoff + VS Code
+- [ ] Cline: npm install && npm run dev → Önizleme butonu localhost açar
 
 ## Stabilite (30 dk)
 
@@ -38,3 +47,14 @@
 
 - [ ] FinOps badge oturum/toplam ayrımı
 - [ ] Browser sidecar crash → panel banner
+
+## v1.1 — Faz 4B–E
+
+- [ ] Sistem tanısı (doctor) tüm kritik kontrolleri listeler
+- [ ] install-sauron-stack.ps1 / Bridge kur yenile
+- [ ] Handoff geçmişi paneli yüklenir, 30 sn yenilenir
+- [ ] Bekleyen handoff → ⌘ rozet; reddet → `.rejected`
+- [ ] FinOps analitik grafiği (7 gün)
+- [ ] Sert bütçe açık → limit aşımında sohbet engellenir
+- [ ] Browser görevi sonrası usage ledger'da `browser-goal` satırı
+- [ ] OpenRouter max tokens kaydedilir

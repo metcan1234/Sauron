@@ -19,10 +19,13 @@ function registerWorkspaceIpc({
   focusVSCodeWorkspace,
   listPendingHandoffs,
   rejectPendingHandoffs,
+  listHandoffHistory,
+  rejectHandoffFile,
   buildHandoffPayload,
   bootstrapWorkspace,
   writeHandoff,
   launchVSCode,
+  runSauronDoctor,
 }) {
   ipcMain.handle("pick-workspace-folder", async () => {
     debugLog("ipc:pick-workspace-folder");
@@ -63,6 +66,53 @@ function registerWorkspaceIpc({
       return {
         ok: false,
         error: error?.message || "Workspace prerequisite check failed.",
+      };
+    }
+  });
+
+  ipcMain.handle("run-sauron-doctor", () => {
+    debugLog("ipc:run-sauron-doctor");
+    try {
+      return { ok: true, ...runSauronDoctor(store) };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error?.message || "Sauron doctor failed.",
+        checks: [],
+      };
+    }
+  });
+
+  ipcMain.handle("list-handoff-history", (_event, options = {}) => {
+    const resolvedPath = String(options?.workspacePath || store.get("workspacePath") || "").trim();
+    if (!resolvedPath) {
+      return { ok: false, error: "Workspace path is not configured.", items: [] };
+    }
+    try {
+      const items = listHandoffHistory(resolvedPath, { limit: options?.limit });
+      return { ok: true, workspacePath: resolvedPath, items };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error?.message || "Failed to list handoff history.",
+        items: [],
+      };
+    }
+  });
+
+  ipcMain.handle("reject-handoff-file", (_event, options = {}) => {
+    const resolvedPath = String(options?.workspacePath || store.get("workspacePath") || "").trim();
+    const handoffFileName = String(options?.handoffFileName || "").trim();
+    if (!resolvedPath || !handoffFileName) {
+      return { ok: false, error: "Missing workspace path or handoff file name." };
+    }
+    try {
+      const result = rejectHandoffFile(resolvedPath, handoffFileName);
+      return { ok: true, workspacePath: resolvedPath, ...result };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error?.message || "Failed to reject handoff file.",
       };
     }
   });

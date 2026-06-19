@@ -495,6 +495,8 @@ class TaskOrchestrator {
       const goalResult = await plugin.runGoal(taskId, {
         trustLevel,
         onSubStep: async (subStep) => this._handleSubStep(subStep, approvalWindow, taskId),
+        sessionId: this.sessionManager.getSnapshot()?.sessionId || "",
+        settings,
       });
 
       const summary = goalResult?.summary || (goalResult?.success ? "Goal completed." : "Goal finished with issues.");

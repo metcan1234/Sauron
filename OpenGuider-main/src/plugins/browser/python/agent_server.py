@@ -83,6 +83,11 @@ class StepResult(BaseModel):
     message: str
     requiresHumanReview: bool = False
     error: Optional[str] = None
+    provider: str = ""
+    model: str = ""
+    promptTokens: int = 0
+    completionTokens: int = 0
+    estimatedCostUsd: float = 0.0
 
 
 class GoalPayload(BaseModel):
@@ -97,6 +102,11 @@ class GoalResult(BaseModel):
     stepsCompleted: int = 0
     screenshotFinal: str = ""
     error: Optional[str] = None
+    provider: str = ""
+    model: str = ""
+    promptTokens: int = 0
+    completionTokens: int = 0
+    estimatedCostUsd: float = 0.0
 
 
 def _coerce_string(value: Any) -> str:
@@ -280,6 +290,62 @@ def _build_agent_kwargs(task: str, llm: Any, browser: Any, hooks: Any, *, autono
 
 # ── Helper: build LLM from env ────────────────────────────────────────────────
 
+def _build_usage_payload(llm: Any, history: Any = None) -> dict[str, Any]:
+    """Collect provider/model/token usage for FinOps ledger export."""
+    provider = os.environ.get("OPENGUIDER_LLM_PROVIDER", "openai").lower()
+    model = _coerce_string(os.environ.get("OPENGUIDER_LLM_MODEL", ""))
+    if not model and llm is not None:
+        model = _coerce_string(getattr(llm, "model_name", None) or getattr(llm, "model", ""))
+
+    prompt_tokens = 0
+    completion_tokens = 0
+
+    if history is not None:
+        for method_name in ("usage", "token_usage", "get_usage"):
+            if not hasattr(history, method_name):
+                continue
+            try:
+                usage = getattr(history, method_name)()
+            except Exception:
+                usage = None
+            if isinstance(usage, dict):
+                prompt_tokens = int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0)
+                completion_tokens = int(usage.get("completion_tokens") or usage.get("output_tokens") or 0)
+                break
+
+        if prompt_tokens == 0 and completion_tokens == 0:
+            for input_attr, output_attr in (
+                ("total_input_tokens", "total_output_tokens"),
+                ("input_tokens", "output_tokens"),
+            ):
+                input_value = getattr(history, input_attr, None)
+                output_value = getattr(history, output_attr, None)
+                if callable(input_value):
+                    try:
+                        prompt_tokens = int(input_value() or 0)
+                    except Exception:
+                        prompt_tokens = 0
+                elif input_value is not None:
+                    prompt_tokens = int(input_value or 0)
+                if callable(output_value):
+                    try:
+                        completion_tokens = int(output_value() or 0)
+                    except Exception:
+                        completion_tokens = 0
+                elif output_value is not None:
+                    completion_tokens = int(output_value or 0)
+                if prompt_tokens or completion_tokens:
+                    break
+
+    return {
+        "provider": provider,
+        "model": model,
+        "promptTokens": max(0, prompt_tokens),
+        "completionTokens": max(0, completion_tokens),
+        "estimatedCostUsd": 0.0,
+    }
+
+
 def _build_llm():
     """
     Build a LangChain-compatible LLM from environment variables injected by sidecar.js.
@@ -440,12 +506,14 @@ async def execute(step: StepPayload):
             success = history.is_successful() or history.is_done()
             message = history.final_result() or ("Task completed" if success else "Task did not complete")
             screenshot_after = _get_history_screenshot(history)
+            usage_payload = _build_usage_payload(llm, history)
             return StepResult(
                 stepId=step.id,
                 success=bool(success),
                 screenshot=_coerce_string(screenshot_after),
                 message=str(message),
                 requiresHumanReview=not bool(success),
+                **usage_payload,
             )
         except asyncio.CancelledError:
             screenshot_after = await _capture_screenshot()
@@ -576,6 +644,7 @@ async def run_goal(payload: GoalPayload):
                         stepsCompleted=steps_completed,
                         screenshotFinal=_coerce_string(screenshot_final),
                         error=diagnostics if not success and diagnostics else None,
+                        **_build_usage_payload(llm, history),
                     )
                 except Exception as exc:
                     message = str(exc)

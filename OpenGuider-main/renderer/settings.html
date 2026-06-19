@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
@@ -10,19 +10,19 @@
 <div class="settings-panel">
   <div class="settings-header">
     <div class="header-logo">⚙</div>
-    <h2>Settings</h2>
-    <button class="icon-btn" id="btn-close" style="-webkit-app-region:no-drag">✕</button>
+    <h2 data-i18n="settingsTitle">Ayarlar</h2>
+    <button class="icon-btn" id="btn-close" style="-webkit-app-region:no-drag" data-i18n="close" data-i18n-attr="title" title="Kapat">✕</button>
   </div>
 
   <div class="settings-body">
     <div class="settings-tabs">
-      <button class="settings-tab-btn active" data-tab="agents">AI Agents</button>
-      <button class="settings-tab-btn" data-tab="workspace">Workspace</button>
-      <button class="settings-tab-btn" data-tab="finops">Bütçe / FinOps</button>
-      <button class="settings-tab-btn" data-tab="voice">Voice</button>
-      <button class="settings-tab-btn" data-tab="plugins">Plugins</button>
-      <button class="settings-tab-btn" data-tab="aware">Aware</button>
-      <button class="settings-tab-btn" data-tab="shortcuts">Shortcuts</button>
+      <button class="settings-tab-btn active" data-tab="agents" data-i18n="aiAgentsTab">AI Ajanları</button>
+      <button class="settings-tab-btn" data-tab="workspace" data-i18n="workspaceTab">Çalışma Kısmı</button>
+      <button class="settings-tab-btn" data-tab="finops" data-i18n="finopsTab">Bütçe / FinOps</button>
+      <button class="settings-tab-btn" data-tab="voice" data-i18n="voiceTab">Ses</button>
+      <button class="settings-tab-btn" data-tab="plugins" data-i18n="pluginsTab">Eklentiler</button>
+      <button class="settings-tab-btn" data-tab="aware" data-i18n="awareTab">Farkındalık</button>
+      <button class="settings-tab-btn" data-tab="shortcuts" data-i18n="shortcutsTab">Kısayollar</button>
     </div>
 
     <div class="settings-tab-section active" data-tab-content="agents">
@@ -152,6 +152,10 @@
                 <input class="form-input" id="openrouterModel" type="text" placeholder="google/gemini-2.0-flash-lite"/>
               </div>
               <div class="form-group">
+                <label>OpenRouter Max Tokens</label>
+                <input class="form-input" id="openrouterMaxTokens" type="number" min="256" step="256" placeholder="2048"/>
+              </div>
+              <div class="form-group">
                 <label>Base URL</label>
                 <input class="form-input" id="openrouterBaseUrl" type="url" placeholder="https://openrouter.ai/api/v1"/>
               </div>
@@ -204,6 +208,15 @@
           <span class="hint">⌘ Çalışma Kısmı basıldığında Bridge otomatik kurulur. Sorun olursa bu düğmeyi kullanın.</span>
         </div>
         <div class="form-group">
+          <label>Sistem tanısı</label>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <button class="btn btn-secondary" id="btn-run-doctor" type="button">Sistem tanısı çalıştır</button>
+            <span class="hint" id="doctor-summary">Henüz çalıştırılmadı</span>
+          </div>
+          <ul class="doctor-results" id="doctor-results"></ul>
+          <span class="hint">Node, VS Code CLI, Bridge, Cline, workspace ve .sauron/ yazılabilirliğini kontrol eder.</span>
+        </div>
+        <div class="form-group">
           <label>Sohbet yedekleme</label>
           <label class="checkbox-row">
             <input type="checkbox" id="chatBackupEnabled"/>
@@ -229,6 +242,19 @@
           <label>Toplam Bütçe (TL)</label>
           <input class="form-input" id="finopsTotalBudgetTl" type="number" min="0" step="0.01" placeholder="0 = sınırsız"/>
           <span class="hint">0 bırakılırsa bütçe uyarısı devre dışı kalır.</span>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="finopsHardBudgetEnabled"/>
+            Sert bütçe limiti (tükendiğinde LLM çağrılarını engelle)
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label>Harcama grafiği (son 7 gün)</label>
+          <canvas class="finops-analytics-canvas" id="finopsAnalyticsCanvas" width="520" height="180"></canvas>
+          <span class="hint" id="finopsAnalyticsHint">Günlük TL harcaması</span>
         </div>
 
         <div class="form-group">
@@ -282,6 +308,25 @@
         </div>
 
         <div class="form-group">
+          <label>Optimizer modu</label>
+          <select class="form-select" id="finopsCostOptimizerMode">
+            <option value="economy">Economy</option>
+            <option value="balanced">Balanced</option>
+            <option value="performance">Performance</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Core model tier</label>
+          <select class="form-select" id="finopsCoreModelTier">
+            <option value="economy">Economy</option>
+            <option value="standard">Standard</option>
+            <option value="premium">Premium</option>
+            <option value="local">Local</option>
+          </select>
+        </div>
+
+        <div class="form-group">
           <label>Handoff max karakter</label>
           <input class="form-input" id="finopsHandoffMaxChars" type="number" min="100" step="100" placeholder="4000"/>
           <span class="hint">Cline'a giden handoff prompt üst sınırı (Goal/plan adımları korunur).</span>
@@ -300,8 +345,7 @@
           <span class="hint">Bütçe hızı aşılırsa Cline bir tier düşürülür (görev başına en fazla 1).</span>
         </div>
 
-        <input type="hidden" id="finopsCostOptimizerMode" value="balanced"/>
-        <input type="hidden" id="finopsCoreModelTier" value="economy"/>
+        <input type="hidden" id="finopsLegacyHidden" value=""/>
       </div>
     </div>
 
@@ -640,8 +684,8 @@
 
   <div class="settings-footer">
     <button class="btn-danger" id="btn-reset-all">Reset to Factory Defaults</button>
-    <button class="btn-ghost" id="btn-cancel">Cancel</button>
-    <button class="btn-primary" id="btn-save">Save Settings</button>
+    <button class="btn-ghost" id="btn-cancel" data-i18n="cancel">İptal</button>
+    <button class="btn-primary" id="btn-save" data-i18n="saveSettings">Ayarları kaydet</button>
   </div>
 </div>
 
@@ -657,6 +701,6 @@
 </div>
 
 <div class="toast hidden" id="toast"></div>
-<script src="js/settings.js"></script>
+<script type="module" src="js/settings.js"></script>
 </body>
 </html>

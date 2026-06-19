@@ -24,6 +24,8 @@ const {
   seedSauronRules,
   launchVSCode,
   listPendingHandoffs,
+  listHandoffHistory,
+  rejectHandoffFile,
   rejectPendingHandoffs,
   getHandoffStatus,
   focusVSCodeWorkspace,
@@ -31,6 +33,7 @@ const {
 const { checkWorkspacePrerequisites } = require("./src/sauron/workspace-setup");
 const { bootstrapWorkspace } = require("./src/sauron/workspace-bootstrap");
 const { installWorkspaceStack } = require("./src/sauron/workspace-stack-installer");
+const { runSauronDoctor } = require("./src/sauron/doctor");
 const { SessionManager } = require("./src/session/session-manager");
 const {
   clearSessionSnapshot,
@@ -68,7 +71,7 @@ const { emitPointerTool } = require("./src/agent/tools/pointer-tool");
 const { TaskOrchestrator } = require("./src/agent/task-orchestrator");
 const { formatStructuredUserError } = require("./src/ai/structured");
 const { configureFinOpsContext } = require("./src/sauron/finops/llm-tracker");
-const { getUsageSummary } = require("./src/sauron/finops/usage-tracker");
+const { getUsageSummary, getUsageTimeSeries } = require("./src/sauron/finops/usage-tracker");
 const { syncFinOpsConfigToWorkspace } = require("./src/sauron/finops/workspace-config");
 const { syncAgentMatrixFromSettings } = require("./src/sauron/finops/agent-matrix");
 const { createLogger, createRequestContext, initializeLogger } = require("./src/logger");
@@ -80,13 +83,16 @@ const {
 } = require("./src/platform-capabilities");
 const { registry } = require("./src/core/plugin-registry");
 const { BrowserPlugin } = require("./src/plugins/browser/index");
-const { resolveBrowserPluginLlmConfig } = require("./src/plugins/browser/llm-config");
+const { prepareBrowserPluginLlmConfig } = require("./src/plugins/browser/llm-config");
 const { createBrowserExecutionTtsController } = require("./src/tts/browser-execution-tts");
 const { registerChatSessionsIpc } = require("./src/ipc/chat-sessions-ipc");
 const { registerAiIpc } = require("./src/ipc/ai-ipc");
 const { registerWorkspaceIpc } = require("./src/ipc/workspace-ipc");
 const { registerFinOpsIpc } = require("./src/ipc/finops-ipc");
 const { registerBrowserIpc } = require("./src/ipc/browser-ipc");
+const { registerWebStudioIpc } = require("./src/ipc/web-studio-ipc");
+const { createWindowManager } = require("./src/main/window-manager");
+const { createTrayMenu } = require("./src/main/tray-menu");
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const PANEL_WIDTH  = 440;
@@ -132,6 +138,107 @@ let panelOpenAnimationTimer = null;
 let lastPanelShowRequestAt = 0;
 let lastPushToTalkToggleAt = 0;
 let browserExecutionTts = null;
+let windowManager = null;
+let trayController = null;
+
+function ensureWindowManager() {
+  if (windowManager) {
+    return windowManager;
+  }
+
+  windowManager = createWindowManager({
+    BrowserWindow,
+    screen,
+    path,
+    fs,
+    nativeImage,
+    appLogger,
+    preloadPath: path.join(__dirname, "preload.js"),
+    rendererDir: path.join(__dirname, "renderer"),
+    constants: {
+      PANEL_WIDTH,
+      PANEL_HEIGHT,
+      WIDGET_WIDTH,
+      WIDGET_COLLAPSED_HEIGHT,
+    },
+    getRefs: () => ({
+      panelWindow,
+      settingsWindow,
+      cursorOverlayWindow,
+      widgetWindow,
+      isPanelVisible,
+    }),
+    setRefs: (patch) => {
+      if (Object.prototype.hasOwnProperty.call(patch, "panelWindow")) panelWindow = patch.panelWindow;
+      if (Object.prototype.hasOwnProperty.call(patch, "settingsWindow")) settingsWindow = patch.settingsWindow;
+      if (Object.prototype.hasOwnProperty.call(patch, "cursorOverlayWindow")) cursorOverlayWindow = patch.cursorOverlayWindow;
+      if (Object.prototype.hasOwnProperty.call(patch, "widgetWindow")) widgetWindow = patch.widgetWindow;
+    },
+    callbacks: {
+      showPanel: () => showPanel(),
+      broadcastSessionSnapshot: () => {
+        if (sessionManager) {
+          broadcastSessionSnapshot(sessionManager.getSnapshot());
+        }
+      },
+    },
+  });
+  return windowManager;
+}
+
+function getVirtualDisplayBounds() {
+  return ensureWindowManager().getVirtualDisplayBounds();
+}
+
+function resizeCursorOverlayToVirtualBounds() {
+  ensureWindowManager().resizeCursorOverlayToVirtualBounds();
+}
+
+function createPanelWindow() {
+  ensureWindowManager().createPanelWindow();
+}
+
+function createSettingsWindow() {
+  ensureWindowManager().createSettingsWindow();
+}
+
+function createCursorOverlay() {
+  ensureWindowManager().createCursorOverlay();
+}
+
+function ensureCursorOverlay() {
+  return ensureWindowManager().ensureCursorOverlay();
+}
+
+function createWidgetWindow() {
+  ensureWindowManager().createWidgetWindow();
+}
+
+function ensureWidgetWindow() {
+  return ensureWindowManager().ensureWidgetWindow();
+}
+
+function resizeWidgetPreservingPosition(nextHeight) {
+  ensureWindowManager().resizeWidgetPreservingPosition(nextHeight);
+}
+
+function createTray() {
+  if (!trayController) {
+    trayController = createTrayMenu({
+      Tray,
+      Menu,
+      buildTrayIcon: () => ensureWindowManager().buildTrayIcon(),
+      callbacks: {
+        showPanel: () => showPanel(),
+        hidePanel: () => hidePanel(),
+        isPanelVisible: () => isPanelVisible,
+        createSettingsWindow: () => createSettingsWindow(),
+        quitApp: () => app.quit(),
+      },
+    });
+  }
+  tray = trayController.createTray();
+}
 
 const BROWSER_PLUGIN_RELEVANT_SETTINGS = new Set([
   "aiProvider",
@@ -150,27 +257,6 @@ const BROWSER_PLUGIN_RELEVANT_SETTINGS = new Set([
   "browserAgentEnabled",
   "browserHeadless",
 ]);
-
-function getVirtualDisplayBounds() {
-  const displays = screen.getAllDisplays();
-  const left = Math.min(...displays.map((display) => display.bounds.x));
-  const top = Math.min(...displays.map((display) => display.bounds.y));
-  const right = Math.max(...displays.map((display) => display.bounds.x + display.bounds.width));
-  const bottom = Math.max(...displays.map((display) => display.bounds.y + display.bounds.height));
-  return {
-    x: left,
-    y: top,
-    width: right - left,
-    height: bottom - top,
-  };
-}
-
-function resizeCursorOverlayToVirtualBounds() {
-  if (!cursorOverlayWindow || cursorOverlayWindow.isDestroyed()) {
-    return;
-  }
-  cursorOverlayWindow.setBounds(getVirtualDisplayBounds());
-}
 
 function debugLog(...args) {
   const [message, ...rest] = args;
@@ -377,8 +463,8 @@ function getBrowserRuntimeInstallDir() {
   return path.join(app.getPath("userData"), "python-runtime");
 }
 
-function buildBrowserPluginConfig(runtimeSettings) {
-  const llmConfig = resolveBrowserPluginLlmConfig(runtimeSettings);
+async function buildBrowserPluginConfig(runtimeSettings) {
+  const llmConfig = await prepareBrowserPluginLlmConfig(runtimeSettings);
   if (llmConfig.warning) {
     appLogger.warn("browser-plugin-llm-model-adjusted", {
       provider: llmConfig.llmProvider,
@@ -422,96 +508,10 @@ async function syncBrowserPluginWithRuntimeSettings(runtimeSettings, { forceRest
     }
   }
 
-  await plugin.initialize(buildBrowserPluginConfig(runtimeSettings));
+  await plugin.initialize(await buildBrowserPluginConfig(runtimeSettings));
   const status = plugin._sidecar?.isRunning ? "running" : "stopped";
   emitBrowserAgentStatus(status);
   return { ok: true, enabled: true, status };
-}
-
-function attachWindowCrashHandlers(windowRef, name) {
-  if (!windowRef || windowRef.isDestroyed()) {
-    return;
-  }
-  windowRef.webContents.on("render-process-gone", (_event, details) => {
-    appLogger.error("renderer-process-gone", {
-      window: name,
-      reason: details?.reason,
-      exitCode: details?.exitCode,
-    });
-
-    if (name === "widget") {
-      setTimeout(() => {
-        try {
-          if (widgetWindow && !widgetWindow.isDestroyed()) {
-            widgetWindow.destroy();
-          }
-        } catch (destroyError) {
-          appLogger.warn("widget-crash-destroy-failed", { error: destroyError });
-        }
-        widgetWindow = null;
-        ensureWidgetWindow();
-        if (isPanelVisible && widgetWindow && !widgetWindow.isDestroyed()) {
-          widgetWindow.show();
-        }
-      }, 400);
-      return;
-    }
-
-    if (name === "cursor-overlay") {
-      setTimeout(() => {
-        try {
-          if (cursorOverlayWindow && !cursorOverlayWindow.isDestroyed()) {
-            cursorOverlayWindow.destroy();
-          }
-        } catch (destroyError) {
-          appLogger.warn("cursor-overlay-crash-destroy-failed", { error: destroyError });
-        }
-        cursorOverlayWindow = null;
-      }, 400);
-      return;
-    }
-
-    if (name === "panel") {
-      const wasVisible = isPanelVisible;
-      setTimeout(() => {
-        try {
-          if (panelWindow && !panelWindow.isDestroyed()) {
-            panelWindow.destroy();
-          }
-        } catch (destroyError) {
-          appLogger.warn("panel-crash-destroy-failed", { error: destroyError });
-        }
-        panelWindow = null;
-        createPanelWindow();
-        if (wasVisible) {
-          showPanel();
-        }
-        if (sessionManager) {
-          broadcastSessionSnapshot(sessionManager.getSnapshot());
-        }
-        appLogger.info("panel-renderer-recovered", { wasVisible });
-      }, 400);
-      return;
-    }
-
-    if (name === "settings") {
-      setTimeout(() => {
-        try {
-          if (settingsWindow && !settingsWindow.isDestroyed()) {
-            settingsWindow.destroy();
-          }
-        } catch (destroyError) {
-          appLogger.warn("settings-crash-destroy-failed", { error: destroyError });
-        }
-        settingsWindow = null;
-        createSettingsWindow();
-        appLogger.info("settings-renderer-recovered");
-      }, 400);
-    }
-  });
-  windowRef.webContents.on("unresponsive", () => {
-    appLogger.warn("renderer-unresponsive", { window: name });
-  });
 }
 
 function registerCrashTracking() {
@@ -525,183 +525,8 @@ function registerCrashTracking() {
   });
 }
 
-// ── Tray icon (programmatic 32x32 purple circle) ──────────────────────────────
-function buildTrayIcon() {
-  const logoPath = path.join(__dirname, "renderer", "assets", "logo.png");
-  if (fs.existsSync(logoPath)) {
-    const logoIcon = nativeImage.createFromPath(logoPath);
-    if (!logoIcon.isEmpty()) {
-      return logoIcon;
-    }
-  }
-
-  const size = 32;
-  const data = Buffer.alloc(size * size * 4);
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const idx = (y * size + x) * 4;
-      const dx = x - size / 2;
-      const dy = y - size / 2;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist <= size / 2 - 2) {
-        data[idx] = 124;
-        data[idx + 1] = 58;
-        data[idx + 2] = 237;
-        data[idx + 3] = 255;
-      }
-    }
-  }
-  return nativeImage.createFromBuffer(data, { width: size, height: size });
-}
-
 function getApprovalWindow() {
   return panelWindow && !panelWindow.isDestroyed() ? panelWindow : null;
-}
-
-// ── Panel window ──────────────────────────────────────────────────────────────
-function createPanelWindow() {
-  panelWindow = new BrowserWindow({
-    width: PANEL_WIDTH,
-    height: PANEL_HEIGHT,
-    frame: false,
-    transparent: true,
-    resizable: false,
-    show: false,
-    skipTaskbar: true,
-    alwaysOnTop: true,
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
-  });
-  panelWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
-  attachWindowCrashHandlers(panelWindow, "panel");
-
-}
-
-// ── Settings window ───────────────────────────────────────────────────────────
-function createSettingsWindow() {
-  if (settingsWindow && !settingsWindow.isDestroyed()) {
-    settingsWindow.focus();
-    return;
-  }
-  settingsWindow = new BrowserWindow({
-    width: 600,
-    height: 700,
-    frame: false,
-    transparent: true,
-    resizable: false,
-    skipTaskbar: false,
-    alwaysOnTop: false,
-    parent: panelWindow,
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
-  });
-  settingsWindow.loadFile(path.join(__dirname, "renderer", "settings.html"));
-  attachWindowCrashHandlers(settingsWindow, "settings");
-  settingsWindow.on("closed", () => { settingsWindow = null; });
-}
-
-// ── Cursor overlay ────────────────────────────────────────────────────────────
-function createCursorOverlay() {
-  const virtualBounds = getVirtualDisplayBounds();
-  cursorOverlayWindow = new BrowserWindow({
-    width: virtualBounds.width,
-    height: virtualBounds.height,
-    x: virtualBounds.x,
-    y: virtualBounds.y,
-    frame: false, transparent: true,
-    alwaysOnTop: true, skipTaskbar: true,
-    focusable: false, show: false,
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-      nodeIntegration: false, contextIsolation: true,
-    },
-  });
-  cursorOverlayWindow.setAlwaysOnTop(true, "screen-saver", 1);
-  cursorOverlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  cursorOverlayWindow.setIgnoreMouseEvents(true, { forward: true });
-  cursorOverlayWindow.loadFile(path.join(__dirname, "renderer", "cursor.html"));
-  attachWindowCrashHandlers(cursorOverlayWindow, "cursor-overlay");
-  screen.on("display-added", resizeCursorOverlayToVirtualBounds);
-  screen.on("display-removed", resizeCursorOverlayToVirtualBounds);
-  screen.on("display-metrics-changed", resizeCursorOverlayToVirtualBounds);
-}
-
-function ensureCursorOverlay() {
-  if (!cursorOverlayWindow || cursorOverlayWindow.isDestroyed()) {
-    createCursorOverlay();
-  }
-  return cursorOverlayWindow;
-}
-
-// ── Widget window ─────────────────────────────────────────────────────────────
-function createWidgetWindow() {
-  if (widgetWindow && !widgetWindow.isDestroyed()) return;
-
-  widgetWindow = new BrowserWindow({
-    width: WIDGET_WIDTH,
-    height: WIDGET_COLLAPSED_HEIGHT,
-    frame: false,
-    transparent: true,
-    resizable: false,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
-  });
-
-  widgetWindow.loadFile(path.join(__dirname, "renderer", "widget.html"));
-  attachWindowCrashHandlers(widgetWindow, "widget");
-
-  // Position at top-right of the display where the mouse cursor currently is
-  const cursorPt = screen.getCursorScreenPoint();
-  const activeDisplay = screen.getDisplayNearestPoint(cursorPt);
-  const wa = activeDisplay.workArea;
-  widgetWindow.setPosition(wa.x + wa.width - WIDGET_WIDTH - 20, wa.y + 20);
-
-  widgetWindow.on("closed", () => { widgetWindow = null; });
-}
-
-function ensureWidgetWindow() {
-  if (!widgetWindow || widgetWindow.isDestroyed()) {
-    createWidgetWindow();
-  }
-  return widgetWindow;
-}
-
-function positionWidgetBottomRight(nextHeight) {
-  if (!widgetWindow || widgetWindow.isDestroyed()) {
-    return;
-  }
-
-  // Use the display the widget is currently on, not always the primary display
-  const [wx, wy] = widgetWindow.getPosition();
-  const { workArea: wa } = screen.getDisplayNearestPoint({ x: wx, y: wy });
-  const x = wa.x + wa.width - WIDGET_WIDTH - 20;
-  const y = wa.y + wa.height - nextHeight - 20;
-  widgetWindow.setPosition(x, y);
-}
-
-function resizeWidgetPreservingPosition(nextHeight) {
-  if (!widgetWindow || widgetWindow.isDestroyed()) {
-    return;
-  }
-
-  const [x, y] = widgetWindow.getPosition();
-  widgetWindow.setBounds({
-    x,
-    y,
-    width: WIDGET_WIDTH,
-    height: nextHeight,
-  });
 }
 
 function updateWidgetState(state) {
@@ -903,20 +728,6 @@ function hidePanel() {
   }
   panelWindow.hide();
   isPanelVisible = false;
-}
-
-// ── Tray ──────────────────────────────────────────────────────────────────────
-function createTray() {
-  tray = new Tray(buildTrayIcon());
-  tray.setToolTip("Sauron — AI Companion");
-  tray.on("click", () => { isPanelVisible ? hidePanel() : showPanel(); });
-  tray.on("double-click", showPanel);
-  tray.setContextMenu(Menu.buildFromTemplate([
-    { label: "Open Sauron",  click: showPanel },
-    { label: "Settings",     click: createSettingsWindow },
-    { type: "separator" },
-    { label: "Quit",         click: () => app.quit() },
-  ]));
 }
 
 function getDefaultSender() {
@@ -1264,6 +1075,7 @@ function registerModularIpcHandlers() {
     debugLog,
     getRuntimeSettings,
     getUsageSummary,
+    getUsageTimeSeries,
     sessionManager,
   });
 
@@ -1343,11 +1155,21 @@ function registerModularIpcHandlers() {
     getHandoffStatus,
     focusVSCodeWorkspace,
     listPendingHandoffs,
+    listHandoffHistory,
+    rejectHandoffFile,
     rejectPendingHandoffs,
     buildHandoffPayload,
     bootstrapWorkspace,
     writeHandoff,
     launchVSCode,
+    runSauronDoctor,
+  });
+
+  registerWebStudioIpc({
+    ipcMain,
+    shell,
+    store,
+    debugLog,
   });
 
   registerBrowserIpc({
@@ -1695,7 +1517,7 @@ app.whenReady().then(async () => {
     const runtimeSettings = await getRuntimeSettings();
     const browserEnabled = store.get('browserAgentEnabled') !== false;
     if (browserEnabled) {
-      registry.initializeAll(buildBrowserPluginConfig(runtimeSettings)).then(() => {
+      buildBrowserPluginConfig(runtimeSettings).then((config) => registry.initializeAll(config)).then(() => {
         const status = registry.getStatus('browser') === 'ok' ? 'running' : 'stopped';
         emitBrowserAgentStatus(status);
       }).catch((err) => {

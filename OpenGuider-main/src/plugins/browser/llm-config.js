@@ -1,3 +1,5 @@
+const { prepareLlmCall } = require("../../sauron/finops/llm-tracker");
+
 const PROVIDER_ALIASES = Object.freeze({
   claude: "anthropic",
   anthropic: "anthropic",
@@ -83,6 +85,15 @@ function sanitizeBrowserPluginModel(model, provider = "") {
   };
 }
 
+async function prepareBrowserPluginLlmConfig(settings = {}) {
+  const preparedSettings = await prepareLlmCall(settings, { operation: "browser-goal" });
+  const resolved = resolveBrowserPluginLlmConfig(preparedSettings);
+  return {
+    ...resolved,
+    settings: preparedSettings,
+  };
+}
+
 function resolveBrowserPluginLlmConfig(settings = {}) {
   const activeProvider = normalizeProvider(settings.aiProvider);
   const provider = PROVIDER_ALIASES[activeProvider] || activeProvider;
@@ -105,4 +116,5 @@ function resolveBrowserPluginLlmConfig(settings = {}) {
 
 module.exports = {
   resolveBrowserPluginLlmConfig,
+  prepareBrowserPluginLlmConfig,
 };

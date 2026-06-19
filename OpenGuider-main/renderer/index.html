@@ -17,6 +17,8 @@
     <span class="agent-status" id="agent-status" data-i18n="agentIdle">boşta</span>
     <div class="header-actions">
       <button class="icon-btn" id="btn-chat-history" data-i18n="chatHistory" data-i18n-attr="title" title="Sohbet geçmişi">☰</button>
+      <button class="icon-btn" id="btn-web-studio" data-i18n="webStudio" data-i18n-attr="title" title="Web Studio">🌐</button>
+      <button class="icon-btn hidden" id="btn-web-preview" data-i18n="webPreview" data-i18n-attr="title" title="Önizleme">👁</button>
       <button class="icon-btn workspace-btn" id="btn-workspace" data-i18n="workspace" data-i18n-attr="title" title="Çalışma Kısmı">⌘</button>
       <button class="icon-btn" id="btn-settings" data-i18n="settings" data-i18n-attr="title" title="Ayarlar">⚙</button>
       <button class="icon-btn" id="btn-close" data-i18n="hide" data-i18n-attr="title" title="Gizle" style="-webkit-app-region:no-drag">✕</button>
@@ -75,6 +77,10 @@
     <div class="workspace-status-main">
       <strong id="workspace-status-title">Çalışma Kısmı</strong>
       <span id="workspace-status-message"></span>
+    </div>
+    <div class="handoff-history-panel" id="handoff-history-panel">
+      <strong>Handoff geçmişi</strong>
+      <ul class="handoff-history-list" id="handoff-history-list"></ul>
     </div>
     <div class="workspace-status-actions">
       <button class="workspace-status-btn" id="workspace-status-focus" type="button">VS Code'a git</button>
@@ -179,6 +185,53 @@
     <div class="confirm-actions">
       <button class="confirm-btn ghost" id="prompt-cancel" type="button" data-i18n="cancel">İptal</button>
       <button class="confirm-btn" id="prompt-confirm" type="button">Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<div class="web-studio-overlay hidden" id="web-studio-overlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="web-studio-title">
+  <div class="web-studio-modal">
+    <div class="web-studio-header">
+      <h3 id="web-studio-title" data-i18n="webStudioTitle">Web Studio — Kurumsal Site</h3>
+      <button class="icon-btn" id="ws-btn-close" type="button" data-i18n="dismiss">✕</button>
+    </div>
+    <div class="web-studio-step" data-step="0">
+      <h4 data-i18n="webStudioStep1">Marka bilgileri</h4>
+      <label class="ws-label">Şirket adı<input class="form-input" id="ws-company-name" type="text" placeholder="Örnek Holding A.Ş."/></label>
+      <label class="ws-label">Sektör<input class="form-input" id="ws-industry" type="text" placeholder="Finans, teknoloji…"/></label>
+      <label class="ws-label">Slogan<textarea class="form-input" id="ws-tagline" rows="2" placeholder="Güvenilir çözümler…"></textarea></label>
+    </div>
+    <div class="web-studio-step hidden" data-step="1">
+      <h4 data-i18n="webStudioStep2">Sayfalar</h4>
+      <div class="ws-checkboxes">
+        <label><input type="checkbox" id="ws-page-home" checked/> Ana sayfa</label>
+        <label><input type="checkbox" id="ws-page-about" checked/> Hakkımızda</label>
+        <label><input type="checkbox" id="ws-page-services" checked/> Hizmetler</label>
+        <label><input type="checkbox" id="ws-page-contact" checked/> İletişim</label>
+        <label><input type="checkbox" id="ws-page-blog"/> Blog</label>
+      </div>
+    </div>
+    <div class="web-studio-step hidden" data-step="2">
+      <h4 data-i18n="webStudioStep3">Görünüm</h4>
+      <label class="ws-label">Ana renk<input class="form-input" id="ws-primary-color" type="color" value="#1e3a5f"/></label>
+      <label class="ws-label">Vurgu rengi<input class="form-input" id="ws-accent-color" type="color" value="#c9a227"/></label>
+      <label class="ws-label">Ton
+        <select class="form-input" id="ws-brand-tone">
+          <option value="corporate">Kurumsal</option>
+          <option value="modern">Modern</option>
+          <option value="luxury">Lüks</option>
+        </select>
+      </label>
+    </div>
+    <div class="web-studio-step hidden" data-step="3">
+      <h4 data-i18n="webStudioStep4">Özet ve kalite</h4>
+      <div id="web-studio-summary" class="web-studio-summary"></div>
+      <pre class="web-studio-checklist" id="web-studio-checklist-preview"></pre>
+    </div>
+    <div class="web-studio-actions">
+      <button class="confirm-btn ghost" id="ws-btn-back" type="button" data-i18n="planBack">Geri</button>
+      <button class="confirm-btn" id="ws-btn-next" type="button" data-i18n="webStudioNext">İleri</button>
+      <button class="confirm-btn primary hidden" id="ws-btn-finish" type="button" data-i18n="webStudioFinish">Oluştur ve Cline'a gönder</button>
     </div>
   </div>
 </div>

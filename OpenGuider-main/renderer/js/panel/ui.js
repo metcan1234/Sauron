@@ -67,6 +67,8 @@ export function queryPanelDom(doc = document) {
     workspaceStatusMessage: doc.getElementById("workspace-status-message"),
     workspaceStatusFocus: doc.getElementById("workspace-status-focus"),
     workspaceStatusDismiss: doc.getElementById("workspace-status-dismiss"),
+    handoffHistoryPanel: doc.getElementById("handoff-history-panel"),
+    handoffHistoryList: doc.getElementById("handoff-history-list"),
     chatDrawerOverlay: doc.getElementById("chat-drawer-overlay"),
     chatDrawerClose: doc.getElementById("chat-drawer-close"),
     chatDrawerSearch: doc.getElementById("chat-drawer-search"),
@@ -763,6 +765,53 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     };
   }
 
+  function renderHandoffHistory(items = []) {
+    if (!dom.handoffHistoryList) {
+      return;
+    }
+
+    const pendingCount = items.filter((item) => item?.status === "pending").length;
+    if (dom.btnWorkspace) {
+      dom.btnWorkspace.classList.toggle("has-pending-handoff", pendingCount > 0);
+      if (pendingCount > 0) {
+        dom.btnWorkspace.title = `Çalışma Kısmı — ${pendingCount} bekleyen handoff`;
+      }
+    }
+
+    if (!Array.isArray(items) || items.length === 0) {
+      dom.handoffHistoryList.innerHTML = `<li class="handoff-history-item"><span class="handoff-history-meta">Henüz handoff kaydı yok</span></li>`;
+      return;
+    }
+
+    dom.handoffHistoryList.innerHTML = items.map((item) => {
+      const status = escapeHtml(String(item?.status || "unknown"));
+      const fileName = escapeHtml(String(item?.fileName || ""));
+      const createdAt = escapeHtml(String(item?.createdAt || "").slice(0, 19).replace("T", " "));
+      const goal = escapeHtml(String(item?.goal || item?.taskSummary || "").slice(0, 80));
+      const rejectBtn = status === "pending"
+        ? `<button type="button" class="workspace-status-btn ghost handoff-reject-btn" data-handoff-file="${fileName}">Reddet</button>`
+        : "";
+      return `<li class="handoff-history-item ${status}"><div><strong>${fileName}</strong><span class="handoff-history-meta">${createdAt} · ${status}${goal ? ` · ${goal}` : ""}</span></div>${rejectBtn}</li>`;
+    }).join("");
+
+    dom.handoffHistoryList.querySelectorAll(".handoff-reject-btn").forEach((button) => {
+      button.addEventListener("click", async (event) => {
+        event.preventDefault();
+        const handoffFileName = button.getAttribute("data-handoff-file");
+        if (!handoffFileName) return;
+        try {
+          await api.invoke("reject-handoff-file", { handoffFileName });
+          showToast("Handoff reddedildi", false);
+          if (typeof state.refreshHandoffHistory === "function") {
+            await state.refreshHandoffHistory();
+          }
+        } catch (error) {
+          showToast(error?.message || "Handoff reddedilemedi", true);
+        }
+      });
+    });
+  }
+
   function showOnboarding() {
     if (dom.onboardingOverlay) {
       dom.onboardingOverlay.classList.remove("hidden");
@@ -1162,6 +1211,7 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     hideErrorBanner,
     showWorkspaceStatus,
     hideWorkspaceStatus,
+    renderHandoffHistory,
     showOnboarding,
     hideOnboarding,
     closeArtifactPanel,

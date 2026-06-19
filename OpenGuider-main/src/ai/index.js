@@ -1,5 +1,5 @@
 const { captureUsageFromStreamEvent } = require("../sauron/finops/token-counter");
-const { recordLlmUsage, prepareLlmCall } = require("../sauron/finops/llm-tracker");
+const { recordLlmUsage, prepareLlmCall, BudgetExceededError } = require("../sauron/finops/llm-tracker");
 const { streamDeepSeek } = require("./deepseek");
 
 const DEFAULT_SYSTEM_PROMPT = `You are Sauron Core (formerly OpenGuider), a helpful AI companion that lives in the Windows system tray.
@@ -497,7 +497,20 @@ async function runProviderStream({ text, images, history, settings, onChunk, sig
 
 // ── Main export ───────────────────────────────────────────────────────────────
 async function streamAIResponse({ text, images, history, settings, onChunk, signal, operation = "chat", complexityHint = "low", sessionId = "" }) {
-  const liveSettings = await prepareLlmCall(settings || {}, { operation, complexityHint });
+  let liveSettings;
+  try {
+    liveSettings = await prepareLlmCall(settings || {}, { operation, complexityHint });
+  } catch (error) {
+    if (error instanceof BudgetExceededError || error?.name === "BudgetExceededError") {
+      const message = error.message || "AI budget exceeded.";
+      if (typeof onChunk === "function") {
+        onChunk(message);
+      }
+      return message;
+    }
+    throw error;
+  }
+
   const provider = liveSettings.aiProvider || "claude";
   const model = liveSettings.aiModel || "default";
   const promptText = buildPromptEstimate(text, history, images);

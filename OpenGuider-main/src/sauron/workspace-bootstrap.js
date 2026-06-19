@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { seedSauronRules } = require("./handoff");
+const { seedWebDevRules } = require("./web-studio/web-dev-rules");
 const { syncFinOpsConfigToWorkspace } = require("./finops/workspace-config");
 const { BRIDGE_EXTENSION_ID, CLINE_EXTENSION_IDS } = require("./workspace-setup");
 
@@ -60,6 +61,7 @@ async function bootstrapWorkspace(workspacePath, settings = {}) {
   });
 
   const rulesResult = seedSauronRules(resolvedPath);
+  const webDevRulesResult = seedWebDevRules(resolvedPath);
   const extensionsPath = writeExtensionsRecommendations(resolvedPath);
 
   return {
@@ -67,6 +69,8 @@ async function bootstrapWorkspace(workspacePath, settings = {}) {
     workspacePath: resolvedPath,
     finopsConfigPath: finopsResult.configPath || null,
     rulesSeeded: rulesResult.seeded,
+    webDevRulesSeeded: webDevRulesResult.seeded,
+    webDevRulesPath: webDevRulesResult.path || null,
     extensionsPath,
   };
 }

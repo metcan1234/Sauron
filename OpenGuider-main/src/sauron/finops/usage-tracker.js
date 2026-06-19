@@ -167,8 +167,49 @@ function getRemainingBudgetTl(settings = {}, totalSpentTl = null) {
   return budget - spent;
 }
 
+async function getUsageTimeSeries(settings = {}, options = {}) {
+  const days = Math.max(1, Math.min(365, Number(options.days) || 7));
+  const logPath = resolveUsageLogPath(settings);
+  const entries = await readUsageEntries(logPath);
+
+  const start = new Date();
+  start.setUTCHours(0, 0, 0, 0);
+  start.setUTCDate(start.getUTCDate() - (days - 1));
+
+  const buckets = {};
+  for (let offset = 0; offset < days; offset += 1) {
+    const day = new Date(start);
+    day.setUTCDate(start.getUTCDate() + offset);
+    const key = day.toISOString().slice(0, 10);
+    buckets[key] = {
+      date: key,
+      costTl: 0,
+      calls: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+    };
+  }
+
+  for (const entry of entries) {
+    const key = String(entry.timestamp || "").slice(0, 10);
+    if (!buckets[key]) {
+      continue;
+    }
+    buckets[key].costTl += Number(entry.costTl) || 0;
+    buckets[key].calls += 1;
+    buckets[key].promptTokens += Number(entry.promptTokens) || 0;
+    buckets[key].completionTokens += Number(entry.completionTokens) || 0;
+  }
+
+  return Object.values(buckets).sort((a, b) => a.date.localeCompare(b.date));
+}
+
 function resetWriteQueueForTests() {
   writeChain = Promise.resolve();
+}
+
+async function flushWriteQueueForTests() {
+  await writeChain;
 }
 
 module.exports = {
@@ -177,9 +218,11 @@ module.exports = {
   importRecord,
   getTotalSpentTl,
   getUsageSummary,
+  getUsageTimeSeries,
   getRemainingBudgetTl,
   readUsageEntries,
   dedupeUsageEntries,
   summarizeBreakdown,
   resetWriteQueueForTests,
+  flushWriteQueueForTests,
 };

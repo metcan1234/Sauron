@@ -141,6 +141,23 @@ cd ../OpenGuider-main && npm test
 
 Handoff mantığı artık Cline çekirdeğinde değil; upstream merge conflict riski düşüktür.
 
+## Kurulum (tek komut — Bridge)
+
+```powershell
+cd OpenGuider-main/scripts
+./install-sauron-stack.ps1
+```
+
+Bridge VSIX derler ve VS Code'a kurar. `code` CLI PATH'te olmalı.
+
+## Sistem tanısı (sauron-doctor)
+
+Sauron Core → **Ayarlar → Workspace → Sistem tanısı çalıştır** ile Node, VS Code CLI, Bridge, Cline, workspace ve `.sauron/` yazılabilirliği kontrol edilir.
+
+## Web Studio (kurumsal site — v1.2)
+
+Panel → **Web Studio (🌐)** ile Next.js + Tailwind kurumsal site iskeleti oluşturulur, Cline'a handoff gönderilir. Rehber: [`OpenGuider-main/docs/web-studio-tr.md`](OpenGuider-main/docs/web-studio-tr.md)
+
 ## Sorun giderme
 
 | Sorun | Çözüm |
@@ -150,6 +167,7 @@ Handoff mantığı artık Cline çekirdeğinde değil; upstream merge conflict r
 | Aktif görev varken uyarı çıkmıyor | Marketplace Cline yerine fork derlemesi kullanın |
 | Pending handoff uyarısı (Core) | VS Code tarafında önceki handoff işlenmemiş; onaylayın veya `.sauron/` içini kontrol edin |
 | Handoff tekrar yüklenmiyor | `.consumed` dosyalar tekrar okunmaz; Core'dan yeni handoff oluşturun |
+| Kurulum belirsiz | Ayarlar → Sistem tanısı veya `install-sauron-stack.ps1` |
 
 ## Manuel test checklist
 

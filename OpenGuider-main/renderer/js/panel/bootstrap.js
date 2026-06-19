@@ -1,4 +1,5 @@
 import { createChatHistoryController } from "./chat-history.js";
+import { createWebStudioController } from "./web-studio.js";
 import { applyI18nToDocument, t } from "../i18n/index.js";
 import { createMessagingController } from "./messaging.js";
 import { createPlanView } from "./plan-view.js";
@@ -139,6 +140,7 @@ export function createPanelController({
   const stepApproval = createStepApprovalController({ dom, log, win });
   const messaging = createMessagingController({ api, doc, dom, log, state, ui });
   const chatHistory = createChatHistoryController({ api, doc, dom, log, ui, state, win });
+  const webStudio = createWebStudioController({ api, ui, win, doc });
   const tts = createTtsPlaybackController({ api, log, state, win });
   const ptt = createPttController({ api, dom, log, messaging, state, ui, win });
   let lastBrowserExecutionSnapshot = null;
@@ -147,6 +149,31 @@ export function createPanelController({
 
   const HANDOFF_POLL_INTERVAL_MS = 2000;
   const HANDOFF_POLL_TIMEOUT_MS = 90000;
+  const HANDOFF_HISTORY_REFRESH_MS = 30000;
+  let handoffHistoryRefreshTimer = null;
+
+  async function refreshHandoffHistory() {
+    try {
+      const result = await api.invoke("list-handoff-history", { limit: 10 });
+      if (result?.ok) {
+        ui.renderHandoffHistory(result.items || []);
+      }
+    } catch (error) {
+      log("handoff history refresh error", error);
+    }
+  }
+
+  function startHandoffHistoryRefresh() {
+    if (handoffHistoryRefreshTimer) {
+      return;
+    }
+    void refreshHandoffHistory();
+    handoffHistoryRefreshTimer = win.setInterval(() => {
+      void refreshHandoffHistory();
+    }, HANDOFF_HISTORY_REFRESH_MS);
+  }
+
+  state.refreshHandoffHistory = refreshHandoffHistory;
 
   function stopWorkspaceHandoffPoll() {
     if (workspacePollTimer) {
@@ -907,6 +934,7 @@ export function createPanelController({
     }
     await ensureRuntimePermissions();
     await updateWorkspaceButtonState();
+    startHandoffHistoryRefresh();
     await ui.refreshFinOpsBadge();
     dom.textInput.focus();
     log("init:complete");

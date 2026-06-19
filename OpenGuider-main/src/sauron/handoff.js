@@ -6,6 +6,7 @@ const {
   mergeCostOptimizerConfig,
   computeComplexityHint,
 } = require("./finops/cost-optimizer-config");
+const { loadBrief } = require("./web-studio/brief-schema");
 
 const SAURON_RULES_FILENAME = "sauron-workspace.md";
 const HANDOFF_DIR = ".sauron";
@@ -136,6 +137,26 @@ function appendRecentChatContext(snapshot, parts, options = {}) {
   }
 }
 
+function formatWebBriefSummary(brief) {
+  if (!brief) {
+    return "";
+  }
+  const pages = Array.isArray(brief.pages) && brief.pages.length
+    ? brief.pages.join(", ")
+    : "home, about, services, contact";
+  return [
+    "WEB PROJECT BRIEF",
+    `Company: ${brief.companyName}`,
+    `Tagline: ${brief.tagline}`,
+    `Industry: ${brief.industry || "general"}`,
+    `Pages: ${pages}`,
+    `Brand: primary ${brief.primaryColor}, accent ${brief.accentColor}, tone ${brief.brandTone || brief.tone || "corporate"}`,
+    "Stack: Next.js 14 App Router + Tailwind CSS + TypeScript",
+    "Use existing components in components/ before creating new ones.",
+    "Follow .clinerules/sauron-web-dev.md for SEO, a11y, and responsive quality gates.",
+  ].join("\n");
+}
+
 function buildTaskSummary(snapshot, options = {}) {
   const includeTranscript = options.includeTranscript === true;
   const handoffMaxChars = Number.isFinite(Number(options.handoffMaxChars))
@@ -143,6 +164,10 @@ function buildTaskSummary(snapshot, options = {}) {
     : 4000;
 
   const parts = [];
+
+  if (options.webBrief) {
+    parts.push(formatWebBriefSummary(options.webBrief));
+  }
 
   if (snapshot?.chatSessionTitle) {
     parts.push(`Chat session: ${String(snapshot.chatSessionTitle).trim()}`);
@@ -205,13 +230,18 @@ function buildTaskSummary(snapshot, options = {}) {
 
 function buildHandoffPayload(sessionSnapshot, workspacePath, handoffId = generateHandoffId(), settings = {}) {
   const optimizer = mergeCostOptimizerConfig(settings);
+  const briefResult = workspacePath ? loadBrief(workspacePath) : { ok: false };
+  const webBrief = briefResult.ok ? briefResult.brief : null;
   const taskSummary = buildTaskSummary(sessionSnapshot, {
     includeTranscript: optimizer.routing.includeTranscript,
     handoffMaxChars: optimizer.routing.handoffMaxChars,
+    webBrief,
   });
-  const complexityHint = computeComplexityHint(taskSummary, optimizer.routing.complexityKeywords);
+  const complexityHint = webBrief
+    ? "high"
+    : computeComplexityHint(taskSummary, optimizer.routing.complexityKeywords);
 
-  return {
+  const payload = {
     version: 2,
     id: handoffId,
     source: "sauron-core",
@@ -220,7 +250,7 @@ function buildHandoffPayload(sessionSnapshot, workspacePath, handoffId = generat
     goal: sessionSnapshot?.goalIntent
       || sessionSnapshot?.activePlan?.goal
       || sessionSnapshot?.browserExecution?.goal
-      || "",
+      || (webBrief ? `Build corporate website for ${webBrief.companyName}` : ""),
     sessionId: sessionSnapshot?.sessionId || "",
     createdAt: new Date().toISOString(),
     autoStart: true,
@@ -231,6 +261,15 @@ function buildHandoffPayload(sessionSnapshot, workspacePath, handoffId = generat
       mode: optimizer.mode,
     },
   };
+
+  if (webBrief) {
+    payload.projectType = "corporate-web";
+    payload.webBrief = webBrief;
+    payload.scaffoldPath = ".";
+    payload.qualityGates = ["seo", "a11y", "responsive", "performance"];
+  }
+
+  return payload;
 }
 
 function listPendingHandoffs(workspacePath) {
@@ -360,6 +399,94 @@ function getHandoffStatus(workspacePath, handoffFileName) {
   return { status: "not_found", handoffFileName };
 }
 
+function rejectHandoffFile(workspacePath, handoffFileName) {
+  if (!workspacePath || !handoffFileName) {
+    throw new Error("Missing workspace path or handoff file name.");
+  }
+
+  const sauronDir = getSauronDir(workspacePath);
+  const pendingPath = path.join(sauronDir, handoffFileName);
+  if (!fs.existsSync(pendingPath)) {
+    throw new Error(`Pending handoff not found: ${handoffFileName}`);
+  }
+
+  const rejectedPath = `${pendingPath}.rejected`;
+  fs.renameSync(pendingPath, rejectedPath);
+  return {
+    ok: true,
+    handoffFileName,
+    status: "rejected",
+    handoffPath: rejectedPath,
+  };
+}
+
+function listHandoffHistory(workspacePath, options = {}) {
+  const limit = Math.max(1, Math.min(100, Number(options.limit) || 20));
+  if (!workspacePath) {
+    return [];
+  }
+
+  const sauronDir = getSauronDir(workspacePath);
+  if (!fs.existsSync(sauronDir)) {
+    return [];
+  }
+
+  const items = [];
+  for (const entry of fs.readdirSync(sauronDir, { withFileTypes: true })) {
+    if (!entry.isFile()) {
+      continue;
+    }
+
+    const name = entry.name;
+    let status = null;
+    let fileName = name;
+
+    if (name.endsWith(".consumed")) {
+      status = "consumed";
+      fileName = name.slice(0, -".consumed".length);
+    } else if (name.endsWith(".rejected")) {
+      status = "rejected";
+      fileName = name.slice(0, -".rejected".length);
+    } else if (isPendingHandoffFileName(name)) {
+      status = "pending";
+    } else {
+      continue;
+    }
+
+    const fullPath = path.join(sauronDir, name);
+    let createdAt = fs.statSync(fullPath).mtime.toISOString();
+    let goal = "";
+    let taskSummary = "";
+
+    try {
+      const parsed = JSON.parse(fs.readFileSync(fullPath, "utf8"));
+      if (parsed?.createdAt) {
+        createdAt = parsed.createdAt;
+      }
+      if (parsed?.goal) {
+        goal = String(parsed.goal);
+      }
+      if (parsed?.taskSummary) {
+        taskSummary = String(parsed.taskSummary).slice(0, 160);
+      }
+    } catch {
+      // keep stat fallback
+    }
+
+    items.push({
+      fileName,
+      status,
+      createdAt,
+      goal,
+      taskSummary,
+      path: fullPath,
+    });
+  }
+
+  items.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  return items.slice(0, limit);
+}
+
 function launchVSCode(workspacePath, options = {}) {
   if (!workspacePath || !fs.existsSync(workspacePath)) {
     throw new Error("Workspace path is invalid or does not exist.");
@@ -424,7 +551,9 @@ module.exports = {
   truncateTaskSummary,
   collectTouchedFiles,
   listPendingHandoffs,
+  listHandoffHistory,
   rejectPendingHandoffs,
+  rejectHandoffFile,
   getHandoffStatus,
   writeHandoff,
   seedSauronRules,

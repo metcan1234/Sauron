@@ -43,3 +43,17 @@ Ayarlar → Workspace → **Otomatik yerel yedekleme**. Klasör seçin; açılı
 ## FinOps rozeti
 
 Header'daki rozet oturum ve toplam TL harcamasını gösterir. Bütçe Ayarlar → FinOps'tan yapılandırılır.
+
+## v1.2 — Web Studio (kurumsal site)
+
+- **Web Studio (🌐):** Brief sihirbazı → Next.js iskelet → Cline handoff.
+- **Önizleme (👁):** `npm run dev` sonrası localhost:3000.
+- Detay: [web-studio-tr.md](./web-studio-tr.md) · Deploy: [web-deploy-tr.md](./web-deploy-tr.md)
+
+## v1.1 — Doctor, handoff geçmişi, analitik
+
+- **Sistem tanısı:** Ayarlar → Workspace → *Sistem tanısı çalıştır* (Node, VS Code CLI, Bridge, Cline, `.sauron/` yazılabilirliği).
+- **Stack kurulumu:** `scripts/install-sauron-stack.ps1` veya *Bridge'i kur / yenile*.
+- **Handoff geçmişi:** Panel workspace banner'ında son handoff kayıtları; bekleyen görevler ⌘ düğmesinde turuncu rozet.
+- **FinOps analitik:** Ayarlar → FinOps → son 7 gün harcama grafiği; **Sert bütçe** açıkken limit aşımında LLM çağrıları engellenir.
+- **OpenRouter:** Gelişmiş bölümde *Max Tokens* alanı.

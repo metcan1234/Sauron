@@ -1,5 +1,7 @@
 // renderer/js/settings.js
 
+import { applyI18nToDocument } from "./i18n/index.js";
+
 let settings = {};
 let activeProvider = "gemini";
 let recordingButton = null;
@@ -18,6 +20,7 @@ function showToast(msg, isError) {
 }
 
 async function init() {
+  applyI18nToDocument();
   settings = await window.openguider.invoke("get-settings");
 
   // Provider dropdown
@@ -61,6 +64,8 @@ async function init() {
   document.getElementById("openrouterApiKey").value  = settings.openrouterApiKey      || "";
   document.getElementById("openrouterModel").value   = settings.openrouterModelCustom || "";
   document.getElementById("openrouterBaseUrl").value = settings.openrouterBaseUrl     || "https://openrouter.ai/api/v1";
+  const openrouterMaxTokensEl = document.getElementById("openrouterMaxTokens");
+  if (openrouterMaxTokensEl) openrouterMaxTokensEl.value = String(settings.openrouterMaxTokens ?? 2048);
   document.getElementById("ollamaModel").value       = settings.ollamaModelCustom     || "";
   // STT / TTS
   document.getElementById("assemblyaiApiKey").value  = settings.assemblyaiApiKey  || "";
@@ -250,6 +255,50 @@ async function init() {
 
   void refreshWorkspaceStackStatus();
 
+  function renderDoctorResults(result) {
+    const summaryEl = document.getElementById("doctor-summary");
+    const listEl = document.getElementById("doctor-results");
+    if (!summaryEl || !listEl) {
+      return;
+    }
+    if (!result?.checks?.length) {
+      summaryEl.textContent = result?.error || "Tanı başarısız";
+      listEl.innerHTML = "";
+      return;
+    }
+    const { pass, warn, fail } = result.summary || {};
+    summaryEl.textContent = `${pass || 0} geçti · ${warn || 0} uyarı · ${fail || 0} hata`;
+    listEl.innerHTML = result.checks.map((check) => {
+      const statusClass = check.status === "pass" ? "pass" : (check.status === "warn" ? "warn" : "fail");
+      const hint = check.fixHint
+        ? `<span class="doctor-fix-hint">${escapeHtml(check.fixHint)}</span>`
+        : "";
+      return `<li class="doctor-check ${statusClass}"><strong>${escapeHtml(check.message)}</strong>${hint}</li>`;
+    }).join("");
+  }
+
+  document.getElementById("btn-run-doctor")?.addEventListener("click", async () => {
+    const button = document.getElementById("btn-run-doctor");
+    const summaryEl = document.getElementById("doctor-summary");
+    if (button) {
+      button.disabled = true;
+    }
+    if (summaryEl) {
+      summaryEl.textContent = "Tanı çalışıyor…";
+    }
+    try {
+      const result = await window.openguider.invoke("run-sauron-doctor");
+      renderDoctorResults(result);
+      await refreshWorkspaceStackStatus();
+    } catch (error) {
+      renderDoctorResults({ error: error?.message || "Tanı başarısız", checks: [] });
+    } finally {
+      if (button) {
+        button.disabled = false;
+      }
+    }
+  });
+
   bindSettingsTabs();
   bindPluginCards();
   bindShortcutRecordButtons();
@@ -385,9 +434,11 @@ function bindSettingsTabs() {
       });
       if (target === "finops") {
         void refreshFinOpsSummary();
+        void refreshFinOpsAnalytics();
         if (finopsRefreshTimer) clearInterval(finopsRefreshTimer);
         finopsRefreshTimer = setInterval(() => {
           void refreshFinOpsSummary();
+          void refreshFinOpsAnalytics();
         }, 10000);
       } else if (finopsRefreshTimer) {
         clearInterval(finopsRefreshTimer);
@@ -399,6 +450,8 @@ function bindSettingsTabs() {
 
 function initFinOpsSettings() {
   document.getElementById("finopsTotalBudgetTl").value = String(settings.finopsTotalBudgetTl ?? 0);
+  const hardBudgetEl = document.getElementById("finopsHardBudgetEnabled");
+  if (hardBudgetEl) hardBudgetEl.checked = settings.finopsHardBudgetEnabled === true;
   document.getElementById("finopsUsdToTl").value = String(settings.finopsUsdToTl ?? 34.5);
   document.getElementById("finopsDefaultPricePerMillionTl").value = String(settings.finopsDefaultPricePerMillionTl ?? 50);
   renderOverrideRows("finopsProviderOverrides", settings.finopsProviderPriceOverrides || {}, "provider");
@@ -412,6 +465,61 @@ function initFinOpsSettings() {
   document.getElementById("finopsHandoffMaxChars").value = String(settings.finopsHandoffMaxChars ?? 4000);
   document.getElementById("finopsHandoffIncludeTranscript").checked = settings.finopsHandoffIncludeTranscript === true;
   document.getElementById("finopsDailyBudgetTl").value = String(settings.finopsDailyBudgetTl ?? 0);
+  void refreshFinOpsAnalytics();
+}
+
+function renderFinOpsAnalyticsChart(series = []) {
+  const canvas = document.getElementById("finopsAnalyticsCanvas");
+  const hintEl = document.getElementById("finopsAnalyticsHint");
+  if (!canvas) return;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  const width = canvas.width;
+  const height = canvas.height;
+  ctx.clearRect(0, 0, width, height);
+
+  const points = Array.isArray(series) ? series : [];
+  if (!points.length) {
+    ctx.fillStyle = "rgba(255,255,255,0.55)";
+    ctx.font = "12px sans-serif";
+    ctx.fillText("Henüz analitik veri yok", 12, height / 2);
+    if (hintEl) hintEl.textContent = "Günlük TL harcaması";
+    return;
+  }
+
+  const maxCost = Math.max(0.01, ...points.map((entry) => Number(entry.costTl) || 0));
+  const barWidth = Math.max(16, Math.floor((width - 40) / points.length) - 8);
+  const chartHeight = height - 36;
+
+  points.forEach((entry, index) => {
+    const cost = Number(entry.costTl) || 0;
+    const barHeight = Math.max(2, (cost / maxCost) * chartHeight);
+    const x = 20 + index * (barWidth + 8);
+    const y = height - 20 - barHeight;
+    ctx.fillStyle = "rgba(124, 58, 237, 0.85)";
+    ctx.fillRect(x, y, barWidth, barHeight);
+    ctx.fillStyle = "rgba(255,255,255,0.55)";
+    ctx.font = "10px sans-serif";
+    ctx.fillText(String(entry.date || "").slice(5), x, height - 6);
+  });
+
+  if (hintEl) {
+    const total = points.reduce((sum, entry) => sum + (Number(entry.costTl) || 0), 0);
+    hintEl.textContent = `Son ${points.length} gün · toplam ${total.toFixed(2)} ₺`;
+  }
+}
+
+async function refreshFinOpsAnalytics() {
+  try {
+    const analytics = await window.openguider.invoke("get-finops-analytics", { days: 7 });
+    if (analytics?.ok) {
+      renderFinOpsAnalyticsChart(analytics.series || []);
+    }
+  } catch (error) {
+    renderFinOpsAnalyticsChart([]);
+  }
 }
 
 function renderOverrideRows(containerId, overrides, kind) {
@@ -770,6 +878,7 @@ async function saveSettings() {
     groqBaseUrl:             document.getElementById("groqBaseUrl")?.value.trim() || "https://api.groq.com/openai/v1",
     openrouterApiKey:        document.getElementById("openrouterApiKey")?.value.trim() || "",
     openrouterBaseUrl:       document.getElementById("openrouterBaseUrl")?.value.trim() || "https://openrouter.ai/api/v1",
+    openrouterMaxTokens:     Number(document.getElementById("openrouterMaxTokens")?.value) || 2048,
     ollamaUrl:               document.getElementById("ollamaUrl").value.trim() || "http://localhost:11434",
     assemblyaiApiKey:        document.getElementById("assemblyaiApiKey").value.trim(),
     whisperApiKey:           document.getElementById("whisperApiKey").value.trim(),
@@ -803,6 +912,7 @@ async function saveSettings() {
     includeScreenshotByDefault: true, // Always true — golden rule
     workspacePath:           document.getElementById("workspacePath").value.trim(),
     finopsTotalBudgetTl:     Number(document.getElementById("finopsTotalBudgetTl")?.value) || 0,
+    finopsHardBudgetEnabled: document.getElementById("finopsHardBudgetEnabled")?.checked === true,
     finopsUsdToTl:           Number(document.getElementById("finopsUsdToTl")?.value) || 34.5,
     finopsDefaultPricePerMillionTl: Number(document.getElementById("finopsDefaultPricePerMillionTl")?.value) || 50,
     finopsProviderPriceOverrides: collectOverrideMap("finopsProviderOverrides"),

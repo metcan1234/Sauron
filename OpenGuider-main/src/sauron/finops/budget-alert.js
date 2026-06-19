@@ -26,14 +26,18 @@ function evaluateBudgetState(settings = {}, totalSpentTl = null) {
   };
 }
 
-function buildPreCallAlert(state) {
+function buildPreCallAlert(state, settings = {}) {
   if (!state.enabled || state.remainingTl == null || state.remainingTl > 0) {
     return null;
   }
 
+  const hardEnabled = settings.finopsHardBudgetEnabled === true;
   return {
     level: "exhausted",
-    message: "Dikkat: AI bütçen tükendi. LLM çağrıları devam edecek, ancak harcama limitin aşıldı.",
+    blocked: hardEnabled,
+    message: hardEnabled
+      ? "AI bütçen tükendi. Sert bütçe etkin — yeni LLM çağrıları engellendi."
+      : "Dikkat: AI bütçen tükendi. LLM çağrıları devam edecek, ancak harcama limitin aşıldı.",
     remainingTl: state.remainingTl,
     remainingPct: state.remainingPct,
   };
@@ -73,7 +77,7 @@ function emitBudgetAlert(getWindows, payload) {
 async function checkPreCallBudgetAlert(settings, getWindows) {
   const totalSpentTl = await getTotalSpentTl(settings);
   const state = evaluateBudgetState(settings, totalSpentTl);
-  const alert = buildPreCallAlert(state);
+  const alert = buildPreCallAlert(state, settings);
   emitBudgetAlert(getWindows, alert);
   return alert;
 }

@@ -339,6 +339,8 @@ Examples:
 
 - Run with inspector: `npm run dev`
 - Run tests: `npm run test`
+- Install Sauron stack (Bridge VSIX, prerequisites): `scripts/install-sauron-stack.ps1` (Windows PowerShell)
+- Workspace health check: Settings → Workspace → **Sistem tanısı çalıştır** (or IPC `run-sauron-doctor`)
 
 ## Build Installers (Windows/macOS/Linux)
 

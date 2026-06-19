@@ -10,6 +10,7 @@ const { Sidecar }          = require('./sidecar');
 const { BrowserBridge }    = require('../../ipc/browser-bridge');
 const { getBrowserRiskScore } = require('./risk-scorer');
 const { createLogger }     = require('../../logger');
+const { recordBrowserGoalUsage } = require('./browser-finops');
 
 const logger = createLogger('browser-plugin');
 
@@ -149,11 +150,35 @@ class BrowserPlugin extends OpenGuiderPlugin {
       const result = await this._bridge.runGoal(goal, { trustLevel });
       const summary = String(result?.summary || '');
       const error = result?.error ? String(result.error) : '';
+      const usage = {
+        provider: String(result?.provider || ''),
+        model: String(result?.model || ''),
+        promptTokens: Number(result?.promptTokens) || 0,
+        completionTokens: Number(result?.completionTokens) || 0,
+        estimatedCostUsd: Number(result?.estimatedCostUsd) || 0,
+      };
+
+      if (options.settings) {
+        try {
+          await recordBrowserGoalUsage({
+            settings: options.settings,
+            sessionId: options.sessionId,
+            usage,
+          });
+        } catch (usageError) {
+          logger.warn('browser-goal-usage-record-failed', { error: usageError?.message });
+        }
+      }
+
       logger.info('run-goal-complete', {
         success: Boolean(result?.success),
         stepsCompleted: Number(result?.stepsCompleted) || 0,
         summary,
         error,
+        provider: usage.provider,
+        model: usage.model,
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
       });
       return {
         success: Boolean(result?.success),
@@ -161,6 +186,11 @@ class BrowserPlugin extends OpenGuiderPlugin {
         stepsCompleted: Number(result?.stepsCompleted) || 0,
         screenshotFinal: String(result?.screenshotFinal || ''),
         error: error || undefined,
+        provider: usage.provider,
+        model: usage.model,
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
+        estimatedCostUsd: usage.estimatedCostUsd,
       };
     } finally {
       this._substepHandler = null;

@@ -8,6 +8,7 @@ const { z } = require('zod');
 const { invokeStructuredResponse } = require('../ai/structured');
 const { extractJSONObject } = require('../agent/schemas');
 const { createLogger } = require('../logger');
+const { detectWebIntent } = require('../sauron/web-studio/web-intent');
 
 const logger = createLogger('intent-router');
 
@@ -20,6 +21,11 @@ const RouteSchema = z.object({
 function looksLikeBrowserTask(userMessage = '') {
   const text = String(userMessage || '').trim().toLowerCase();
   if (!text) return false;
+
+  const webIntent = detectWebIntent(userMessage);
+  if (webIntent.mode === 'build') {
+    return false;
+  }
 
   return /\b(open|navigate|visit|website|web site|browser|tab|page|url|link|click|search|find on|type into|fill|submit|amazon|google|youtube|login|sign in|checkout|cart|product|results?)\b/.test(text);
 }
@@ -57,6 +63,17 @@ class IntentRouter {
    * @returns {Promise<{ pluginId: string|null, goal: string, suggestedTrustLevel: 'balanced'|'autopilot', trust: 'supervised'|'autopilot' }>}
    */
   async route(userMessage, screenshotBase64, availablePlugins = [], settings, signal) {
+    const webIntent = detectWebIntent(userMessage);
+    if (webIntent.mode === 'build') {
+      return {
+        pluginId: null,
+        goal: userMessage,
+        suggestedTrustLevel: 'balanced',
+        trust: 'supervised',
+        webIntent,
+      };
+    }
+
     const quickText = String(userMessage || '').trim().toLowerCase();
     const looksLikeGeneralQnA = /^(what|who|when|where|why|how)\b/.test(quickText)
       && !/(open|navigate|website|browser|click|search|amazon|google|checkout|buy|login|sign in)/.test(quickText);
