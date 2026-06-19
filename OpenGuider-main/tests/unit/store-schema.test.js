@@ -1,0 +1,30 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+
+const { schema } = require("../../src/store");
+
+test("store schema defaults aware assistance to disabled", () => {
+  assert.ok(schema.awareAssistanceEnabled);
+  assert.equal(schema.awareAssistanceEnabled.type, "boolean");
+  assert.equal(schema.awareAssistanceEnabled.default, false);
+});
+
+test("store schema includes finops budget defaults", () => {
+  assert.equal(schema.finopsTotalBudgetTl.default, 0);
+  assert.equal(schema.finopsUsdToTl.default, 34.5);
+  assert.equal(schema.finopsDefaultPricePerMillionTl.default, 50);
+  assert.equal(schema.finopsLastAlertDate.default, "");
+  assert.deepEqual(schema.finopsModelPriceOverrides.default, {});
+  assert.deepEqual(schema.finopsProviderPriceOverrides.default, {});
+  assert.deepEqual(schema.finopsDiscoveredModels.default, {});
+});
+
+test("store schema includes cost optimizer defaults", () => {
+  assert.equal(schema.finopsCostOptimizerEnabled.default, true);
+  assert.equal(schema.finopsCostOptimizerMode.default, "balanced");
+  assert.equal(schema.finopsCoreModelTier.default, "economy");
+  assert.equal(schema.finopsHandoffMaxChars.default, 4000);
+  assert.equal(schema.finopsHandoffIncludeTranscript.default, false);
+  assert.equal(schema.finopsDailyBudgetTl.default, 0);
+  assert.deepEqual(schema.finopsOptimizerModels.default, {});
+});

@@ -1,0 +1,186 @@
+name: Build Release Artifacts
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    env:
+      npm_config_fetch_retries: "5"
+      npm_config_fetch_retry_mintimeout: "20000"
+      npm_config_fetch_retry_maxtimeout: "120000"
+      ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
+      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/electron
+            .cache/electron-builder
+          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $maxAttempts = 3
+
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            try {
+              $npmCiArgs = @("ci", "--omit=optional")
+              if ("${{ matrix.os }}" -eq "macos-latest") {
+                # dmg-builder needs its optional dmg-license package to create DMG installers.
+                $npmCiArgs = @("ci")
+              }
+
+              Write-Host "npm $($npmCiArgs -join ' ') attempt $attempt/$maxAttempts"
+              npm @npmCiArgs
+              if ($LASTEXITCODE -eq 0) {
+                Write-Host "npm ci completed successfully"
+                break
+              }
+
+              throw "npm ci exited with code $LASTEXITCODE"
+            } catch {
+              if ($attempt -eq $maxAttempts) {
+                throw
+              }
+
+              Write-Warning "npm ci failed on attempt $attempt. Clearing partial Electron downloads and retrying..."
+              if (Test-Path node_modules) {
+                Remove-Item node_modules -Recurse -Force -ErrorAction SilentlyContinue
+              }
+              if (Test-Path $env:ELECTRON_CACHE) {
+                Remove-Item $env:ELECTRON_CACHE -Recurse -Force -ErrorAction SilentlyContinue
+              }
+
+              Start-Sleep -Seconds (15 * $attempt)
+            }
+          }
+
+      - name: Build Windows installer
+        if: matrix.os == 'windows-latest'
+        continue-on-error: true
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npx electron-builder --win nsis --publish never
+
+      - name: Create fallback Windows installer
+        if: matrix.os == 'windows-latest' && failure()
+        shell: pwsh
+        run: |
+          throw "Windows NSIS installer build failed."
+
+      - name: Build macOS installer
+        if: matrix.os == 'macos-latest'
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npx electron-builder --mac dmg --config.mac.identity=null --publish never
+
+      - name: Ensure macOS release artifacts are present
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -d "release" ] || [ -z "$(find release -type f | head -n 1)" ]; then
+            if [ -d "dist" ] && [ -n "$(find dist -type f | head -n 1)" ]; then
+              mkdir -p release
+              cp -R dist/* release/
+            fi
+          fi
+
+          MACOS_DMG="$(find release -type f -name '*.dmg' | head -n 1 || true)"
+          if [ -z "${MACOS_DMG}" ]; then
+            echo "::error::macOS build completed without a DMG artifact."
+            find release dist -maxdepth 3 -type f -print 2>/dev/null || true
+            exit 1
+          fi
+
+      - name: Build Linux artifact
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npx electron-builder --linux zip --publish never
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openguider-${{ matrix.os }}
+          path: release/**
+
+  publish:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create stable latest asset aliases
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/aliases
+
+          WINDOWS_SETUP="$(find artifacts -type f -iname '*setup*.exe' | head -n 1)"
+          if [ -z "${WINDOWS_SETUP}" ]; then
+            WINDOWS_SETUP="$(find artifacts -type f -name '*.exe' ! -path '*/win-unpacked/*' ! -name 'OpenGuider.exe' | head -n 1)"
+          fi
+          MACOS_DMG="$(find artifacts -type f -name '*.dmg' | head -n 1)"
+          LINUX_ZIP="$(find artifacts -type f -name '*linux*.zip' | head -n 1)"
+
+          if [ -z "${WINDOWS_SETUP}" ] || [ -z "${MACOS_DMG}" ] || [ -z "${LINUX_ZIP}" ]; then
+            echo "Could not locate one or more platform installer files."
+            echo "WINDOWS_SETUP=${WINDOWS_SETUP:-missing}"
+            echo "MACOS_DMG=${MACOS_DMG:-missing}"
+            echo "LINUX_ZIP=${LINUX_ZIP:-missing}"
+            exit 1
+          fi
+
+          cp "${WINDOWS_SETUP}" artifacts/aliases/OpenGuider-windows-setup-latest.exe
+          cp "${MACOS_DMG}" artifacts/aliases/OpenGuider-macos-installer-latest.dmg
+          cp "${LINUX_ZIP}" artifacts/aliases/OpenGuider-linux-latest.zip
+
+      - name: Publish release with artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          name: OpenGuider ${{ github.ref_name }}
+          body: |
+            OpenGuider desktop release.
+
+            Download installers:
+            - Windows setup: OpenGuider-windows-setup-latest.exe
+            - macOS installer: OpenGuider-macos-installer-latest.dmg
+            - Linux: OpenGuider-linux-latest.zip
+          files: |
+            artifacts/aliases/OpenGuider-windows-setup-latest.exe
+            artifacts/aliases/OpenGuider-macos-installer-latest.dmg
+            artifacts/aliases/OpenGuider-linux-latest.zip

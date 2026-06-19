@@ -1,0 +1,47 @@
+# Dependencies
+**/node_modules/
+
+# Build outputs
+**/dist/
+**/release/
+**/out/
+**/build/
+
+# Electron artifacts
+*.asar
+*.blockmap
+
+# Logs
+**/*.log
+logs/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# OS/editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+
+# Sauron runtime handoff artifacts
+.sauron/handoff*.json
+.sauron/handoff*.json.consumed
+.sauron/handoff*.json.rejected
+.sauron/archive/
+**/.sauron/usage/
+
+# Test coverage / caches
+coverage/
+.cache/
+.eslintcache
+tmp/
+temp/
+
+# Missing upstream LFS asset (optional demo)
+cline-main/assets/docs/demo.gif

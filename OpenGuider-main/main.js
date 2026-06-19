@@ -1,0 +1,2076 @@
+// main.js — Electron main process
+// Handles: system tray, windows lifecycle, global hotkeys, IPC, AI streaming,
+// screenshot capture, TTS, cursor overlay management.
+
+const { app } = require("electron");
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+  process.exit(0);
+}
+const {
+  BrowserWindow, Tray, Menu, ipcMain, screen,
+  nativeImage, globalShortcut, shell, safeStorage, systemPreferences, dialog,
+} = require("electron");
+const path   = require("path");
+const fs = require("fs");
+const { createStore }     = require("./src/store");
+const { SecureStore, SECRET_KEYS } = require("./src/secure-store");
+const { captureAllScreens } = require("./src/screenshot");
+const { streamAIResponse, parsePointTag, fetchOllamaModels } = require("./src/ai/index");
+const {
+  buildHandoffPayload,
+  writeHandoff,
+  seedSauronRules,
+  launchVSCode,
+  listPendingHandoffs,
+} = require("./src/sauron/handoff");
+const { SessionManager } = require("./src/session/session-manager");
+const {
+  clearSessionSnapshot,
+  loadSessionSnapshot,
+  saveSessionSnapshot,
+} = require("./src/session/session-persistence");
+const { TaskOrchestrator } = require("./src/agent/task-orchestrator");
+const { emitPointerTool } = require("./src/agent/tools/pointer-tool");
+const { formatStructuredUserError } = require("./src/ai/structured");
+const { configureFinOpsContext } = require("./src/sauron/finops/llm-tracker");
+const { getUsageSummary } = require("./src/sauron/finops/usage-tracker");
+const { syncFinOpsConfigToWorkspace } = require("./src/sauron/finops/workspace-config");
+const { syncAgentMatrixFromSettings } = require("./src/sauron/finops/agent-matrix");
+const { createLogger, createRequestContext, initializeLogger } = require("./src/logger");
+const { PerformanceMetrics } = require("./src/performance-metrics");
+const {
+  getPlatformCapabilities,
+  normalizeSettingsForPlatform,
+  resolveEffectiveTtsProvider,
+} = require("./src/platform-capabilities");
+const { registry } = require("./src/core/plugin-registry");
+const { BrowserPlugin } = require("./src/plugins/browser/index");
+const { resolveBrowserPluginLlmConfig } = require("./src/plugins/browser/llm-config");
+const { createBrowserExecutionTtsController } = require("./src/tts/browser-execution-tts");
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const PANEL_WIDTH  = 440;
+const PANEL_HEIGHT = 660;
+const WIDGET_WIDTH = 220;
+const WIDGET_COLLAPSED_HEIGHT = 58;
+const WIDGET_EXPANDED_HEIGHT = 248;
+const FAST_MODE_PROMPT = [
+  "FAST MODE:",
+  "Do NOT create long plans.",
+  "Give only the next best action in maximum two short sentences.",
+  "Always append a [POINT:x,y:label] tag when a clickable target is likely on screen.",
+  "If uncertain, still provide your best click estimate with a concise label.",
+].join(" ");
+const TERMINAL_BROWSER_EXECUTION_STATUSES = new Set(["success", "failed", "aborted"]);
+
+// ── Global state ──────────────────────────────────────────────────────────────
+let tray                 = null;
+let panelWindow          = null;
+let settingsWindow       = null;
+let cursorOverlayWindow  = null;
+let widgetWindow         = null;
+let store                = null;
+let secureStore          = null;
+let appLogger            = createLogger("main");
+let isPanelVisible       = false;
+let currentAIController  = null; // AbortController for in-flight AI requests
+let assemblySocket       = null; // AssemblyAI WebSocket
+let sessionManager       = null;
+let taskOrchestrator     = null;
+let perfMetrics          = new PerformanceMetrics();
+let pointerCalibration   = {
+  byScreenNumber: {},
+  byDisplayId: {},
+  updatedAt: null,
+};
+let isPushToTalkRecording = false;
+let isPlanShortcutInFlight = false;
+let panelOpenAnimationTimer = null;
+let lastPanelShowRequestAt = 0;
+let lastPushToTalkToggleAt = 0;
+let browserExecutionTts = null;
+
+const BROWSER_PLUGIN_RELEVANT_SETTINGS = new Set([
+  "aiProvider",
+  "aiModel",
+  "claudeApiKey",
+  "claudeModelCustom",
+  "openaiApiKey",
+  "openaiModelCustom",
+  "geminiApiKey",
+  "geminiModelCustom",
+  "groqApiKey",
+  "groqModelCustom",
+  "openrouterApiKey",
+  "openrouterModelCustom",
+  "ollamaModelCustom",
+  "browserAgentEnabled",
+  "browserHeadless",
+]);
+
+function getVirtualDisplayBounds() {
+  const displays = screen.getAllDisplays();
+  const left = Math.min(...displays.map((display) => display.bounds.x));
+  const top = Math.min(...displays.map((display) => display.bounds.y));
+  const right = Math.max(...displays.map((display) => display.bounds.x + display.bounds.width));
+  const bottom = Math.max(...displays.map((display) => display.bounds.y + display.bounds.height));
+  return {
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top,
+  };
+}
+
+function resizeCursorOverlayToVirtualBounds() {
+  if (!cursorOverlayWindow || cursorOverlayWindow.isDestroyed()) {
+    return;
+  }
+  cursorOverlayWindow.setBounds(getVirtualDisplayBounds());
+}
+
+function debugLog(...args) {
+  const [message, ...rest] = args;
+  appLogger.debug(String(message || ""), { data: rest });
+}
+
+function recordPerformanceMetric(name, startedAt, { ok = true, meta = {} } = {}) {
+  const durationMs = Date.now() - startedAt;
+  perfMetrics.recordDuration(name, durationMs, { ok, meta });
+}
+
+function buildPointerCalibration(screenshots = []) {
+  const displays = screen.getAllDisplays();
+  const byScreenNumber = {};
+  const byDisplayId = {};
+
+  (screenshots || []).forEach((shot, index) => {
+    const requestedDisplayId = String(shot?.displayId || "").trim();
+    let matchedDisplay = null;
+    if (requestedDisplayId) {
+      matchedDisplay = displays.find((display) => String(display.id) === requestedDisplayId) || null;
+    }
+    if (!matchedDisplay && Number(shot?.screenNumber) > 0) {
+      matchedDisplay = displays[Number(shot.screenNumber) - 1] || null;
+    }
+    if (!matchedDisplay) {
+      matchedDisplay = displays[index] || displays[0] || null;
+    }
+    if (!matchedDisplay) {
+      return;
+    }
+
+    const sourceWidth = Math.max(1, Number(shot?.width) || matchedDisplay.bounds.width);
+    const sourceHeight = Math.max(1, Number(shot?.height) || matchedDisplay.bounds.height);
+    const calibration = {
+      sourceWidth,
+      sourceHeight,
+      scaleX: matchedDisplay.bounds.width / sourceWidth,
+      scaleY: matchedDisplay.bounds.height / sourceHeight,
+      displayId: String(matchedDisplay.id),
+      screenNumber: Number(shot?.screenNumber) || index + 1,
+    };
+    byScreenNumber[calibration.screenNumber] = calibration;
+    byDisplayId[calibration.displayId] = calibration;
+  });
+
+  return {
+    byScreenNumber,
+    byDisplayId,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function updatePointerCalibration(screenshots = []) {
+  pointerCalibration = buildPointerCalibration(screenshots);
+}
+
+function wrapUserFacingError(error) {
+  return new Error(formatStructuredUserError(error));
+}
+
+function classifyErrorForUI(error) {
+  const message = String(error?.message || "");
+  if (/api key|authentication|unauthorized|forbidden|401|403/i.test(message)) {
+    return {
+      code: "auth_error",
+      action: "open-settings",
+      actionLabel: "Open settings",
+    };
+  }
+  if (/rate limit|429|quota/i.test(message)) {
+    return {
+      code: "rate_limit",
+      action: "retry",
+      actionLabel: "Try again",
+    };
+  }
+  if (/credits|402|insufficient/i.test(message)) {
+    return {
+      code: "credits",
+      action: "open-settings",
+      actionLabel: "Open settings",
+    };
+  }
+  return {
+    code: "unknown_error",
+    action: "open-settings",
+    actionLabel: "Open settings",
+  };
+}
+
+function toUiErrorPayload(error, requestContext) {
+  const base = classifyErrorForUI(error);
+  return {
+    ...base,
+    message: error?.message || "Unexpected error",
+    requestId: requestContext?.requestId || null,
+  };
+}
+
+function applyPlatformSettingsGuards(settings) {
+  const capabilities = getPlatformCapabilities(process.platform);
+  const normalized = normalizeSettingsForPlatform(settings, capabilities);
+  return {
+    capabilities,
+    normalizedSettings: normalized.settings,
+    warnings: normalized.warnings,
+  };
+}
+
+async function persistFinOpsSettings(patch = {}) {
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined || value === null) {
+      store.delete(key);
+    } else {
+      store.set(key, value);
+    }
+  }
+}
+
+function getFinOpsAlertWindows() {
+  return [panelWindow, settingsWindow].filter((window) => window && !window.isDestroyed());
+}
+
+async function getRuntimeSettings() {
+  if (!secureStore) {
+    return applyPlatformSettingsGuards(store?.store || {}).normalizedSettings;
+  }
+  const hydrated = await secureStore.fillSecrets(store.store);
+  return applyPlatformSettingsGuards(hydrated).normalizedSettings;
+}
+
+function shouldRefreshBrowserPlugin(changedSettings = {}) {
+  return Object.keys(changedSettings || {}).some((key) => BROWSER_PLUGIN_RELEVANT_SETTINGS.has(key));
+}
+
+function emitBrowserAgentStatus(status) {
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.webContents.send("browser-agent-status-changed", status);
+  }
+  if (panelWindow && !panelWindow.isDestroyed()) {
+    panelWindow.webContents.send("browser-agent-status-changed", status);
+  }
+}
+
+function createBrowserPluginCrashHandler() {
+  return (err) => {
+    appLogger.error("browser-plugin-crashed", { error: err?.message });
+    emitBrowserAgentStatus(`crashed: ${err?.message}`);
+  };
+}
+
+function resolveChildProcessAssetPath(...segments) {
+  const directPath = path.join(__dirname, ...segments);
+  const asarSegment = `${path.sep}app.asar${path.sep}`;
+  if (!directPath.includes(asarSegment)) {
+    return directPath;
+  }
+
+  const unpackedPath = directPath.replace(asarSegment, `${path.sep}app.asar.unpacked${path.sep}`);
+  return fs.existsSync(unpackedPath) ? unpackedPath : directPath;
+}
+
+function getBrowserRuntimeInstallDir() {
+  return path.join(app.getPath("userData"), "python-runtime");
+}
+
+function buildBrowserPluginConfig(runtimeSettings) {
+  const llmConfig = resolveBrowserPluginLlmConfig(runtimeSettings);
+  if (llmConfig.warning) {
+    appLogger.warn("browser-plugin-llm-model-adjusted", {
+      provider: llmConfig.llmProvider,
+      requestedModel: llmConfig.requestedModel,
+      warning: llmConfig.warning,
+    });
+  }
+  return {
+    headless: store.get("browserHeadless") === true,
+    llmProvider: llmConfig.llmProvider,
+    llmApiKey: llmConfig.llmApiKey,
+    llmModel: llmConfig.llmModel,
+    onCrash: createBrowserPluginCrashHandler(),
+  };
+}
+
+async function syncBrowserPluginWithRuntimeSettings(runtimeSettings, { forceRestart = false } = {}) {
+  let plugin;
+  try {
+    plugin = registry.getPlugin("browser");
+  } catch (_error) {
+    return { ok: false, skipped: true, error: "browser plugin is not registered" };
+  }
+
+  const browserEnabled = store.get("browserAgentEnabled") !== false;
+  if (!browserEnabled) {
+    try {
+      await plugin.shutdown();
+    } catch (err) {
+      appLogger.warn("browser-plugin-shutdown-error", { error: err?.message });
+    }
+    emitBrowserAgentStatus("stopped");
+    return { ok: true, enabled: false };
+  }
+
+  if (forceRestart) {
+    try {
+      await plugin.shutdown();
+    } catch (err) {
+      appLogger.warn("browser-plugin-restart-shutdown-error", { error: err?.message });
+    }
+  }
+
+  await plugin.initialize(buildBrowserPluginConfig(runtimeSettings));
+  const status = plugin._sidecar?.isRunning ? "running" : "stopped";
+  emitBrowserAgentStatus(status);
+  return { ok: true, enabled: true, status };
+}
+
+function attachWindowCrashHandlers(windowRef, name) {
+  if (!windowRef || windowRef.isDestroyed()) {
+    return;
+  }
+  windowRef.webContents.on("render-process-gone", (_event, details) => {
+    appLogger.error("renderer-process-gone", {
+      window: name,
+      reason: details?.reason,
+      exitCode: details?.exitCode,
+    });
+  });
+  windowRef.webContents.on("unresponsive", () => {
+    appLogger.warn("renderer-unresponsive", { window: name });
+  });
+}
+
+function registerCrashTracking() {
+  process.on("uncaughtException", (error) => {
+    appLogger.error("uncaught-exception", { error });
+  });
+  process.on("unhandledRejection", (reason) => {
+    appLogger.error("unhandled-rejection", {
+      error: reason instanceof Error ? reason : new Error(String(reason)),
+    });
+  });
+}
+
+// ── Tray icon (programmatic 32x32 purple circle) ──────────────────────────────
+function buildTrayIcon() {
+  const logoPath = path.join(__dirname, "renderer", "assets", "logo.png");
+  if (fs.existsSync(logoPath)) {
+    const logoIcon = nativeImage.createFromPath(logoPath);
+    if (!logoIcon.isEmpty()) {
+      return logoIcon;
+    }
+  }
+
+  const size = 32;
+  const data = Buffer.alloc(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4;
+      const dx = x - size / 2;
+      const dy = y - size / 2;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist <= size / 2 - 2) {
+        data[idx] = 124;
+        data[idx + 1] = 58;
+        data[idx + 2] = 237;
+        data[idx + 3] = 255;
+      }
+    }
+  }
+  return nativeImage.createFromBuffer(data, { width: size, height: size });
+}
+
+function getApprovalWindow() {
+  return panelWindow && !panelWindow.isDestroyed() ? panelWindow : null;
+}
+
+// ── Panel window ──────────────────────────────────────────────────────────────
+function createPanelWindow() {
+  panelWindow = new BrowserWindow({
+    width: PANEL_WIDTH,
+    height: PANEL_HEIGHT,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    show: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  });
+  panelWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
+  attachWindowCrashHandlers(panelWindow, "panel");
+
+}
+
+// ── Settings window ───────────────────────────────────────────────────────────
+function createSettingsWindow() {
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.focus();
+    return;
+  }
+  settingsWindow = new BrowserWindow({
+    width: 600,
+    height: 700,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    skipTaskbar: false,
+    alwaysOnTop: false,
+    parent: panelWindow,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  });
+  settingsWindow.loadFile(path.join(__dirname, "renderer", "settings.html"));
+  attachWindowCrashHandlers(settingsWindow, "settings");
+  settingsWindow.on("closed", () => { settingsWindow = null; });
+}
+
+// ── Cursor overlay ────────────────────────────────────────────────────────────
+function createCursorOverlay() {
+  const virtualBounds = getVirtualDisplayBounds();
+  cursorOverlayWindow = new BrowserWindow({
+    width: virtualBounds.width,
+    height: virtualBounds.height,
+    x: virtualBounds.x,
+    y: virtualBounds.y,
+    frame: false, transparent: true,
+    alwaysOnTop: true, skipTaskbar: true,
+    focusable: false, show: false,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      nodeIntegration: false, contextIsolation: true,
+    },
+  });
+  cursorOverlayWindow.setAlwaysOnTop(true, "screen-saver", 1);
+  cursorOverlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  cursorOverlayWindow.setIgnoreMouseEvents(true, { forward: true });
+  cursorOverlayWindow.loadFile(path.join(__dirname, "renderer", "cursor.html"));
+  attachWindowCrashHandlers(cursorOverlayWindow, "cursor-overlay");
+  screen.on("display-added", resizeCursorOverlayToVirtualBounds);
+  screen.on("display-removed", resizeCursorOverlayToVirtualBounds);
+  screen.on("display-metrics-changed", resizeCursorOverlayToVirtualBounds);
+}
+
+// ── Widget window ─────────────────────────────────────────────────────────────
+function createWidgetWindow() {
+  if (widgetWindow && !widgetWindow.isDestroyed()) return;
+
+  widgetWindow = new BrowserWindow({
+    width: WIDGET_WIDTH,
+    height: WIDGET_COLLAPSED_HEIGHT,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  });
+
+  widgetWindow.loadFile(path.join(__dirname, "renderer", "widget.html"));
+  attachWindowCrashHandlers(widgetWindow, "widget");
+
+  // Position at top-right of the display where the mouse cursor currently is
+  const cursorPt = screen.getCursorScreenPoint();
+  const activeDisplay = screen.getDisplayNearestPoint(cursorPt);
+  const wa = activeDisplay.workArea;
+  widgetWindow.setPosition(wa.x + wa.width - WIDGET_WIDTH - 20, wa.y + 20);
+
+  widgetWindow.on("closed", () => { widgetWindow = null; });
+}
+
+function positionWidgetBottomRight(nextHeight) {
+  if (!widgetWindow || widgetWindow.isDestroyed()) {
+    return;
+  }
+
+  // Use the display the widget is currently on, not always the primary display
+  const [wx, wy] = widgetWindow.getPosition();
+  const { workArea: wa } = screen.getDisplayNearestPoint({ x: wx, y: wy });
+  const x = wa.x + wa.width - WIDGET_WIDTH - 20;
+  const y = wa.y + wa.height - nextHeight - 20;
+  widgetWindow.setPosition(x, y);
+}
+
+function resizeWidgetPreservingPosition(nextHeight) {
+  if (!widgetWindow || widgetWindow.isDestroyed()) {
+    return;
+  }
+
+  const [x, y] = widgetWindow.getPosition();
+  widgetWindow.setBounds({
+    x,
+    y,
+    width: WIDGET_WIDTH,
+    height: nextHeight,
+  });
+}
+
+function updateWidgetState(state) {
+  debugLog("widget:state", state);
+  if (widgetWindow && !widgetWindow.isDestroyed()) {
+    widgetWindow.webContents.send("state-change", state);
+  }
+}
+
+function broadcastAgentState(state) {
+  if (panelWindow && !panelWindow.isDestroyed()) {
+    panelWindow.webContents.send("agent-state-changed", state);
+  }
+  if (widgetWindow && !widgetWindow.isDestroyed()) {
+    widgetWindow.webContents.send("agent-state-changed", state);
+  }
+}
+
+function broadcastSessionSnapshot(snapshot) {
+  if (panelWindow && !panelWindow.isDestroyed()) {
+    panelWindow.webContents.send("session-updated", snapshot);
+    panelWindow.webContents.send("plan-updated", snapshot.activePlan);
+    panelWindow.webContents.send("agent-state-changed", snapshot.status);
+  }
+
+  if (widgetWindow && !widgetWindow.isDestroyed()) {
+    widgetWindow.webContents.send("session-updated", snapshot);
+    widgetWindow.webContents.send("plan-updated", snapshot.activePlan);
+    widgetWindow.webContents.send("agent-state-changed", snapshot.status);
+  }
+
+  const widgetState = mapSessionStatusToWidgetState(snapshot.status);
+  updateWidgetState(widgetState);
+}
+
+function broadcastBrowserExecutionSubstepProgress(progress) {
+  if (panelWindow && !panelWindow.isDestroyed()) {
+    panelWindow.webContents.send("execution:substep-progress", progress);
+  }
+
+  if (widgetWindow && !widgetWindow.isDestroyed()) {
+    widgetWindow.webContents.send("execution:substep-progress", progress);
+  }
+}
+
+function mapSessionStatusToWidgetState(status) {
+  switch (status) {
+    case "planning":
+    case "executing":
+    case "evaluating":
+      return "thinking";
+    case "waiting_user":
+      return "idle";
+    default:
+      return status || "idle";
+  }
+}
+
+function hideCursorOverlay() {
+  if (cursorOverlayWindow && !cursorOverlayWindow.isDestroyed()) {
+    cursorOverlayWindow.hide();
+  }
+
+  if (panelWindow && !panelWindow.isDestroyed()) {
+    panelWindow.webContents.send("pointer-updated", null);
+  }
+
+  if (widgetWindow && !widgetWindow.isDestroyed()) {
+    widgetWindow.webContents.send("pointer-updated", null);
+  }
+}
+
+function showPointer(pointer) {
+  const payload = emitPointerTool({
+    pointer,
+    screen,
+    cursorOverlayWindow,
+    pointerCalibration,
+  });
+
+  if (!payload) {
+    hideCursorOverlay();
+    return null;
+  }
+
+  if (panelWindow && !panelWindow.isDestroyed()) {
+    panelWindow.webContents.send("pointer-updated", payload);
+  }
+
+  if (widgetWindow && !widgetWindow.isDestroyed()) {
+    widgetWindow.webContents.send("pointer-updated", payload);
+  }
+
+  return payload;
+}
+
+// ── Panel position (top-right by default, persistent if moved) ───────────────
+function getPanelPosition() {
+  const displays = screen.getAllDisplays();
+  const primaryWorkArea = screen.getPrimaryDisplay().workArea;
+  const defaultX = primaryWorkArea.x + primaryWorkArea.width - PANEL_WIDTH - 20;
+  const defaultY = primaryWorkArea.y + 20;
+
+  const rawX = store?.get("panelWindowX");
+  const rawY = store?.get("panelWindowY");
+
+  if (rawX === undefined || rawX === null || rawY === undefined || rawY === null) {
+    return { x: defaultX, y: defaultY };
+  }
+
+  const savedX = Number(rawX);
+  const savedY = Number(rawY);
+
+  if (!Number.isFinite(savedX) || !Number.isFinite(savedY)) {
+    return { x: defaultX, y: defaultY };
+  }
+
+  // Find which display the saved position belongs to (handles multi-monitor setups)
+  const targetDisplay =
+    displays.find(
+      (d) =>
+        savedX >= d.workArea.x &&
+        savedX < d.workArea.x + d.workArea.width &&
+        savedY >= d.workArea.y &&
+        savedY < d.workArea.y + d.workArea.height,
+    ) || screen.getPrimaryDisplay();
+
+  const wa = targetDisplay.workArea;
+  const clampedX = Math.max(wa.x, Math.min(savedX, wa.x + wa.width - PANEL_WIDTH));
+  const clampedY = Math.max(wa.y, Math.min(savedY, wa.y + wa.height - PANEL_HEIGHT));
+  return { x: clampedX, y: clampedY };
+}
+
+function animatePanelIn(targetX, targetY) {
+  if (!panelWindow || panelWindow.isDestroyed()) {
+    return;
+  }
+
+  if (panelOpenAnimationTimer) {
+    clearInterval(panelOpenAnimationTimer);
+    panelOpenAnimationTimer = null;
+  }
+
+  const startY = targetY - 10;
+  const steps = 8;
+  let step = 0;
+  panelWindow.setPosition(targetX, startY);
+  panelWindow.setOpacity(0);
+  panelWindow.show();
+
+  panelOpenAnimationTimer = setInterval(() => {
+    if (!panelWindow || panelWindow.isDestroyed()) {
+      clearInterval(panelOpenAnimationTimer);
+      panelOpenAnimationTimer = null;
+      return;
+    }
+    step += 1;
+    const progress = Math.min(1, step / steps);
+    const eased = 1 - (1 - progress) * (1 - progress);
+    const nextY = Math.round(startY + (targetY - startY) * eased);
+    panelWindow.setPosition(targetX, nextY);
+    panelWindow.setOpacity(progress);
+
+    if (progress >= 1) {
+      clearInterval(panelOpenAnimationTimer);
+      panelOpenAnimationTimer = null;
+      panelWindow.setPosition(targetX, targetY);
+      panelWindow.setOpacity(1);
+    }
+  }, 16);
+}
+
+function showPanel() {
+  debugLog("window:panel show");
+  const now = Date.now();
+  if (now - lastPanelShowRequestAt < 180) {
+    return;
+  }
+  lastPanelShowRequestAt = now;
+
+  if (!panelWindow || panelWindow.isDestroyed()) {
+    return;
+  }
+  if (isPanelVisible && panelWindow.isVisible()) {
+    panelWindow.focus();
+    return;
+  }
+
+  const { x, y } = getPanelPosition();
+  animatePanelIn(x, y);
+  panelWindow.focus();
+  isPanelVisible = true;
+}
+function hidePanel() {
+  debugLog("window:panel hide");
+  if (panelOpenAnimationTimer) {
+    clearInterval(panelOpenAnimationTimer);
+    panelOpenAnimationTimer = null;
+  }
+  panelWindow.hide();
+  isPanelVisible = false;
+}
+
+// ── Tray ──────────────────────────────────────────────────────────────────────
+function createTray() {
+  tray = new Tray(buildTrayIcon());
+  tray.setToolTip("Sauron — AI Companion");
+  tray.on("click", () => { isPanelVisible ? hidePanel() : showPanel(); });
+  tray.on("double-click", showPanel);
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: "Open Sauron",  click: showPanel },
+    { label: "Settings",     click: createSettingsWindow },
+    { type: "separator" },
+    { label: "Quit",         click: () => app.quit() },
+  ]));
+}
+
+function getDefaultSender() {
+  if (panelWindow && !panelWindow.isDestroyed()) {
+    return panelWindow.webContents;
+  }
+  if (widgetWindow && !widgetWindow.isDestroyed()) {
+    return widgetWindow.webContents;
+  }
+  return null;
+}
+
+function canRunPlanShortcutAction() {
+  const snapshot = sessionManager?.getSnapshot?.();
+  const currentStep = snapshot?.activePlan?.steps?.[snapshot?.activePlan?.currentStepIndex];
+  return Boolean(currentStep) && snapshot?.status === "waiting_user";
+}
+
+async function runPlanShortcutAction(actionName) {
+  if (!canRunPlanShortcutAction()) {
+    debugLog("hotkey:plan-action skipped", actionName, "inactive");
+    return;
+  }
+
+  if (isPlanShortcutInFlight) {
+    debugLog("hotkey:plan-action skipped", actionName, "busy");
+    return;
+  }
+
+  isPlanShortcutInFlight = true;
+  const sender = getDefaultSender();
+  if (!sender) {
+    isPlanShortcutInFlight = false;
+    return;
+  }
+
+  if (currentAIController) {
+    currentAIController.abort();
+  }
+  currentAIController = new AbortController();
+
+  try {
+    let result = null;
+    if (actionName === "mark-step-done") {
+      result = await taskOrchestrator.markStepDone({
+        settings: store.store,
+        signal: currentAIController.signal,
+      });
+    } else if (actionName === "request-step-help") {
+      result = await taskOrchestrator.requestStepHelp({
+        settings: store.store,
+        signal: currentAIController.signal,
+      });
+    } else if (actionName === "recheck-current-step") {
+      result = await taskOrchestrator.recheckCurrentStep({
+        settings: store.store,
+        signal: currentAIController.signal,
+      });
+    } else if (actionName === "previous-step") {
+      result = await taskOrchestrator.previousStep({
+        settings: store.store,
+        signal: currentAIController.signal,
+      });
+    } else if (actionName === "skip-current-step") {
+      result = await taskOrchestrator.skipCurrentStep({
+        settings: store.store,
+        signal: currentAIController.signal,
+      });
+    } else if (actionName === "regenerate-current-step") {
+      result = await taskOrchestrator.regenerateCurrentStep({
+        settings: store.store,
+        signal: currentAIController.signal,
+      });
+    } else if (actionName === "cancel-active-plan") {
+      result = taskOrchestrator.cancelActivePlan();
+    }
+
+    if (result) {
+      await handleOrchestratorResult(result, store.store, sender);
+    }
+  } catch (err) {
+    if (err?.name !== "AbortError") {
+      debugLog("hotkey:plan-action error", actionName, err?.message || err);
+      appLogger.error("global-shortcut-action failed", { actionName, error: err });
+    }
+  } finally {
+    currentAIController = null;
+    isPlanShortcutInFlight = false;
+  }
+}
+
+function registerShortcut(accelerator, onPress, label) {
+  const shortcut = (accelerator || "").trim();
+  if (!shortcut) {
+    debugLog("hotkey:skip empty", label);
+    return;
+  }
+  const ok = globalShortcut.register(shortcut, onPress);
+  if (!ok) {
+    debugLog("hotkey:register failed", label, shortcut);
+    return;
+  }
+  debugLog("hotkey:registered", label, shortcut);
+}
+
+// ── Global hotkey ─────────────────────────────────────────────────────────────
+function registerHotkeys() {
+  globalShortcut.unregisterAll();
+  isPushToTalkRecording = false;
+
+  const pushToTalkShortcut = store.get("pushToTalkShortcut") || "Ctrl+Shift+Space";
+  const markStepDoneShortcut = store.get("markStepDoneShortcut") || "Ctrl+Alt+1";
+  const requestStepHelpShortcut = store.get("requestStepHelpShortcut") || "Ctrl+Alt+2";
+  const recheckCurrentStepShortcut = store.get("recheckCurrentStepShortcut") || "Ctrl+Alt+3";
+  const cancelActivePlanShortcut = store.get("cancelActivePlanShortcut") || "Ctrl+Alt+4";
+  const previousStepShortcut = store.get("previousStepShortcut") || "Ctrl+Alt+5";
+  const skipCurrentStepShortcut = store.get("skipCurrentStepShortcut") || "Ctrl+Alt+6";
+  const regenerateCurrentStepShortcut = store.get("regenerateCurrentStepShortcut") || "Ctrl+Alt+7";
+
+  registerShortcut(pushToTalkShortcut, () => {
+    const now = Date.now();
+    // Prevent accidental double toggles from key repeat.
+    if (now - lastPushToTalkToggleAt < 300) {
+      return;
+    }
+    lastPushToTalkToggleAt = now;
+    debugLog("hotkey:push-to-talk", pushToTalkShortcut, isPushToTalkRecording ? "stop" : "start");
+    if (!panelWindow || panelWindow.isDestroyed()) {
+      isPushToTalkRecording = false;
+      return;
+    }
+    if (!isPushToTalkRecording) {
+      isPushToTalkRecording = true;
+      panelWindow.webContents.send("push-to-talk-start");
+      updateWidgetState("listening");
+    } else {
+      isPushToTalkRecording = false;
+      panelWindow.webContents.send("push-to-talk-stop");
+      updateWidgetState("idle");
+    }
+  }, "pushToTalk");
+
+  registerShortcut(markStepDoneShortcut, () => {
+    void runPlanShortcutAction("mark-step-done");
+  }, "markStepDone");
+  registerShortcut(requestStepHelpShortcut, () => {
+    void runPlanShortcutAction("request-step-help");
+  }, "requestStepHelp");
+  registerShortcut(recheckCurrentStepShortcut, () => {
+    void runPlanShortcutAction("recheck-current-step");
+  }, "recheckCurrentStep");
+  registerShortcut(previousStepShortcut, () => {
+    void runPlanShortcutAction("previous-step");
+  }, "previousStep");
+  registerShortcut(skipCurrentStepShortcut, () => {
+    void runPlanShortcutAction("skip-current-step");
+  }, "skipCurrentStep");
+  registerShortcut(regenerateCurrentStepShortcut, () => {
+    void runPlanShortcutAction("regenerate-current-step");
+  }, "regenerateCurrentStep");
+  registerShortcut(cancelActivePlanShortcut, () => {
+    void runPlanShortcutAction("cancel-active-plan");
+  }, "cancelActivePlan");
+}
+
+function resolvePreferredTtsTargetSender(sender) {
+  if (panelWindow && !panelWindow.isDestroyed()) {
+    return panelWindow.webContents;
+  }
+  if (sender && typeof sender.isDestroyed === "function" && !sender.isDestroyed()) {
+    return sender;
+  }
+  if (widgetWindow && !widgetWindow.isDestroyed()) {
+    return widgetWindow.webContents;
+  }
+  return null;
+}
+
+async function ensureRuntimePermissions() {
+  const payload = {
+    platform: process.platform,
+    microphone: "not_required",
+    screen: "not_required",
+    screenNeedsSettings: false,
+  };
+
+  if (process.platform !== "darwin") {
+    return payload;
+  }
+
+  const microphoneStatus = systemPreferences.getMediaAccessStatus("microphone");
+  if (microphoneStatus === "granted") {
+    payload.microphone = "granted";
+  } else {
+    const granted = await systemPreferences.askForMediaAccess("microphone");
+    payload.microphone = granted ? "granted" : "denied";
+  }
+
+  const screenStatus = systemPreferences.getMediaAccessStatus("screen");
+  payload.screen = screenStatus || "unknown";
+  payload.screenNeedsSettings = ["denied", "restricted"].includes(payload.screen);
+
+  return payload;
+}
+
+async function openPermissionSettings(scope) {
+  if (process.platform !== "darwin") {
+    return false;
+  }
+  const normalizedScope = String(scope || "").trim().toLowerCase();
+  if (normalizedScope === "microphone") {
+    return shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone");
+  }
+  if (normalizedScope === "screen") {
+    return shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture");
+  }
+  return false;
+}
+
+function sanitizeTextForTts(input) {
+  let text = String(input || "");
+  if (!text) {
+    return "";
+  }
+
+  // Remove code blocks, inline code, markdown emphasis markers and links.
+  text = text
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
+    .replace(/[*_~>#]+/g, " ");
+
+  // Remove most emoji / pictographic symbols.
+  text = text
+    .replace(/\p{Extended_Pictographic}/gu, " ")
+    .replace(/[\uFE0F\u200D]/g, " ");
+
+  // Remove repeated punctuation and clean spacing.
+  text = text
+    .replace(/[^\p{L}\p{N}\p{P}\p{Z}\n]/gu, " ")
+    .replace(/([!?.,])\1+/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return text;
+}
+
+async function speakAssistantResponse(text, settings, sender, { shouldAbort } = {}) {
+  const safeText = sanitizeTextForTts(text);
+  if (!settings.ttsEnabled || !safeText) {
+    return;
+  }
+  if (typeof shouldAbort === "function" && shouldAbort()) {
+    return;
+  }
+
+  const { provider: effectiveTtsProvider, warning } = resolveEffectiveTtsProvider(
+    settings.ttsProvider,
+    getPlatformCapabilities(process.platform),
+  );
+  if (warning) {
+    appLogger.warn("tts provider fallback", {
+      requestedProvider: settings.ttsProvider,
+      effectiveProvider: effectiveTtsProvider,
+      warning,
+    });
+  }
+
+  const ttsTargetSender = resolvePreferredTtsTargetSender(sender);
+  if (!ttsTargetSender || (typeof ttsTargetSender.isDestroyed === "function" && ttsTargetSender.isDestroyed())) {
+    return;
+  }
+  debugLog("tts:start", effectiveTtsProvider);
+  if (effectiveTtsProvider === "elevenlabs") {
+    updateWidgetState("speaking");
+    if (typeof shouldAbort === "function" && shouldAbort()) {
+      return;
+    }
+    await speakWithElevenLabs(safeText, settings, ttsTargetSender, { shouldAbort });
+  } else if (effectiveTtsProvider === "openai") {
+    const openaiTTS = require("./src/tts/openai-tts");
+    try {
+      const base64Audio = await openaiTTS.speakText(safeText, settings);
+      if (
+        base64Audio
+        && !(typeof shouldAbort === "function" && shouldAbort())
+        && !ttsTargetSender.isDestroyed()
+      ) {
+        updateWidgetState("speaking");
+        ttsTargetSender.send("tts-start", base64Audio);
+      }
+    } catch (err) {
+      appLogger.error("openai-tts failed", { error: err });
+    }
+  } else if (effectiveTtsProvider === "google") {
+    const googleTTS = require("./src/tts/google-tts");
+    try {
+      const chunksBase64 = await googleTTS.speakText(safeText, settings);
+      if (
+        chunksBase64.length > 0
+        && !(typeof shouldAbort === "function" && shouldAbort())
+        && !ttsTargetSender.isDestroyed()
+      ) {
+        updateWidgetState("speaking");
+        ttsTargetSender.send("tts-google", chunksBase64);
+      }
+    } catch (err) {
+      appLogger.error("google-tts failed", { error: err });
+    }
+  }
+
+  if (
+    !(typeof shouldAbort === "function" && shouldAbort())
+    && !ttsTargetSender.isDestroyed()
+  ) {
+    ttsTargetSender.send("tts-done");
+  }
+  debugLog("tts:done", effectiveTtsProvider);
+}
+
+async function handleOrchestratorResult(result, settings, sender) {
+  if (result?.pointer?.shouldPoint && result.pointer.coordinate) {
+    showPointer(result.pointer);
+  } else {
+    hideCursorOverlay();
+  }
+
+  // In planning flow, speak only the current actionable step once when pointer appears.
+  if (result?.pointer?.shouldPoint && result?.assistantMessage) {
+    const ttsText = result?.userInputRequest?.message || result.assistantMessage;
+    await speakAssistantResponse(ttsText, settings, sender);
+  }
+
+  return result;
+}
+
+// ── IPC handlers ──────────────────────────────────────────────────────────────
+function setupIPC() {
+  // ── Settings ─────────────────────────────────────────────────────────────
+  ipcMain.handle("get-settings", async () => {
+    debugLog("ipc:get-settings");
+    const nextSettings = await secureStore.fillSecrets(store.store);
+    const guarded = applyPlatformSettingsGuards(nextSettings);
+    return guarded.normalizedSettings;
+  });
+  ipcMain.handle("save-settings", async (_e, newSettings) => {
+    debugLog("ipc:save-settings", Object.keys(newSettings || {}));
+    const incomingSettings = newSettings || {};
+    const guardedInput = applyPlatformSettingsGuards(incomingSettings);
+    Object.assign(
+      guardedInput.normalizedSettings,
+      syncAgentMatrixFromSettings(guardedInput.normalizedSettings || {}),
+    );
+    if (guardedInput.warnings.length > 0) {
+      appLogger.warn("save-settings platform normalization", {
+        warnings: guardedInput.warnings,
+      });
+    }
+    await secureStore.saveSecretsFromSettings(guardedInput.normalizedSettings);
+    for (const [k, v] of Object.entries(guardedInput.normalizedSettings || {})) {
+      if (SECRET_KEYS.includes(k)) {
+        store.delete(k);
+        continue;
+      }
+      // electron-store throws if you try to set() undefined — use delete() instead
+      if (v === undefined || v === null) {
+        store.delete(k);
+      } else {
+        store.set(k, v);
+      }
+    }
+    const hydratedSettings = await secureStore.fillSecrets(store.store);
+    const guardedHydrated = applyPlatformSettingsGuards(hydratedSettings);
+    const settingsToBroadcast = guardedHydrated.normalizedSettings;
+    if (taskOrchestrator && typeof taskOrchestrator.setAwareAssistanceEnabled === "function") {
+      taskOrchestrator.setAwareAssistanceEnabled(settingsToBroadcast.awareAssistanceEnabled === true);
+    }
+    if (panelWindow && !panelWindow.isDestroyed()) {
+      panelWindow.webContents.send("settings-changed", settingsToBroadcast);
+    }
+    if (widgetWindow && !widgetWindow.isDestroyed()) {
+      widgetWindow.webContents.send("settings-changed", settingsToBroadcast);
+    }
+    if (shouldRefreshBrowserPlugin(incomingSettings)) {
+      try {
+        await syncBrowserPluginWithRuntimeSettings(settingsToBroadcast, { forceRestart: true });
+      } catch (err) {
+        appLogger.error("browser-plugin-refresh-failed", { error: err?.message });
+        emitBrowserAgentStatus(`crashed: ${err?.message}`);
+      }
+    }
+    registerHotkeys();
+    try {
+      await syncFinOpsConfigToWorkspace(settingsToBroadcast);
+    } catch (err) {
+      appLogger.warn("finops-config-sync-failed", { error: err?.message || err });
+    }
+    return {
+      ok: true,
+      warnings: guardedInput.warnings,
+    };
+  });
+  ipcMain.handle("reset-settings", async () => {
+    debugLog("ipc:reset-settings");
+    if (currentAIController) {
+      currentAIController.abort();
+      currentAIController = null;
+    }
+    hideCursorOverlay();
+    taskOrchestrator.resetSession();
+    store.clear();
+    clearSessionSnapshot(store);
+    await secureStore.clearAllSecrets();
+    const hydratedSettings = await secureStore.fillSecrets(store.store);
+    const guardedHydrated = applyPlatformSettingsGuards(hydratedSettings);
+    const settingsToBroadcast = guardedHydrated.normalizedSettings;
+    if (taskOrchestrator && typeof taskOrchestrator.setAwareAssistanceEnabled === "function") {
+      taskOrchestrator.setAwareAssistanceEnabled(settingsToBroadcast.awareAssistanceEnabled === true);
+    }
+    if (panelWindow && !panelWindow.isDestroyed()) {
+      panelWindow.webContents.send("settings-changed", settingsToBroadcast);
+    }
+    if (widgetWindow && !widgetWindow.isDestroyed()) {
+      widgetWindow.webContents.send("settings-changed", settingsToBroadcast);
+    }
+    registerHotkeys();
+    return settingsToBroadcast;
+  });
+
+  ipcMain.handle("get-platform-capabilities", () => {
+    return getPlatformCapabilities(process.platform);
+  });
+
+  ipcMain.handle("ensure-runtime-permissions", async () => {
+    return ensureRuntimePermissions();
+  });
+
+  ipcMain.handle("open-permission-settings", async (_event, scope) => {
+    return openPermissionSettings(scope);
+  });
+
+  ipcMain.handle("get-performance-metrics", () => {
+    return perfMetrics.getSnapshot();
+  });
+
+  ipcMain.handle("reset-performance-metrics", () => {
+    perfMetrics.reset();
+    return { ok: true };
+  });
+
+  ipcMain.handle("get-finops-summary", async () => {
+    const runtimeSettings = await getRuntimeSettings();
+    return getUsageSummary(runtimeSettings);
+  });
+
+  // ── Screenshot ───────────────────────────────────────────────────────────
+  ipcMain.handle("capture-screenshot", async () => {
+    const startedAt = Date.now();
+    debugLog("ipc:capture-screenshot");
+    try {
+      const result = await captureAllScreens({ includeTimings: true });
+      recordPerformanceMetric("ipc.capture-screenshot", startedAt, {
+        ok: true,
+        meta: {
+          imageCount: result.images.length,
+          fromCache: Boolean(result.timings?.fromCache),
+          totalDurationMs: result.timings?.totalDurationMs || 0,
+          getSourcesDurationMs: result.timings?.getSourcesDurationMs || 0,
+          encodeDurationMs: result.timings?.encodeDurationMs || 0,
+        },
+      });
+      updatePointerCalibration(result.images);
+      return result.images;
+    } catch (err) {
+      recordPerformanceMetric("ipc.capture-screenshot", startedAt, {
+        ok: false,
+        meta: { errorName: err?.name || "Error" },
+      });
+      appLogger.error("capture-screenshot failed", { error: err });
+      return [];
+    }
+  });
+
+  ipcMain.handle("get-active-session", () => {
+    debugLog("ipc:get-active-session");
+    return sessionManager.getSnapshot();
+  });
+
+  ipcMain.handle("reset-session", () => {
+    debugLog("ipc:reset-session");
+    hideCursorOverlay();
+    return taskOrchestrator.resetSession();
+  });
+
+  ipcMain.handle("start-goal-session", async (event, { text, images }) => {
+    const requestContext = createRequestContext("start-goal-session");
+    const startedAt = Date.now();
+    debugLog("ipc:start-goal-session", {
+      requestId: requestContext.requestId,
+      textLength: text?.length || 0,
+      imageCount: images?.length || 0,
+    });
+    if (currentAIController) currentAIController.abort();
+    currentAIController = new AbortController();
+    const runtimeSettings = await getRuntimeSettings();
+    if (Array.isArray(images) && images.length > 0) {
+      updatePointerCalibration(images);
+    }
+
+    try {
+      const result = await taskOrchestrator.startGoalSession({
+        text,
+        images,
+        settings: runtimeSettings,
+        signal: currentAIController.signal,
+        requestId: requestContext.requestId,
+      });
+      const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
+      recordPerformanceMetric("ipc.start-goal-session", startedAt, {
+        ok: true,
+        meta: { requestId: requestContext.requestId, imageCount: images?.length || 0 },
+      });
+      return { ...handled, requestId: requestContext.requestId };
+    } catch (err) {
+      recordPerformanceMetric("ipc.start-goal-session", startedAt, {
+        ok: false,
+        meta: { requestId: requestContext.requestId, errorName: err?.name || "Error" },
+      });
+      appLogger.error("ipc:start-goal-session failed", {
+        requestId: requestContext.requestId,
+        error: err,
+      });
+      throw wrapUserFacingError(err);
+    } finally {
+      currentAIController = null;
+    }
+  });
+
+  ipcMain.handle("submit-user-message", async (event, { text, images }) => {
+    const requestContext = createRequestContext("submit-user-message");
+    const startedAt = Date.now();
+    debugLog("ipc:submit-user-message", {
+      requestId: requestContext.requestId,
+      textLength: text?.length || 0,
+      imageCount: images?.length || 0,
+    });
+    if (currentAIController) currentAIController.abort();
+    currentAIController = new AbortController();
+    const runtimeSettings = await getRuntimeSettings();
+    if (Array.isArray(images) && images.length > 0) {
+      updatePointerCalibration(images);
+    }
+
+    try {
+      const result = await taskOrchestrator.submitUserMessage({
+        text,
+        images,
+        settings: runtimeSettings,
+        signal: currentAIController.signal,
+        requestId: requestContext.requestId,
+      });
+      const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
+      recordPerformanceMetric("ipc.submit-user-message", startedAt, {
+        ok: true,
+        meta: { requestId: requestContext.requestId, imageCount: images?.length || 0 },
+      });
+      return { ...handled, requestId: requestContext.requestId };
+    } catch (err) {
+      recordPerformanceMetric("ipc.submit-user-message", startedAt, {
+        ok: false,
+        meta: { requestId: requestContext.requestId, errorName: err?.name || "Error" },
+      });
+      appLogger.error("ipc:submit-user-message failed", {
+        requestId: requestContext.requestId,
+        error: err,
+      });
+      throw wrapUserFacingError(err);
+    } finally {
+      currentAIController = null;
+    }
+  });
+
+  ipcMain.handle("mark-step-done", async (event) => {
+    const requestContext = createRequestContext("mark-step-done");
+    debugLog("ipc:mark-step-done", { requestId: requestContext.requestId });
+    if (currentAIController) currentAIController.abort();
+    currentAIController = new AbortController();
+    const runtimeSettings = await getRuntimeSettings();
+
+    try {
+      const result = await taskOrchestrator.markStepDone({
+        settings: runtimeSettings,
+        signal: currentAIController.signal,
+        requestId: requestContext.requestId,
+      });
+      const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
+      return { ...handled, requestId: requestContext.requestId };
+    } catch (err) {
+      appLogger.error("ipc:mark-step-done failed", {
+        requestId: requestContext.requestId,
+        error: err,
+      });
+      throw wrapUserFacingError(err);
+    } finally {
+      currentAIController = null;
+    }
+  });
+
+  ipcMain.handle("request-step-help", async (event) => {
+    const requestContext = createRequestContext("request-step-help");
+    debugLog("ipc:request-step-help", { requestId: requestContext.requestId });
+    if (currentAIController) currentAIController.abort();
+    currentAIController = new AbortController();
+    const runtimeSettings = await getRuntimeSettings();
+
+    try {
+      const result = await taskOrchestrator.requestStepHelp({
+        settings: runtimeSettings,
+        signal: currentAIController.signal,
+        requestId: requestContext.requestId,
+      });
+      const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
+      return { ...handled, requestId: requestContext.requestId };
+    } catch (err) {
+      appLogger.error("ipc:request-step-help failed", {
+        requestId: requestContext.requestId,
+        error: err,
+      });
+      throw wrapUserFacingError(err);
+    } finally {
+      currentAIController = null;
+    }
+  });
+
+  ipcMain.handle("recheck-current-step", async (event) => {
+    const requestContext = createRequestContext("recheck-current-step");
+    debugLog("ipc:recheck-current-step", { requestId: requestContext.requestId });
+    if (currentAIController) currentAIController.abort();
+    currentAIController = new AbortController();
+    const runtimeSettings = await getRuntimeSettings();
+
+    try {
+      const result = await taskOrchestrator.recheckCurrentStep({
+        settings: runtimeSettings,
+        signal: currentAIController.signal,
+        requestId: requestContext.requestId,
+      });
+      const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
+      return { ...handled, requestId: requestContext.requestId };
+    } catch (err) {
+      appLogger.error("ipc:recheck-current-step failed", {
+        requestId: requestContext.requestId,
+        error: err,
+      });
+      throw wrapUserFacingError(err);
+    } finally {
+      currentAIController = null;
+    }
+  });
+
+  ipcMain.handle("skip-current-step", async (event) => {
+    const requestContext = createRequestContext("skip-current-step");
+    debugLog("ipc:skip-current-step", { requestId: requestContext.requestId });
+    if (currentAIController) currentAIController.abort();
+    currentAIController = new AbortController();
+    const runtimeSettings = await getRuntimeSettings();
+
+    try {
+      const result = await taskOrchestrator.skipCurrentStep({
+        settings: runtimeSettings,
+        signal: currentAIController.signal,
+        requestId: requestContext.requestId,
+      });
+      const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
+      return { ...handled, requestId: requestContext.requestId };
+    } catch (err) {
+      appLogger.error("ipc:skip-current-step failed", {
+        requestId: requestContext.requestId,
+        error: err,
+      });
+      throw wrapUserFacingError(err);
+    } finally {
+      currentAIController = null;
+    }
+  });
+
+  ipcMain.handle("previous-step", async (event) => {
+    const requestContext = createRequestContext("previous-step");
+    debugLog("ipc:previous-step", { requestId: requestContext.requestId });
+    if (currentAIController) currentAIController.abort();
+    currentAIController = new AbortController();
+    const runtimeSettings = await getRuntimeSettings();
+
+    try {
+      const result = await taskOrchestrator.previousStep({
+        settings: runtimeSettings,
+        signal: currentAIController.signal,
+        requestId: requestContext.requestId,
+      });
+      const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
+      return { ...handled, requestId: requestContext.requestId };
+    } catch (err) {
+      appLogger.error("ipc:previous-step failed", {
+        requestId: requestContext.requestId,
+        error: err,
+      });
+      throw wrapUserFacingError(err);
+    } finally {
+      currentAIController = null;
+    }
+  });
+
+  ipcMain.handle("regenerate-current-step", async (event) => {
+    const requestContext = createRequestContext("regenerate-current-step");
+    debugLog("ipc:regenerate-current-step", { requestId: requestContext.requestId });
+    if (currentAIController) currentAIController.abort();
+    currentAIController = new AbortController();
+    const runtimeSettings = await getRuntimeSettings();
+
+    try {
+      const result = await taskOrchestrator.regenerateCurrentStep({
+        settings: runtimeSettings,
+        signal: currentAIController.signal,
+        requestId: requestContext.requestId,
+      });
+      const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
+      return { ...handled, requestId: requestContext.requestId };
+    } catch (err) {
+      appLogger.error("ipc:regenerate-current-step failed", {
+        requestId: requestContext.requestId,
+        error: err,
+      });
+      throw wrapUserFacingError(err);
+    } finally {
+      currentAIController = null;
+    }
+  });
+
+  // ── AI streaming ─────────────────────────────────────────────────────────
+  ipcMain.handle("send-message", async (event, { text, images, history, fastMode }) => {
+    const requestContext = createRequestContext("send-message");
+    const startedAt = Date.now();
+    debugLog("ipc:send-message start", {
+      requestId: requestContext.requestId,
+      textLength: text?.length || 0,
+      imageCount: images?.length || 0,
+      historyCount: history?.length || 0,
+      fastMode: Boolean(fastMode),
+    });
+    // Cancel any in-progress AI request
+    if (currentAIController) currentAIController.abort();
+    currentAIController = new AbortController();
+    if (Array.isArray(images) && images.length > 0) {
+      updatePointerCalibration(images);
+    }
+
+    broadcastAgentState("thinking");
+    updateWidgetState("thinking");
+    const settings = await getRuntimeSettings();
+    const requestSettings = { ...settings };
+    if (fastMode) {
+      const userPrompt = settings.systemPromptOverride || "";
+      requestSettings.systemPromptOverride = `${userPrompt}\n\n${FAST_MODE_PROMPT}`.trim();
+    }
+    try {
+      // ── Pre-LLM layer: enrich prompt with OCR & window context ──
+      const layerManager = taskOrchestrator?.isAwareAssistanceEnabled?.()
+        ? taskOrchestrator.interactionPipeline
+        : null;
+      let enrichedText = text;
+      if (layerManager && Array.isArray(images) && images.length > 0) {
+        try {
+          const preContext = await layerManager.preprocess({
+            images,
+            step: null,
+            sessionId: sessionManager?.getSnapshot?.().sessionId || "fast",
+            signal: currentAIController.signal,
+          });
+          if (preContext.ocrResult || preContext.windowInfo) {
+            enrichedText = await layerManager.distillContext(text, preContext, requestSettings);
+          }
+        } catch (preErr) {
+          appLogger.warn("send-message pre-layer error (non-fatal)", { error: preErr });
+        }
+      }
+
+      const fullText = await streamAIResponse({
+        text: enrichedText, images, history, settings: requestSettings,
+        signal: currentAIController.signal,
+        onChunk: (chunk) => {
+          if (!event.sender.isDestroyed())
+            event.sender.send("ai-chunk", chunk);
+        },
+      });
+
+      const parsed = parsePointTag(fullText);
+      if (!event.sender.isDestroyed())
+        event.sender.send("ai-done", { ...parsed, requestId: requestContext.requestId });
+      broadcastAgentState("executing");
+      
+      debugLog("ipc:send-message done", {
+        requestId: requestContext.requestId,
+        hasCoordinate: Boolean(parsed.coordinate),
+        textLength: fullText.length,
+      });
+      updateWidgetState("idle");
+
+      // ── Post-LLM layer: validate & snap coordinates ──
+      let finalCoordinate = parsed.coordinate;
+      if (layerManager && parsed.coordinate) {
+        try {
+          const postResult = await layerManager.postprocess({
+            coordinate: parsed.coordinate,
+            label: parsed.label,
+            step: null,
+            sessionId: sessionManager?.getSnapshot?.().sessionId || "fast",
+            signal: currentAIController?.signal,
+          });
+          if (postResult.confidence > 0.5 && postResult.coordinate) {
+            finalCoordinate = postResult.coordinate;
+          }
+        } catch (postErr) {
+          appLogger.warn("send-message post-layer error (non-fatal)", { error: postErr });
+        }
+      }
+
+      if (finalCoordinate) {
+        showPointer({
+          coordinate: finalCoordinate,
+          label: parsed.label,
+          explanation: parsed.spokenText,
+          shouldPoint: true,
+        });
+      }
+
+      await speakAssistantResponse(parsed.spokenText || fullText, settings, event.sender);
+      recordPerformanceMetric("ipc.send-message", startedAt, {
+        ok: true,
+        meta: {
+          requestId: requestContext.requestId,
+          textLength: text?.length || 0,
+          responseLength: fullText.length,
+          imageCount: images?.length || 0,
+        },
+      });
+    } catch (err) {
+      recordPerformanceMetric("ipc.send-message", startedAt, {
+        ok: false,
+        meta: {
+          requestId: requestContext.requestId,
+          errorName: err?.name || "Error",
+          imageCount: images?.length || 0,
+        },
+      });
+      appLogger.error("ipc:send-message failed", {
+        requestId: requestContext.requestId,
+        error: err,
+      });
+      if (err.name !== "AbortError" && !event.sender.isDestroyed())
+        event.sender.send("ai-error", toUiErrorPayload(err, requestContext));
+      broadcastAgentState("idle");
+    } finally {
+      currentAIController = null;
+    }
+  });
+
+  // ── Abort current AI request ──────────────────────────────────────────────
+  ipcMain.handle("abort-message", () => {
+    debugLog("ipc:abort-message");
+    if (currentAIController) {
+      currentAIController.abort();
+      currentAIController = null;
+    }
+    if (taskOrchestrator && typeof taskOrchestrator.abortActiveExecution === "function") {
+      taskOrchestrator.abortActiveExecution();
+    }
+  });
+
+  // ── TTS ───────────────────────────────────────────────────────────────────
+  ipcMain.on("stop-tts", (event, options) => {
+    debugLog("ipc:stop-tts");
+    if (!event.sender.isDestroyed()) event.sender.send("tts-webspeech-stop", options || {});
+  });
+
+  // ── Cursor ────────────────────────────────────────────────────────────────
+  ipcMain.on("show-cursor-at", (_e, data) => {
+    debugLog("ipc:show-cursor-at", data?.label || "element");
+    if (cursorOverlayWindow && !cursorOverlayWindow.isDestroyed()) {
+      cursorOverlayWindow.show();
+      cursorOverlayWindow.webContents.send("show-cursor-at", data);
+    }
+  });
+  ipcMain.on("hide-cursor", () => {
+    debugLog("ipc:hide-cursor");
+    if (cursorOverlayWindow && !cursorOverlayWindow.isDestroyed())
+      cursorOverlayWindow.hide();
+  });
+
+  // ── AssemblyAI token (direct API key only) ────────────────────────────────
+  ipcMain.handle("get-assemblyai-token", async () => {
+    debugLog("ipc:get-assemblyai-token");
+    const settings = await getRuntimeSettings();
+    if (settings.assemblyaiApiKey) {
+      const resp = await fetch("https://streaming.assemblyai.com/v3/token?expires_in_seconds=480", {
+        headers: { authorization: settings.assemblyaiApiKey },
+      });
+      if (!resp.ok) {
+        const errBody = await resp.text().catch(() => "");
+        throw new Error(`AssemblyAI token request failed (${resp.status}): ${errBody || resp.statusText}`);
+      }
+      const json = await resp.json();
+      return json.token;
+    }
+    throw new Error("No AssemblyAI API key configured. Go to Settings → Voice and add your key.");
+  });
+
+  // ── Ollama model list ─────────────────────────────────────────────────────
+  ipcMain.handle("get-ollama-models", async () => {
+    debugLog("ipc:get-ollama-models");
+    const ollamaUrl = store.get("ollamaUrl") || "http://localhost:11434";
+    return fetchOllamaModels(ollamaUrl);
+  });
+
+  // ── Window controls ───────────────────────────────────────────────────────
+  ipcMain.handle("open-settings",  () => {
+    debugLog("ipc:open-settings");
+    return createSettingsWindow();
+  });
+  ipcMain.handle("open-external-link", async (_event, url) => {
+    const target = String(url || "").trim();
+    if (!/^https?:\/\//i.test(target)) {
+      throw new Error("Invalid URL");
+    }
+    await shell.openExternal(target);
+    return true;
+  });
+
+  ipcMain.handle("pick-workspace-folder", async () => {
+    debugLog("ipc:pick-workspace-folder");
+    const parentWindow = panelWindow && !panelWindow.isDestroyed()
+      ? panelWindow
+      : (settingsWindow && !settingsWindow.isDestroyed() ? settingsWindow : null);
+    const result = await dialog.showOpenDialog(parentWindow, {
+      properties: ["openDirectory"],
+      title: "Select Workspace Folder",
+    });
+    if (result.canceled || !result.filePaths?.[0]) {
+      return { ok: false, canceled: true };
+    }
+    const selectedPath = result.filePaths[0];
+    store.set("workspacePath", selectedPath);
+    return { ok: true, path: selectedPath };
+  });
+
+  ipcMain.handle("open-workspace-handoff", async (_event, options = {}) => {
+    debugLog("ipc:open-workspace-handoff", options);
+    try {
+      const force = Boolean(options?.force);
+      let workspacePath = String(store.get("workspacePath") || "").trim();
+
+      if (!workspacePath) {
+        const parentWindow = panelWindow && !panelWindow.isDestroyed() ? panelWindow : null;
+        const pickResult = await dialog.showOpenDialog(parentWindow, {
+          properties: ["openDirectory"],
+          title: "Select Workspace Folder for Çalışma Kısmı",
+        });
+        if (pickResult.canceled || !pickResult.filePaths?.[0]) {
+          return { ok: false, error: "Workspace folder not selected." };
+        }
+        workspacePath = pickResult.filePaths[0];
+        store.set("workspacePath", workspacePath);
+      }
+
+      if (!fs.existsSync(workspacePath)) {
+        return { ok: false, error: `Workspace path does not exist: ${workspacePath}` };
+      }
+
+      const pending = listPendingHandoffs(workspacePath);
+      if (!force && pending.length > 0) {
+        return {
+          ok: false,
+          needsConfirm: true,
+          pendingCount: pending.length,
+          message: "Önceki görev henüz VS Code tarafında işlenmedi. Yine de devam edilsin mi?",
+        };
+      }
+
+      const snapshot = sessionManager ? sessionManager.getSnapshot() : {};
+      const runtimeSettings = await getRuntimeSettings();
+      const payload = buildHandoffPayload(snapshot, workspacePath, undefined, runtimeSettings);
+      const written = writeHandoff(workspacePath, payload);
+      seedSauronRules(workspacePath);
+      await launchVSCode(workspacePath);
+      try {
+        await syncFinOpsConfigToWorkspace({ ...runtimeSettings, workspacePath });
+      } catch (syncError) {
+        appLogger.warn("finops-config-sync-on-handoff-failed", {
+          error: syncError?.message || syncError,
+        });
+      }
+
+      return {
+        ok: true,
+        workspacePath,
+        handoffPath: written.handoffPath,
+        handoffId: written.handoffId,
+      };
+    } catch (error) {
+      appLogger.error("open-workspace-handoff failed", { error: error?.message || error });
+      return {
+        ok: false,
+        error: error?.message || "Failed to open workspace.",
+      };
+    }
+  });
+  ipcMain.handle("close-settings", () => {
+    debugLog("ipc:close-settings");
+    if (settingsWindow) settingsWindow.close();
+  });
+  ipcMain.handle("minimize-panel", () => {
+    debugLog("ipc:minimize-panel");
+    if (store && panelWindow && !panelWindow.isDestroyed()) {
+      const [x, y] = panelWindow.getPosition();
+      store.set("panelWindowX", x);
+      store.set("panelWindowY", y);
+    }
+    panelWindow.hide();
+  });
+  ipcMain.handle("quit-app",       () => {
+    debugLog("ipc:quit-app");
+    app.quit();
+  });
+
+  // ── Widget ───────────────────────────────────────────────────────────────
+  ipcMain.handle("show-main",      () => {
+    debugLog("ipc:show-main");
+    return showPanel();
+  });
+  ipcMain.handle("hide-widget",    () => {
+    debugLog("ipc:hide-widget");
+    if (widgetWindow) widgetWindow.hide();
+  });
+  ipcMain.handle("set-widget-expanded", (_e, isExpanded) => {
+    const expanded = Boolean(isExpanded);
+    debugLog("ipc:set-widget-expanded", expanded);
+    if (!widgetWindow || widgetWindow.isDestroyed()) {
+      return false;
+    }
+
+    const nextHeight = expanded ? WIDGET_EXPANDED_HEIGHT : WIDGET_COLLAPSED_HEIGHT;
+    resizeWidgetPreservingPosition(nextHeight);
+    return true;
+  });
+  ipcMain.handle("set-widget-height", (_e, requestedHeight) => {
+    const numericHeight = Number(requestedHeight);
+    if (!widgetWindow || widgetWindow.isDestroyed() || !Number.isFinite(numericHeight)) {
+      return false;
+    }
+
+    // Use the display the widget is currently on for accurate height clamping
+    const [wx, wy] = widgetWindow.getPosition();
+    const { workArea: widgetWorkArea } = screen.getDisplayNearestPoint({ x: wx, y: wy });
+    const maxHeight = Math.max(WIDGET_COLLAPSED_HEIGHT, widgetWorkArea.height - 40);
+    const nextHeight = Math.max(
+      WIDGET_COLLAPSED_HEIGHT,
+      Math.min(Math.round(numericHeight), maxHeight),
+    );
+    resizeWidgetPreservingPosition(nextHeight);
+    return true;
+  });
+  ipcMain.handle("cancel-active-plan", (_event, options) => {
+    debugLog("ipc:cancel-active-plan");
+    const result = taskOrchestrator.cancelActivePlan(options || {});
+    return result;
+  });
+  ipcMain.on("widget-loaded",      () => {
+    debugLog("ipc:widget-loaded");
+    if (widgetWindow) widgetWindow.webContents.send("widget-ready");
+  });
+  ipcMain.on("update-widget-state", (_e, state) => {
+    debugLog("ipc:update-widget-state", state);
+    if (state === "listening") {
+      isPushToTalkRecording = true;
+    } else if (state === "idle") {
+      isPushToTalkRecording = false;
+    }
+    if (state === "speaking") {
+      broadcastAgentState("responding");
+    } else if (state === "idle" && !isPushToTalkRecording) {
+      const snapshotStatus = sessionManager?.getSnapshot?.().status || "idle";
+      broadcastAgentState(snapshotStatus);
+    }
+    updateWidgetState(state);
+  });
+
+  // ── Browser Agent ─────────────────────────────────────────────────────────────
+  ipcMain.handle("restart-browser-agent", async () => {
+    debugLog("ipc:restart-browser-agent");
+    try {
+      const plugin = registry.getPlugin("browser");
+      const runtimeSettings = await getRuntimeSettings();
+      await plugin.shutdown();
+      await syncBrowserPluginWithRuntimeSettings(runtimeSettings, { forceRestart: false });
+      return { ok: true };
+    } catch (err) {
+      appLogger.error("restart-browser-agent-failed", { error: err });
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("get-browser-agent-status", () => {
+    try {
+      const status = registry.getStatus("browser");
+      if (status === "ok") {
+        const plugin = registry.getPlugin("browser");
+        return plugin._sidecar?.isRunning ? "running" : "stopped";
+      }
+      return status || "stopped";
+    } catch (_) {
+      return "stopped";
+    }
+  });
+
+  ipcMain.handle("download-browser-agent", async (event) => {
+    debugLog("ipc:download-browser-agent");
+    return new Promise((resolve) => {
+      const { spawn } = require("child_process");
+      const scriptPath = resolveChildProcessAssetPath("scripts", "download-browser-agent.js");
+      const targetDir = getBrowserRuntimeInstallDir();
+      const child = spawn(process.execPath, [scriptPath, "--target", targetDir], {
+        env: {
+          ...process.env,
+          ELECTRON_RUN_AS_NODE: "1",
+          OPENGUIDER_BROWSER_RUNTIME_DIR: targetDir,
+        },
+      });
+
+      child.stdout.on("data", (data) => {
+        const lines = data.toString().split("\n");
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const parsed = JSON.parse(line);
+            event.sender.send("browser-agent-download-progress", parsed);
+          } catch (e) {}
+        }
+      });
+
+      child.on("close", async (code) => {
+        if (code === 0) {
+          try {
+            const runtimeSettings = await getRuntimeSettings();
+            await syncBrowserPluginWithRuntimeSettings(runtimeSettings, { forceRestart: true });
+            resolve({ ok: true, targetDir });
+          } catch (err) {
+            appLogger.error("download-browser-agent-restart-failed", { error: err?.message });
+            resolve({ ok: false, error: err?.message || "Runtime downloaded but restart failed" });
+          }
+          return;
+        }
+
+        resolve({ ok: false, error: `Exit code ${code}` });
+      });
+
+      child.on("error", (err) => resolve({ ok: false, error: err.message }));
+    });
+  });
+}
+
+// ── ElevenLabs TTS (direct API key) ──────────────────────────────────────────
+async function speakWithElevenLabs(text, settings, sender, { shouldAbort } = {}) {
+  const url = `https://api.elevenlabs.io/v1/text-to-speech/${settings.elevenlabsVoiceId}`;
+  const headers = {
+    "Content-Type": "application/json",
+    accept: "audio/mpeg",
+    "xi-api-key": settings.elevenlabsApiKey,
+  };
+
+  const resp = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ text, model_id: "eleven_flash_v2_5" }),
+  });
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`ElevenLabs error ${resp.status}: ${errText}`);
+  }
+
+  const arrayBuffer = await resp.arrayBuffer();
+  if (typeof shouldAbort === "function" && shouldAbort()) {
+    return;
+  }
+  const base64Audio = Buffer.from(arrayBuffer).toString("base64");
+  updateWidgetState("speaking");
+  if (!sender.isDestroyed()) sender.send("tts-start", base64Audio);
+
+  // Wait for renderer to signal tts-done — handled via IPC from renderer
+  await new Promise(resolve => setTimeout(resolve, 500));
+}
+
+// ── App lifecycle ─────────────────────────────────────────────────────────────
+app.whenReady().then(async () => {
+  app.setName("Sauron");
+  initializeLogger({ app, level: process.env.OPENGUIDER_LOG_LEVEL || "info" });
+  appLogger = createLogger("main");
+  registerCrashTracking();
+  debugLog("app:ready start");
+  store = createStore();
+  secureStore = new SecureStore({ safeStorage, serviceName: "OpenGuider" });
+  configureFinOpsContext({
+    getSettings: () => store.store,
+    getWindows: getFinOpsAlertWindows,
+    persistSettings: persistFinOpsSettings,
+  });
+  sessionManager = new SessionManager();
+  const persistedSession = loadSessionSnapshot(store);
+  if (persistedSession) {
+    sessionManager.hydrateSession(persistedSession);
+    appLogger.info("restored-session-from-disk", {
+      messageCount: persistedSession?.messages?.length || 0,
+      hasPlan: Boolean(persistedSession?.activePlan),
+    });
+  }
+  taskOrchestrator = new TaskOrchestrator({
+    captureAllScreens,
+    sessionManager,
+    prePostLayersEnabled: store.get("awareAssistanceEnabled") === true,
+    getApprovalWindow,
+  });
+  browserExecutionTts = createBrowserExecutionTtsController({
+    getSettings: getRuntimeSettings,
+    speak: speakAssistantResponse,
+    getSender: () => resolvePreferredTtsTargetSender(null),
+    logger: (message, data) => appLogger.warn(message, data),
+  });
+  createTray();
+  createPanelWindow();
+  createCursorOverlay();
+  createWidgetWindow();
+
+  // ── Register & initialize plugins [NEW] ───────────────────────────
+  try {
+    registry.register(new BrowserPlugin());
+    const runtimeSettings = await getRuntimeSettings();
+    const browserEnabled = store.get('browserAgentEnabled') !== false;
+    if (browserEnabled) {
+      registry.initializeAll(buildBrowserPluginConfig(runtimeSettings)).then(() => {
+        const status = registry.getStatus('browser') === 'ok' ? 'running' : 'stopped';
+        emitBrowserAgentStatus(status);
+      }).catch((err) => {
+        appLogger.error('plugin-init-failed', { error: err?.message });
+        emitBrowserAgentStatus(`crashed: ${err?.message}`);
+      });
+    } else {
+      emitBrowserAgentStatus("stopped");
+    }
+  } catch (err) {
+    appLogger.error('plugin-registration-failed', { error: err?.message });
+  }
+  sessionManager.on("updated", (snapshot) => {
+    saveSessionSnapshot(store, snapshot);
+    if (Array.isArray(snapshot?.lastScreenshots) && snapshot.lastScreenshots.length > 0) {
+      updatePointerCalibration(snapshot.lastScreenshots);
+    }
+    if (!snapshot?.browserExecution || TERMINAL_BROWSER_EXECUTION_STATUSES.has(snapshot.browserExecution.status)) {
+      browserExecutionTts?.invalidate();
+    }
+    broadcastSessionSnapshot(snapshot);
+  });
+  sessionManager.on("browser-execution-substep-progress", (progress) => {
+    broadcastBrowserExecutionSubstepProgress(progress);
+    void browserExecutionTts?.handleSubstepProgress(progress);
+  });
+  broadcastSessionSnapshot(sessionManager.getSnapshot());
+  setupIPC();
+  registerHotkeys();
+  app.on("activate", () => {
+    debugLog("app:activate");
+    showPanel();
+    if (widgetWindow) widgetWindow.show();
+  });
+  debugLog("app:ready complete");
+});
+
+app.on("second-instance", () => {
+  if (panelWindow && !panelWindow.isDestroyed()) {
+    showPanel();
+    return;
+  }
+  app.whenReady().then(() => {
+    if (panelWindow && !panelWindow.isDestroyed()) {
+      showPanel();
+    }
+  });
+});
+
+// ── Graceful shutdown with plugin cleanup [NEW] ──────────────────────
+app.on("before-quit", (e) => {
+  // Prevent quit, run async cleanup, then re-quit
+  if (app._pluginsShutdown) return; // second time through — really quit
+  e.preventDefault();
+  app._pluginsShutdown = true;
+
+  const shutdownTimeout = setTimeout(() => {
+    appLogger.warn('plugin-shutdown-forced');
+    app.quit();
+  }, 5000);
+
+  registry.shutdownAll()
+    .catch((err) => appLogger.error('shutdown-error', { error: err?.message }))
+    .finally(() => {
+      clearTimeout(shutdownTimeout);
+      app.quit();
+    });
+});
+
+app.on("will-quit", () => {
+  debugLog("app:will-quit");
+  globalShortcut.unregisterAll();
+});
+app.on("window-all-closed", (e) => e.preventDefault()); // keep running in tray

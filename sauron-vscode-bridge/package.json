@@ -1,0 +1,30 @@
+{
+  "name": "sauron-vscode-bridge",
+  "displayName": "Sauron VS Code Bridge",
+  "description": "Loads Sauron Core handoff files into Cline without patching Cline core logic.",
+  "version": "0.1.0",
+  "publisher": "sauron-local",
+  "engines": {
+    "vscode": "^1.84.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "workspaceContains:.sauron",
+    "onStartupFinished"
+  ],
+  "extensionDependencies": [
+    "saoudrizwan.claude-dev"
+  ],
+  "main": "./dist/extension.js",
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "node --import tsx --test src/test/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.84.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.4.0"
+  }
+}
