@@ -48,6 +48,13 @@ async function init() {
   const deepseekBaseUrlEl = document.getElementById("deepseekBaseUrl");
   if (deepseekModelEl) deepseekModelEl.value = settings.deepseekModelCustom || "deepseek-chat";
   if (deepseekBaseUrlEl) deepseekBaseUrlEl.value = settings.deepseekBaseUrl || "https://api.deepseek.com";
+  const systemPromptEl = document.getElementById("systemPromptOverride");
+  const userMemoryEl = document.getElementById("userMemoryFacts");
+  if (systemPromptEl) systemPromptEl.value = settings.systemPromptOverride || "";
+  if (userMemoryEl) {
+    const facts = Array.isArray(settings.userMemoryFacts) ? settings.userMemoryFacts : [];
+    userMemoryEl.value = facts.join("\n");
+  }
   document.getElementById("groqApiKey").value        = settings.groqApiKey            || "";
   document.getElementById("groqModel").value         = settings.groqModelCustom       || "";
   document.getElementById("groqBaseUrl").value       = settings.groqBaseUrl           || "https://api.groq.com/openai/v1";
@@ -70,6 +77,10 @@ async function init() {
   document.getElementById("skipCurrentStepShortcut").value = settings.skipCurrentStepShortcut || "Ctrl+Alt+6";
   document.getElementById("regenerateCurrentStepShortcut").value = settings.regenerateCurrentStepShortcut || "Ctrl+Alt+7";
   document.getElementById("workspacePath").value = settings.workspacePath || "";
+  const chatBackupEnabledEl = document.getElementById("chatBackupEnabled");
+  const chatBackupPathEl = document.getElementById("chatBackupPath");
+  if (chatBackupEnabledEl) chatBackupEnabledEl.checked = settings.chatBackupEnabled === true;
+  if (chatBackupPathEl) chatBackupPathEl.value = settings.chatBackupPath || "";
 
   initFinOpsSettings();
 
@@ -158,6 +169,33 @@ async function init() {
     if (result?.ok && result.path) {
       document.getElementById("workspacePath").value = result.path;
       showToast("Workspace folder selected");
+    }
+  });
+
+  document.getElementById("btn-browse-backup")?.addEventListener("click", async () => {
+    const result = await window.openguider.invoke("pick-chat-backup-folder");
+    if (result?.ok && result.path) {
+      document.getElementById("chatBackupPath").value = result.path;
+      showToast("Yedek klasörü seçildi");
+    }
+  });
+
+  document.getElementById("btn-backup-now")?.addEventListener("click", async () => {
+    const pathValue = document.getElementById("chatBackupPath")?.value.trim();
+    const result = await window.openguider.invoke("backup-chat-sessions", { folderPath: pathValue || undefined });
+    if (result?.ok) {
+      showToast(`Yedek oluşturuldu: ${result.path}`);
+    } else if (!result?.canceled) {
+      showToast(result?.error || "Yedekleme başarısız", true);
+    }
+  });
+
+  document.getElementById("btn-import-backup")?.addEventListener("click", async () => {
+    const result = await window.openguider.invoke("import-chat-sessions", { mode: "merge" });
+    if (result?.ok) {
+      showToast(`İçe aktarıldı (${result.importedCount || 0} sohbet)`);
+    } else if (!result?.canceled) {
+      showToast(result?.error || "İçe aktarma başarısız", true);
     }
   });
 
@@ -775,6 +813,13 @@ async function saveSettings() {
     finopsHandoffMaxChars: Number(document.getElementById("finopsHandoffMaxChars")?.value) || 4000,
     finopsHandoffIncludeTranscript: document.getElementById("finopsHandoffIncludeTranscript")?.checked === true,
     finopsDailyBudgetTl: Number(document.getElementById("finopsDailyBudgetTl")?.value) || 0,
+    systemPromptOverride: document.getElementById("systemPromptOverride")?.value.trim() || "",
+    userMemoryFacts: String(document.getElementById("userMemoryFacts")?.value || "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean),
+    chatBackupEnabled: document.getElementById("chatBackupEnabled")?.checked === true,
+    chatBackupPath: document.getElementById("chatBackupPath")?.value.trim() || "",
   };
 
   try {

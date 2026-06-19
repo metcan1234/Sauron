@@ -110,7 +110,11 @@ export function createMessagingController({
       ? overrideText
       : dom.textInput.value.trim();
 
-    if (!rawText || state.isStreaming()) {
+    const attachmentPayload = buildAttachmentPayload(state.getPendingAttachments());
+    const attachmentSuffix = attachmentPayload.textSuffix;
+    const text = [rawText, attachmentSuffix].filter(Boolean).join("\n\n").trim();
+
+    if (!text || state.isStreaming()) {
       return;
     }
 
@@ -118,6 +122,9 @@ export function createMessagingController({
     const regenerate = Boolean(options.regenerate);
 
     let images = state.getPendingScreenshots();
+    if (attachmentPayload.images.length > 0) {
+      images = [...(images || []), ...attachmentPayload.images];
+    }
     if (state.getIncludeScreen() && !images) {
       try {
         log("ipc:capture-screenshot invoke auto");
@@ -128,6 +135,8 @@ export function createMessagingController({
     }
 
     state.setPendingScreenshots(null);
+    state.clearPendingAttachments();
+    ui.renderAttachmentPreviewStrip([], null);
     ui.hideErrorBanner();
     dom.textInput.value = "";
     dom.textInput.style.height = "auto";
@@ -160,8 +169,8 @@ export function createMessagingController({
 
     try {
       if (!skipUserPersist) {
-        ui.appendUserMessage(rawText);
-        state.addConversationMessage({ role: "user", content: rawText });
+        ui.appendUserMessage(text);
+        state.addConversationMessage({ role: "user", content: text });
       }
       typingId = ui.showTypingIndicator();
 
@@ -170,7 +179,7 @@ export function createMessagingController({
         : state.getConversationHistory().slice(-MAX_AI_CONTEXT_MESSAGES);
 
       await api.invoke("send-message", {
-        text: rawText,
+        text,
         images: images || [],
         history: historyForRequest,
         fastMode: true,
@@ -237,6 +246,102 @@ export function createMessagingController({
     }
 
     await sendMessage(lastUser.content, { skipUserPersist: true, regenerate: true });
+  }
+
+  function buildAttachmentPayload(attachments) {
+    const images = [];
+    const textParts = [];
+    for (const attachment of attachments || []) {
+      if (attachment?.type === "image" && attachment.base64Jpeg) {
+        images.push({ base64Jpeg: attachment.base64Jpeg });
+      } else if (attachment?.type === "text" && attachment.content) {
+        textParts.push(`[${attachment.name || "dosya"}]\n${attachment.content}`);
+      }
+    }
+    return {
+      images,
+      textSuffix: textParts.join("\n\n"),
+    };
+  }
+
+  async function editMessage(index) {
+    if (state.isStreaming()) {
+      return;
+    }
+    const history = state.getConversationHistory().slice();
+    const message = history[index];
+    if (!message?.content) {
+      return;
+    }
+
+    const newContent = await ui.promptDialog({
+      title: "Mesajı düzenle",
+      message: "Yeni mesaj metnini girin:",
+      defaultValue: message.content,
+      confirmLabel: "Kaydet",
+      cancelLabel: "İptal",
+    });
+    if (newContent === null) {
+      return;
+    }
+    const trimmed = String(newContent).trim();
+    if (!trimmed) {
+      ui.showToast("Mesaj boş olamaz", true);
+      return;
+    }
+
+    const hadFollowingMessages = index < history.length - 1;
+    try {
+      const result = await api.invoke("edit-chat-message", { index, content: trimmed });
+      if (!result?.ok) {
+        ui.showToast(result?.error || "Mesaj güncellenemedi", true);
+        return;
+      }
+      state.setSessionSnapshot(result.snapshot);
+      ui.renderConversation(result.snapshot.messages || []);
+
+      if (message.role === "user" && (hadFollowingMessages || result.snapshot.messages.length - 1 === index)) {
+        await sendMessage(trimmed, { skipUserPersist: true, regenerate: false });
+      }
+    } catch (error) {
+      log("edit-chat-message error", error);
+      ui.showToast("Mesaj güncellenemedi", true);
+    }
+  }
+
+  async function deleteMessage(index) {
+    if (state.isStreaming()) {
+      return;
+    }
+    const history = state.getConversationHistory();
+    const message = history[index];
+    if (!message) {
+      return;
+    }
+
+    const shouldDelete = await ui.confirmDialog({
+      title: "Mesaj silinsin mi?",
+      message: "Bu mesaj kalıcı olarak silinecek.",
+      confirmLabel: "Sil",
+      cancelLabel: "İptal",
+      confirmDanger: true,
+    });
+    if (!shouldDelete) {
+      return;
+    }
+
+    try {
+      const result = await api.invoke("delete-chat-message", { index });
+      if (!result?.ok) {
+        ui.showToast(result?.error || "Mesaj silinemedi", true);
+        return;
+      }
+      state.setSessionSnapshot(result.snapshot);
+      ui.renderConversation(result.snapshot.messages || []);
+    } catch (error) {
+      log("delete-chat-message error", error);
+      ui.showToast("Mesaj silinemedi", true);
+    }
   }
 
   function appendStreamChunk(chunk) {
@@ -340,6 +445,8 @@ export function createMessagingController({
     onAIDone,
     onAIError,
     cancelMessage,
+    deleteMessage,
+    editMessage,
     regenerateLastResponse,
     sendMessage,
   };

@@ -1,3 +1,5 @@
+import { t } from "../i18n/index.js";
+
 const PROVIDER_COLORS = {
   groq: "#f97316",
   claude: "#f59e0b",
@@ -69,6 +71,7 @@ export function queryPanelDom(doc = document) {
     chatDrawerClose: doc.getElementById("chat-drawer-close"),
     chatDrawerSearch: doc.getElementById("chat-drawer-search"),
     chatDrawerNew: doc.getElementById("chat-drawer-new"),
+    chatDrawerCreateFolder: doc.getElementById("chat-drawer-create-folder"),
     chatDrawerEphemeral: doc.getElementById("chat-drawer-ephemeral"),
     chatDrawerList: doc.getElementById("chat-drawer-list"),
     chatDrawerExportActive: doc.getElementById("chat-drawer-export-active"),
@@ -87,6 +90,13 @@ export function queryPanelDom(doc = document) {
     promptConfirm: doc.getElementById("prompt-confirm"),
     finopsBadge: doc.getElementById("finops-badge"),
     toast: doc.getElementById("toast"),
+    attachmentPreviewStrip: doc.getElementById("attachment-preview-strip"),
+    artifactPanel: doc.getElementById("artifact-panel"),
+    artifactPanelTitle: doc.getElementById("artifact-panel-title"),
+    artifactPanelContent: doc.getElementById("artifact-panel-content"),
+    artifactPanelClose: doc.getElementById("artifact-panel-close"),
+    artifactPanelCopy: doc.getElementById("artifact-panel-copy"),
+    artifactPanelDownload: doc.getElementById("artifact-panel-download"),
   };
 }
 
@@ -169,6 +179,54 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     return button;
   }
 
+  function makeEditButton(messageIndex, role) {
+    const button = doc.createElement("button");
+    button.type = "button";
+    button.className = "message-action-btn edit-msg-btn";
+    button.title = "Düzenle";
+    button.setAttribute("aria-label", "Mesajı düzenle");
+    button.textContent = "✏️";
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      doc.dispatchEvent(new CustomEvent("openguide:edit-message", {
+        detail: { index: messageIndex, role },
+      }));
+    });
+    return button;
+  }
+
+  function makeDeleteButton(messageIndex) {
+    const button = doc.createElement("button");
+    button.type = "button";
+    button.className = "message-action-btn delete-msg-btn";
+    button.title = "Sil";
+    button.setAttribute("aria-label", "Mesajı sil");
+    button.textContent = "🗑";
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      doc.dispatchEvent(new CustomEvent("openguide:delete-message", {
+        detail: { index: messageIndex },
+      }));
+    });
+    return button;
+  }
+
+  function makeOpenArtifactButton(code, language) {
+    const button = doc.createElement("button");
+    button.type = "button";
+    button.className = "artifact-open-btn";
+    button.title = "Panelde aç";
+    button.textContent = "⧉ Panel";
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openArtifactPanel(code, language);
+    });
+    return button;
+  }
+
   function splitThinkingText(text, collapseThinking = false) {
     const source = String(text || "");
     const thoughtParts = [];
@@ -201,7 +259,7 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     };
   }
 
-  function buildAssistantMeta(messageElement) {
+  function buildAssistantMeta(messageElement, messageIndex) {
     const meta = doc.createElement("span");
     meta.className = "msg-meta";
 
@@ -219,6 +277,10 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
 
     const actions = doc.createElement("span");
     actions.className = "assistant-meta-actions";
+    if (Number.isFinite(messageIndex)) {
+      actions.appendChild(makeEditButton(messageIndex, "assistant"));
+      actions.appendChild(makeDeleteButton(messageIndex));
+    }
     actions.appendChild(makeRegenerateButton());
     actions.appendChild(makeCopyButton(messageElement));
 
@@ -333,9 +395,12 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     dom.providerDot.title = provider;
   }
 
-  function appendUserMessage(text, images) {
+  function appendUserMessage(text, images, messageIndex) {
     const messageElement = doc.createElement("div");
     messageElement.className = "message user";
+    if (Number.isFinite(messageIndex)) {
+      messageElement.dataset.messageIndex = String(messageIndex);
+    }
 
     const bubble = doc.createElement("div");
     bubble.className = "bubble";
@@ -353,10 +418,20 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
 
     const meta = doc.createElement("span");
     meta.className = "msg-meta";
-    meta.textContent = new Date().toLocaleTimeString([], {
+    const time = doc.createElement("span");
+    time.textContent = new Date().toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
     });
+    meta.appendChild(time);
+
+    if (Number.isFinite(messageIndex)) {
+      const actions = doc.createElement("span");
+      actions.className = "user-meta-actions";
+      actions.appendChild(makeEditButton(messageIndex, "user"));
+      actions.appendChild(makeDeleteButton(messageIndex));
+      meta.appendChild(actions);
+    }
 
     messageElement.appendChild(bubble);
     messageElement.appendChild(meta);
@@ -365,10 +440,13 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     scrollToBottom();
   }
 
-  function appendAssistantMessage(text) {
+  function appendAssistantMessage(text, messageIndex) {
     const collapseThinking = false;
     const messageElement = doc.createElement("div");
     messageElement.className = "message assistant";
+    if (Number.isFinite(messageIndex)) {
+      messageElement.dataset.messageIndex = String(messageIndex);
+    }
 
     const bubble = doc.createElement("div");
     bubble.className = "bubble";
@@ -380,7 +458,7 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     });
 
     messageElement.appendChild(bubble);
-    messageElement.appendChild(buildAssistantMeta(messageElement));
+    messageElement.appendChild(buildAssistantMeta(messageElement, messageIndex));
     dom.chatMessages.appendChild(messageElement);
     updateChatBackgroundState(dom.chatMessages.childElementCount);
     scrollToBottom();
@@ -499,11 +577,11 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
       return;
     }
 
-    messages.forEach((message) => {
+    messages.forEach((message, index) => {
       if (message.role === "user") {
-        appendUserMessage(message.content);
+        appendUserMessage(message.content, message.images, index);
       } else {
-        appendAssistantMessage(message.content);
+        appendAssistantMessage(message.content, index);
       }
     });
     updateChatBackgroundState(dom.chatMessages.childElementCount);
@@ -550,6 +628,7 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     return [
       '<div class="code-block">',
       `<div class="code-block-header"><span class="code-lang">${escapeHtml(lang)}</span>`,
+      `<button type="button" class="code-artifact-btn" data-code="${encoded}" data-lang="${escapeHtml(lang)}" title="Panelde aç" aria-label="Panelde aç">⧉ Panel</button>`,
       `<button type="button" class="code-copy-btn" data-code="${encoded}" title="Kopyala" aria-label="Kodu kopyala">⧉</button></div>`,
       `<pre><code class="language-${escapeHtml(lang)}">${highlighted}</code></pre>`,
       "</div>",
@@ -767,10 +846,10 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
 
   function confirmClearConversation() {
     return confirmDialog({
-      title: "Sohbet temizlensin mi?",
-      message: "Tüm sohbet geçmişi ve aktif plan ilerlemesi silinecek.",
-      confirmLabel: "Temizle",
-      cancelLabel: "İptal",
+      title: t("confirmClearTitle"),
+      message: t("confirmClearMessage"),
+      confirmLabel: t("confirmClear"),
+      cancelLabel: t("cancel"),
       confirmDanger: true,
     });
   }
@@ -837,20 +916,122 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
       return;
     }
     const budget = Number(summary?.budgetTl) || 0;
-    const spent = Number(summary?.totalSpentTl) || 0;
+    const totalSpent = Number(summary?.totalSpentTl) || 0;
+    const sessionSpent = Number(summary?.sessionSpentTl) || 0;
+    const hasSessionCost = sessionSpent > 0;
+
     if (budget <= 0) {
-      dom.finopsBadge.textContent = spent > 0 ? `${spent.toFixed(2)} ₺` : "";
-      dom.finopsBadge.classList.toggle("hidden", spent <= 0);
-      dom.finopsBadge.title = "Oturum maliyeti (bütçe ayarlanmadı)";
+      if (!hasSessionCost && totalSpent <= 0) {
+        dom.finopsBadge.classList.add("hidden");
+        dom.finopsBadge.textContent = "";
+        return;
+      }
+      dom.finopsBadge.classList.remove("hidden");
+      dom.finopsBadge.textContent = hasSessionCost
+        ? `${sessionSpent.toFixed(2)} / ${totalSpent.toFixed(2)} ₺`
+        : `${totalSpent.toFixed(2)} ₺`;
+      dom.finopsBadge.title = t("finopsSessionNoBudget", {
+        session: sessionSpent.toFixed(2),
+        total: totalSpent.toFixed(2),
+      });
       return;
     }
+
     const remainingPct = Number(summary?.remainingPct);
-    const pctLabel = Number.isFinite(remainingPct) ? `%${Math.round(remainingPct)}` : "";
-    dom.finopsBadge.textContent = `${spent.toFixed(2)} ₺ · ${pctLabel}`;
+    const pctLabel = Number.isFinite(remainingPct) ? Math.round(remainingPct) : 0;
+    dom.finopsBadge.textContent = hasSessionCost
+      ? `${sessionSpent.toFixed(2)} · ${totalSpent.toFixed(2)} ₺`
+      : `${totalSpent.toFixed(2)} ₺ · %${pctLabel}`;
     dom.finopsBadge.classList.remove("hidden");
-    dom.finopsBadge.title = `Harcanan: ${spent.toFixed(2)} ₺ / Bütçe: ${budget.toFixed(2)} ₺`;
+    dom.finopsBadge.title = t("finopsSessionBudget", {
+      session: sessionSpent.toFixed(2),
+      total: totalSpent.toFixed(2),
+      pct: pctLabel,
+    });
     dom.finopsBadge.classList.toggle("is-warning", remainingPct <= 20);
     dom.finopsBadge.classList.toggle("is-danger", remainingPct <= 5);
+  }
+
+  function renderAttachmentPreviewStrip(attachments, onRemove) {
+    if (!dom.attachmentPreviewStrip) {
+      return;
+    }
+    dom.attachmentPreviewStrip.innerHTML = "";
+    if (!Array.isArray(attachments) || attachments.length === 0) {
+      dom.attachmentPreviewStrip.classList.add("hidden");
+      return;
+    }
+    dom.attachmentPreviewStrip.classList.remove("hidden");
+
+    for (let index = 0; index < attachments.length; index += 1) {
+      const attachment = attachments[index];
+      const chip = doc.createElement("div");
+      chip.className = "attachment-chip";
+
+      if (attachment.type === "image" && attachment.base64Jpeg) {
+        const thumb = doc.createElement("img");
+        thumb.className = "attachment-chip-thumb";
+        thumb.src = `data:image/jpeg;base64,${attachment.base64Jpeg}`;
+        thumb.alt = attachment.name || "ek";
+        chip.appendChild(thumb);
+      } else {
+        const icon = doc.createElement("span");
+        icon.className = "attachment-chip-icon";
+        icon.textContent = "📎";
+        chip.appendChild(icon);
+      }
+
+      const label = doc.createElement("span");
+      label.className = "attachment-chip-name";
+      label.textContent = attachment.name || "dosya";
+      chip.appendChild(label);
+
+      const removeBtn = doc.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "attachment-chip-remove";
+      removeBtn.title = "Kaldır";
+      removeBtn.textContent = "✕";
+      removeBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof onRemove === "function") {
+          onRemove(index);
+        }
+      });
+      chip.appendChild(removeBtn);
+      dom.attachmentPreviewStrip.appendChild(chip);
+    }
+  }
+
+  let activeArtifact = null;
+
+  function openArtifactPanel(code, language = "text") {
+    if (!dom.artifactPanel || !dom.artifactPanelContent) {
+      return;
+    }
+    activeArtifact = {
+      code: String(code || ""),
+      language: String(language || "text"),
+    };
+    if (dom.artifactPanelTitle) {
+      dom.artifactPanelTitle.textContent = `Artifact · ${activeArtifact.language}`;
+    }
+    dom.artifactPanelContent.value = activeArtifact.code;
+    dom.artifactPanel.classList.remove("hidden");
+    dom.artifactPanel.setAttribute("aria-hidden", "false");
+  }
+
+  function closeArtifactPanel() {
+    if (!dom.artifactPanel) {
+      return;
+    }
+    activeArtifact = null;
+    dom.artifactPanel.classList.add("hidden");
+    dom.artifactPanel.setAttribute("aria-hidden", "true");
+  }
+
+  function getActiveArtifact() {
+    return activeArtifact;
   }
 
   async function refreshFinOpsBadge() {
@@ -883,6 +1064,16 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
   }
 
   dom.chatMessages.addEventListener("click", (event) => {
+    const artifactButton = event.target.closest(".code-artifact-btn");
+    if (artifactButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      const encoded = artifactButton.getAttribute("data-code") || "";
+      const lang = artifactButton.getAttribute("data-lang") || "text";
+      openArtifactPanel(decodeURIComponent(encoded), lang);
+      return;
+    }
+
     const copyButton = event.target.closest(".code-copy-btn");
     if (copyButton) {
       event.preventDefault();
@@ -913,6 +1104,41 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     });
   });
 
+  if (dom.artifactPanelClose) {
+    dom.artifactPanelClose.addEventListener("click", closeArtifactPanel);
+  }
+  if (dom.artifactPanelCopy) {
+    dom.artifactPanelCopy.addEventListener("click", async () => {
+      const text = dom.artifactPanelContent?.value || activeArtifact?.code || "";
+      if (!text) {
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast("Kopyalandı");
+      } catch (error) {
+        showToast("Kopyalama başarısız", true);
+      }
+    });
+  }
+  if (dom.artifactPanelDownload) {
+    dom.artifactPanelDownload.addEventListener("click", () => {
+      const text = dom.artifactPanelContent?.value || activeArtifact?.code || "";
+      if (!text) {
+        return;
+      }
+      const lang = activeArtifact?.language || "txt";
+      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const anchor = doc.createElement("a");
+      anchor.href = url;
+      anchor.download = `artifact.${lang === "text" ? "txt" : lang}`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      showToast("İndirildi");
+    });
+  }
+
   startBackgroundBlinkLoop();
   updateChatBackgroundState(0);
 
@@ -938,9 +1164,14 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     hideWorkspaceStatus,
     showOnboarding,
     hideOnboarding,
+    closeArtifactPanel,
     confirmClearConversation,
+    confirmDialog,
+    getActiveArtifact,
+    openArtifactPanel,
     promptDialog,
     refreshFinOpsBadge,
+    renderAttachmentPreviewStrip,
     renderFinOpsBadge,
     confirmDialog,
     showTypingIndicator,

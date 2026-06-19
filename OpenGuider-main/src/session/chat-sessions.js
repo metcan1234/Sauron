@@ -24,6 +24,9 @@ function resolveRuntimeChatState(store) {
   } else if (loaded && runtimeChatState.lastPersistedActiveId === undefined) {
     runtimeChatState.lastPersistedActiveId = null;
   }
+  if (!Array.isArray(runtimeChatState.folders)) {
+    runtimeChatState.folders = [];
+  }
   return runtimeChatState;
 }
 
@@ -33,6 +36,7 @@ function createDefaultState() {
   return {
     activeSessionId: id,
     order: [id],
+    folders: [],
     sessions: {
       [id]: {
         id,
@@ -40,6 +44,7 @@ function createDefaultState() {
         createdAt: now,
         updatedAt: now,
         pinned: false,
+        folderId: null,
         snapshot: createChatSnapshot(createEmptySession()),
       },
     },
@@ -153,6 +158,7 @@ function saveChatSessionsState(store, state) {
     activeSessionId,
     order: persistableOrder,
     sessions: persistableSessions,
+    folders: Array.isArray(state.folders) ? state.folders : [],
     lastPersistedActiveId: state.lastPersistedActiveId || null,
   });
 }
@@ -197,6 +203,7 @@ function listChatSessionSummaries(store, options = {}) {
       updatedAt: session.updatedAt,
       pinned: Boolean(session.pinned),
       ephemeral: Boolean(session.ephemeral),
+      folderId: session.folderId || null,
       messageCount: Array.isArray(session.snapshot?.messages) ? session.snapshot.messages.length : 0,
       preview: deriveSessionPreview(session.snapshot?.messages),
       isActive: session.id === state.activeSessionId,
@@ -226,6 +233,7 @@ function persistActiveSession(store, sessionSnapshot) {
     updatedAt: now,
     pinned: Boolean(existing?.pinned),
     ephemeral: Boolean(existing?.ephemeral),
+    folderId: existing?.folderId || null,
     snapshot: createChatSnapshot(sessionSnapshot),
   };
 
@@ -258,6 +266,7 @@ function createNewChatSession(store, sessionManager) {
     createdAt: now,
     updatedAt: now,
     pinned: false,
+    folderId: null,
     snapshot: emptySnapshot,
   };
   state.activeSessionId = id;
@@ -498,12 +507,168 @@ function migrateLegacySessionSnapshot(store, sessionManager, legacySnapshot) {
   return state;
 }
 
+function listChatFolders(store) {
+  const state = ensureChatSessionsState(store);
+  return Array.isArray(state.folders) ? state.folders.slice() : [];
+}
+
+function createChatFolder(store, name) {
+  const state = ensureChatSessionsState(store);
+  const title = String(name || "").trim();
+  if (!title) {
+    return { ok: false, error: "Klasör adı boş olamaz." };
+  }
+  const folder = {
+    id: randomUUID(),
+    name: title.slice(0, 60),
+    createdAt: new Date().toISOString(),
+  };
+  state.folders = [...(state.folders || []), folder];
+  saveChatSessionsState(store, state);
+  return { ok: true, folder, folders: listChatFolders(store) };
+}
+
+function renameChatFolder(store, folderId, name) {
+  const state = ensureChatSessionsState(store);
+  const targetId = String(folderId || "").trim();
+  const folder = (state.folders || []).find((entry) => entry.id === targetId);
+  if (!folder) {
+    return { ok: false, error: "Klasör bulunamadı." };
+  }
+  const title = String(name || "").trim();
+  if (!title) {
+    return { ok: false, error: "Klasör adı boş olamaz." };
+  }
+  folder.name = title.slice(0, 60);
+  saveChatSessionsState(store, state);
+  return { ok: true, folder, folders: listChatFolders(store) };
+}
+
+function deleteChatFolder(store, folderId) {
+  const state = ensureChatSessionsState(store);
+  const targetId = String(folderId || "").trim();
+  state.folders = (state.folders || []).filter((entry) => entry.id !== targetId);
+  for (const session of Object.values(state.sessions)) {
+    if (session?.folderId === targetId) {
+      session.folderId = null;
+    }
+  }
+  saveChatSessionsState(store, state);
+  return {
+    ok: true,
+    folders: listChatFolders(store),
+    sessions: listChatSessionSummaries(store),
+  };
+}
+
+function moveChatSession(store, sessionId, folderId) {
+  const state = ensureChatSessionsState(store);
+  const targetId = String(sessionId || "").trim();
+  const session = state.sessions[targetId];
+  if (!session) {
+    return { ok: false, error: "Sohbet bulunamadı." };
+  }
+  const nextFolderId = String(folderId || "").trim() || null;
+  if (nextFolderId && !(state.folders || []).some((entry) => entry.id === nextFolderId)) {
+    return { ok: false, error: "Klasör bulunamadı." };
+  }
+  session.folderId = nextFolderId;
+  session.updatedAt = new Date().toISOString();
+  saveChatSessionsState(store, state);
+  return {
+    ok: true,
+    sessionId: targetId,
+    folderId: nextFolderId,
+    sessions: listChatSessionSummaries(store),
+    folders: listChatFolders(store),
+  };
+}
+
+function exportAllSessionsJson(store) {
+  const state = ensureChatSessionsState(store);
+  const persistableOrder = state.order.filter((sessionId) => !state.sessions[sessionId]?.ephemeral);
+  const persistableSessions = {};
+  for (const sessionId of persistableOrder) {
+    if (state.sessions[sessionId]) {
+      persistableSessions[sessionId] = state.sessions[sessionId];
+    }
+  }
+  return {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    activeSessionId: state.activeSessionId,
+    order: persistableOrder,
+    folders: Array.isArray(state.folders) ? state.folders.slice() : [],
+    sessions: persistableSessions,
+  };
+}
+
+function importChatSessionsFromJson(store, payload, { mode = "merge" } = {}) {
+  if (!payload || typeof payload !== "object" || !payload.sessions) {
+    return { ok: false, error: "Geçersiz yedek dosyası." };
+  }
+
+  const incomingSessions = payload.sessions;
+  const incomingFolders = Array.isArray(payload.folders) ? payload.folders : [];
+  const state = ensureChatSessionsState(store);
+
+  if (mode === "replace") {
+    state.sessions = { ...incomingSessions };
+    state.order = Array.isArray(payload.order)
+      ? payload.order.filter((id) => state.sessions[id])
+      : Object.keys(state.sessions);
+    state.folders = incomingFolders.slice();
+    state.activeSessionId = payload.activeSessionId && state.sessions[payload.activeSessionId]
+      ? payload.activeSessionId
+      : state.order[0];
+    saveChatSessionsState(store, state);
+    return {
+      ok: true,
+      importedCount: Object.keys(incomingSessions).length,
+      activeSessionId: state.activeSessionId,
+      sessions: listChatSessionSummaries(store),
+      folders: listChatFolders(store),
+    };
+  }
+
+  const folderIds = new Set((state.folders || []).map((entry) => entry.id));
+  for (const folder of incomingFolders) {
+    if (folder?.id && !folderIds.has(folder.id)) {
+      state.folders = [...(state.folders || []), folder];
+      folderIds.add(folder.id);
+    }
+  }
+
+  let importedCount = 0;
+  for (const [sessionId, session] of Object.entries(incomingSessions)) {
+    if (!session || typeof session !== "object") {
+      continue;
+    }
+    if (!state.sessions[sessionId]) {
+      state.order.push(sessionId);
+      importedCount += 1;
+    }
+    state.sessions[sessionId] = session;
+  }
+
+  saveChatSessionsState(store, state);
+  return {
+    ok: true,
+    importedCount,
+    activeSessionId: state.activeSessionId,
+    sessions: listChatSessionSummaries(store),
+    folders: listChatFolders(store),
+  };
+}
+
 module.exports = {
   CHAT_SESSIONS_STORE_KEY,
   MAX_AI_CONTEXT_MESSAGES,
   MAX_STORED_MESSAGES,
   createEphemeralChatSession,
+  createChatFolder,
   createNewChatSession,
+  deleteChatFolder,
   deleteChatSession,
   duplicateChatSession,
   deriveSessionPreview,
@@ -512,11 +677,16 @@ module.exports = {
   formatChatExportMarkdown,
   getActiveChatSessionTitle,
   getChatSessionById,
+  exportAllSessionsJson,
+  importChatSessionsFromJson,
   listChatSessionSummaries,
+  listChatFolders,
   loadChatSession,
   loadChatSessionsState,
   migrateLegacySessionSnapshot,
+  moveChatSession,
   persistActiveSession,
+  renameChatFolder,
   renameChatSession,
   resetRuntimeChatStateForTests,
   sanitizeExportFilename,

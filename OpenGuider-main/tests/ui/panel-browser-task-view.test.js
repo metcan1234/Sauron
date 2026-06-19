@@ -130,7 +130,7 @@ test("panel controller hides guide actions during browser execution and restores
       status: "waiting_user",
     });
 
-    assert.equal(panelActions.classList.contains("hidden"), true);
+    assert.equal(panelActions.classList.contains("hidden"), false);
     assert.equal(browserTaskView.classList.contains("hidden"), true);
     assert.equal(panelRoot.classList.contains("browser-task-active"), false);
     assert.equal(modeBar.getAttribute("aria-hidden"), "true");
@@ -280,7 +280,7 @@ test("panel controller keeps the completed browser task summary visible in the t
   }
 });
 
-test("panel controller keeps guide plan actions hidden in chat-only assistant mode", async () => {
+test("panel controller shows guide plan actions when waiting on user without browser execution", async () => {
   const html = fs.readFileSync(path.join(__dirname, "../../renderer/index.html"), "utf8");
   const dom = new JSDOM(html, { url: "http://localhost" });
   installDomGlobals(dom);
@@ -321,6 +321,38 @@ test("panel controller keeps guide plan actions hidden in chat-only assistant mo
       status: "waiting_user",
     });
 
+    assert.equal(panelActions.classList.contains("hidden"), false);
+  } finally {
+    cleanupDomGlobals(dom);
+  }
+});
+
+test("panel controller keeps guide plan actions hidden without an active plan", async () => {
+  const html = fs.readFileSync(path.join(__dirname, "../../renderer/index.html"), "utf8");
+  const dom = new JSDOM(html, { url: "http://localhost" });
+  installDomGlobals(dom);
+
+  const settings = {
+    assistantMode: "planning",
+    onboardingCompleted: true,
+    aiProvider: "openai",
+    aiModel: "gpt-4o-mini",
+    includeScreenshotByDefault: false,
+  };
+  const session = {
+    messages: [],
+    activePlan: null,
+    browserExecution: null,
+    status: "waiting_user",
+  };
+  const { api } = createApiMock({ settings, session });
+  const { createPanelController } = await importModule("../../renderer/js/panel/bootstrap.js");
+
+  try {
+    const controller = createPanelController({ api, doc: dom.window.document, win: dom.window });
+    await controller.init();
+
+    const panelActions = dom.window.document.getElementById("panel-actions");
     assert.equal(panelActions.classList.contains("hidden"), true);
   } finally {
     cleanupDomGlobals(dom);

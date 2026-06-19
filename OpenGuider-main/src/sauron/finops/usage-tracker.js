@@ -36,7 +36,7 @@ function appendUsageRecord(logPath, record) {
 }
 
 function normalizeRecord(record = {}) {
-  return {
+  const normalized = {
     provider: String(record.provider || "unknown"),
     model: String(record.model || "default"),
     promptTokens: Math.max(0, Number(record.promptTokens) || 0),
@@ -46,6 +46,11 @@ function normalizeRecord(record = {}) {
     latencyMs: Math.max(0, Number(record.latencyMs) || 0),
     timestamp: record.timestamp || new Date().toISOString(),
   };
+  const sessionId = String(record.sessionId || "").trim();
+  if (sessionId) {
+    normalized.sessionId = sessionId;
+  }
+  return normalized;
 }
 
 function trackCall(record, settings = {}) {
@@ -126,10 +131,16 @@ async function getTotalSpentTl(settings = {}) {
   return entries.reduce((sum, entry) => sum + (Number(entry.costTl) || 0), 0);
 }
 
-async function getUsageSummary(settings = {}) {
+async function getUsageSummary(settings = {}, options = {}) {
   const logPath = resolveUsageLogPath(settings);
   const entries = await readUsageEntries(logPath);
   const totalSpentTl = entries.reduce((sum, entry) => sum + (Number(entry.costTl) || 0), 0);
+  const chatSessionId = String(options.chatSessionId || "").trim();
+  const sessionSpentTl = chatSessionId
+    ? entries
+      .filter((entry) => String(entry.sessionId || "") === chatSessionId)
+      .reduce((sum, entry) => sum + (Number(entry.costTl) || 0), 0)
+    : 0;
   const budget = Number(settings.finopsTotalBudgetTl) || 0;
   const remainingTl = budget > 0 ? budget - totalSpentTl : null;
   const remainingPct = budget > 0 ? Math.max(0, (remainingTl / budget) * 100) : null;
@@ -137,6 +148,8 @@ async function getUsageSummary(settings = {}) {
 
   return {
     totalSpentTl,
+    sessionSpentTl,
+    chatSessionId: chatSessionId || null,
     remainingTl,
     remainingPct,
     budgetTl: budget,

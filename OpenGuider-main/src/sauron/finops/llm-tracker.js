@@ -47,6 +47,7 @@ async function recordLlmUsage({
   completionText = "",
   providerUsage = null,
   latencyMs = 0,
+  sessionId = "",
 }) {
   const liveSettings = {
     ...budgetContext.getSettings(),
@@ -81,6 +82,7 @@ async function recordLlmUsage({
       operation,
       latencyMs,
       timestamp: new Date().toISOString(),
+      sessionId: String(sessionId || "").trim() || undefined,
     },
     liveSettings,
   );

@@ -20,6 +20,8 @@ const {
   sanitizeExportFilename,
   toggleChatSessionPin,
   sessionMatchesQuery,
+  createChatFolder,
+  moveChatSession,
   MAX_STORED_MESSAGES,
   resetRuntimeChatStateForTests,
 } = require("../../src/session/chat-sessions");
@@ -337,4 +339,40 @@ test("SessionManager removeLastAssistantMessage removes only the latest assistan
     ["selam", "nasılsın"],
   );
   assert.equal(manager.removeLastAssistantMessage(), false);
+});
+
+test("SessionManager updateMessage edits content in place", () => {
+  const manager = new SessionManager();
+  manager.addMessage({ role: "user", content: "ilk" });
+  manager.addMessage({ role: "assistant", content: "yanıt" });
+  assert.equal(manager.updateMessage(0, "güncel"), true);
+  assert.equal(manager.getSnapshot().messages[0].content, "güncel");
+});
+
+test("SessionManager deleteMessage and truncateAfter support branching", () => {
+  const manager = new SessionManager();
+  manager.addMessage({ role: "user", content: "a" });
+  manager.addMessage({ role: "assistant", content: "b" });
+  manager.addMessage({ role: "user", content: "c" });
+  assert.equal(manager.truncateAfter(0), true);
+  assert.equal(manager.getSnapshot().messages.length, 1);
+  manager.addMessage({ role: "assistant", content: "b2" });
+  assert.equal(manager.deleteMessage(1), true);
+  assert.equal(manager.getSnapshot().messages.length, 1);
+});
+
+test("createChatFolder and moveChatSession organize sessions", () => {
+  const store = makeStore();
+  migrateLegacySessionSnapshot(store, null, {
+    messages: [{ role: "user", content: "klasör testi" }],
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  });
+  const sessionId = store.get("chatSessionsV1").activeSessionId;
+  const created = createChatFolder(store, "Projeler");
+  assert.equal(created.ok, true);
+  const moved = moveChatSession(store, sessionId, created.folder.id);
+  assert.equal(moved.ok, true);
+  assert.equal(moved.folderId, created.folder.id);
+  const summaries = listChatSessionSummaries(store);
+  assert.equal(summaries[0].folderId, created.folder.id);
 });

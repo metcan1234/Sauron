@@ -39,16 +39,23 @@ const {
 } = require("./src/session/session-persistence");
 const {
   createEphemeralChatSession,
+  createChatFolder,
   createNewChatSession,
+  deleteChatFolder,
   deleteChatSession,
   listChatSessionSummaries,
+  listChatFolders,
   loadChatSession,
   migrateLegacySessionSnapshot,
+  moveChatSession,
   persistActiveSession,
   duplicateChatSession,
+  exportAllSessionsJson,
   formatChatExportMarkdown,
   getActiveChatSessionTitle,
   getChatSessionById,
+  importChatSessionsFromJson,
+  renameChatFolder,
   renameChatSession,
   sanitizeExportFilename,
   toggleChatSessionPin,
@@ -75,6 +82,11 @@ const { registry } = require("./src/core/plugin-registry");
 const { BrowserPlugin } = require("./src/plugins/browser/index");
 const { resolveBrowserPluginLlmConfig } = require("./src/plugins/browser/llm-config");
 const { createBrowserExecutionTtsController } = require("./src/tts/browser-execution-tts");
+const { registerChatSessionsIpc } = require("./src/ipc/chat-sessions-ipc");
+const { registerAiIpc } = require("./src/ipc/ai-ipc");
+const { registerWorkspaceIpc } = require("./src/ipc/workspace-ipc");
+const { registerFinOpsIpc } = require("./src/ipc/finops-ipc");
+const { registerBrowserIpc } = require("./src/ipc/browser-ipc");
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const PANEL_WIDTH  = 440;
@@ -285,10 +297,49 @@ function getFinOpsAlertWindows() {
 
 async function getRuntimeSettings() {
   if (!secureStore) {
-    return applyPlatformSettingsGuards(store?.store || {}).normalizedSettings;
+    return mergeUserMemoryIntoSettings(applyPlatformSettingsGuards(store?.store || {}).normalizedSettings);
   }
   const hydrated = await secureStore.fillSecrets(store.store);
-  return applyPlatformSettingsGuards(hydrated).normalizedSettings;
+  return mergeUserMemoryIntoSettings(applyPlatformSettingsGuards(hydrated).normalizedSettings);
+}
+
+function mergeUserMemoryIntoSettings(settings = {}) {
+  const facts = Array.isArray(settings.userMemoryFacts)
+    ? settings.userMemoryFacts.map((entry) => String(entry || "").trim()).filter(Boolean)
+    : [];
+  if (facts.length === 0) {
+    return settings;
+  }
+  const memoryBlock = `\n\nKullanıcı hafızası:\n${facts.map((entry) => `- ${entry}`).join("\n")}`;
+  const basePrompt = String(settings.systemPromptOverride || "").trim();
+  return {
+    ...settings,
+    systemPromptOverride: `${basePrompt}${memoryBlock}`.trim(),
+  };
+}
+
+async function maybeAutoBackupChatSessions(trigger = "manual") {
+  if (!store || store.get("chatBackupEnabled") !== true) {
+    return null;
+  }
+  const folderPath = String(store.get("chatBackupPath") || "").trim();
+  if (!folderPath) {
+    return null;
+  }
+  try {
+    if (!fs.existsSync(folderPath)) {
+      fs.mkdirSync(folderPath, { recursive: true });
+    }
+    const payload = exportAllSessionsJson(store);
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const filePath = path.join(folderPath, `openguider-chats-${trigger}-${stamp}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf8");
+    appLogger.info("chat-backup-created", { trigger, filePath });
+    return filePath;
+  } catch (error) {
+    appLogger.warn("chat-backup-failed", { trigger, error: error?.message || error });
+    return null;
+  }
 }
 
 function shouldRefreshBrowserPlugin(changedSettings = {}) {
@@ -416,6 +467,45 @@ function attachWindowCrashHandlers(windowRef, name) {
           appLogger.warn("cursor-overlay-crash-destroy-failed", { error: destroyError });
         }
         cursorOverlayWindow = null;
+      }, 400);
+      return;
+    }
+
+    if (name === "panel") {
+      const wasVisible = isPanelVisible;
+      setTimeout(() => {
+        try {
+          if (panelWindow && !panelWindow.isDestroyed()) {
+            panelWindow.destroy();
+          }
+        } catch (destroyError) {
+          appLogger.warn("panel-crash-destroy-failed", { error: destroyError });
+        }
+        panelWindow = null;
+        createPanelWindow();
+        if (wasVisible) {
+          showPanel();
+        }
+        if (sessionManager) {
+          broadcastSessionSnapshot(sessionManager.getSnapshot());
+        }
+        appLogger.info("panel-renderer-recovered", { wasVisible });
+      }, 400);
+      return;
+    }
+
+    if (name === "settings") {
+      setTimeout(() => {
+        try {
+          if (settingsWindow && !settingsWindow.isDestroyed()) {
+            settingsWindow.destroy();
+          }
+        } catch (destroyError) {
+          appLogger.warn("settings-crash-destroy-failed", { error: destroyError });
+        }
+        settingsWindow = null;
+        createSettingsWindow();
+        appLogger.info("settings-renderer-recovered");
       }, 400);
     }
   });
@@ -1163,6 +1253,116 @@ async function handleOrchestratorResult(result, settings, sender) {
   return result;
 }
 
+function registerModularIpcHandlers() {
+  const currentAIControllerRef = {
+    get current() { return currentAIController; },
+    set current(value) { currentAIController = value; },
+  };
+
+  registerFinOpsIpc({
+    ipcMain,
+    debugLog,
+    getRuntimeSettings,
+    getUsageSummary,
+    sessionManager,
+  });
+
+  registerChatSessionsIpc({
+    ipcMain,
+    dialog,
+    store,
+    sessionManager,
+    taskOrchestrator,
+    hideCursorOverlay,
+    debugLog,
+    broadcastSessionSnapshot,
+    persistActiveSession,
+    panelWindow,
+    createChatFolder,
+    createEphemeralChatSession,
+    createNewChatSession,
+    deleteChatFolder,
+    deleteChatSession,
+    duplicateChatSession,
+    exportAllSessionsJson,
+    formatChatExportMarkdown,
+    getChatSessionById,
+    importChatSessionsFromJson,
+    listChatFolders,
+    listChatSessionSummaries,
+    loadChatSession,
+    moveChatSession,
+    renameChatFolder,
+    renameChatSession,
+    sanitizeExportFilename,
+    toggleChatSessionPin,
+  });
+
+  registerAiIpc({
+    ipcMain,
+    ASSISTANT_CHAT_PROMPT,
+    MAX_AI_CONTEXT_MESSAGES,
+    MAX_STORED_MESSAGES,
+    appLogger,
+    createRequestContext,
+    currentAIControllerRef,
+    debugLog,
+    fetchOllamaModels,
+    getRuntimeSettings,
+    handleOrchestratorResult,
+    parsePointTag,
+    recordPerformanceMetric,
+    sessionManager,
+    speakAssistantResponse,
+    store,
+    streamAIResponse,
+    taskOrchestrator,
+    toUiErrorPayload,
+    updatePointerCalibration,
+    updateWidgetState,
+    broadcastAgentState,
+    showPointer,
+    wrapUserFacingError,
+  });
+
+  registerWorkspaceIpc({
+    ipcMain,
+    dialog,
+    shell,
+    store,
+    sessionManager,
+    panelWindow,
+    settingsWindow,
+    debugLog,
+    appLogger,
+    getRuntimeSettings,
+    persistActiveSession,
+    getActiveChatSessionTitle,
+    checkWorkspacePrerequisites,
+    installWorkspaceStack,
+    getHandoffStatus,
+    focusVSCodeWorkspace,
+    listPendingHandoffs,
+    rejectPendingHandoffs,
+    buildHandoffPayload,
+    bootstrapWorkspace,
+    writeHandoff,
+    launchVSCode,
+  });
+
+  registerBrowserIpc({
+    ipcMain,
+    debugLog,
+    appLogger,
+    getRuntimeSettings,
+    syncBrowserPluginWithRuntimeSettings,
+    registry,
+    resolveChildProcessAssetPath,
+    getBrowserRuntimeInstallDir,
+    process,
+  });
+}
+
 // ── IPC handlers ──────────────────────────────────────────────────────────────
 function setupIPC() {
   // ── Settings ─────────────────────────────────────────────────────────────
@@ -1277,11 +1477,6 @@ function setupIPC() {
     return { ok: true };
   });
 
-  ipcMain.handle("get-finops-summary", async () => {
-    const runtimeSettings = await getRuntimeSettings();
-    return getUsageSummary(runtimeSettings);
-  });
-
   // ── Screenshot ───────────────────────────────────────────────────────────
   ipcMain.handle("capture-screenshot", async () => {
     const startedAt = Date.now();
@@ -1310,740 +1505,11 @@ function setupIPC() {
     }
   });
 
-  ipcMain.handle("get-active-session", () => {
-    debugLog("ipc:get-active-session");
-    return sessionManager.getSnapshot();
-  });
+  registerModularIpcHandlers();
 
-  ipcMain.handle("reset-session", () => {
-    debugLog("ipc:reset-session");
-    hideCursorOverlay();
-    const result = taskOrchestrator.resetSession();
-    persistActiveSession(store, sessionManager.getSnapshot());
-    return result;
-  });
-
-  ipcMain.handle("list-chat-sessions", (_event, { query } = {}) => {
-    debugLog("ipc:list-chat-sessions", { query: query || "" });
-    return {
-      ok: true,
-      activeSessionId: store.get("chatSessionsV1")?.activeSessionId || null,
-      sessions: listChatSessionSummaries(store, { query }),
-    };
-  });
-
-  ipcMain.handle("create-chat-session", () => {
-    debugLog("ipc:create-chat-session");
-    const created = createNewChatSession(store, sessionManager);
-    const snapshot = sessionManager.getSnapshot();
-    broadcastSessionSnapshot(snapshot);
-    return { ok: true, ...created, snapshot };
-  });
-
-  ipcMain.handle("create-ephemeral-chat-session", () => {
-    debugLog("ipc:create-ephemeral-chat-session");
-    const created = createEphemeralChatSession(store, sessionManager);
-    const snapshot = sessionManager.getSnapshot();
-    broadcastSessionSnapshot(snapshot);
-    return { ok: true, ...created, snapshot };
-  });
-
-  ipcMain.handle("remove-last-assistant-message", () => {
-    debugLog("ipc:remove-last-assistant-message");
-    const removed = sessionManager.removeLastAssistantMessage();
-    persistActiveSession(store, sessionManager.getSnapshot());
-    const snapshot = sessionManager.getSnapshot();
-    broadcastSessionSnapshot(snapshot);
-    return { ok: removed, snapshot };
-  });
-
-  ipcMain.handle("load-chat-session", (_event, { sessionId } = {}) => {
-    debugLog("ipc:load-chat-session", { sessionId });
-    const loaded = loadChatSession(store, sessionManager, sessionId);
-    if (!loaded.ok) {
-      return loaded;
-    }
-    broadcastSessionSnapshot(loaded.snapshot);
-    return loaded;
-  });
-
-  ipcMain.handle("delete-chat-session", (_event, { sessionId } = {}) => {
-    debugLog("ipc:delete-chat-session", { sessionId });
-    const deleted = deleteChatSession(store, sessionManager, sessionId);
-    if (deleted.ok && deleted.snapshot) {
-      broadcastSessionSnapshot(deleted.snapshot);
-    }
-    return deleted;
-  });
-
-  ipcMain.handle("toggle-pin-chat-session", (_event, { sessionId } = {}) => {
-    debugLog("ipc:toggle-pin-chat-session", { sessionId });
-    return toggleChatSessionPin(store, sessionId);
-  });
-
-  ipcMain.handle("rename-chat-session", (_event, { sessionId, title } = {}) => {
-    debugLog("ipc:rename-chat-session", { sessionId, title });
-    return renameChatSession(store, sessionId, title);
-  });
-
-  ipcMain.handle("duplicate-chat-session", (_event, { sessionId } = {}) => {
-    debugLog("ipc:duplicate-chat-session", { sessionId });
-    const duplicated = duplicateChatSession(store, sessionManager, sessionId);
-    if (duplicated.ok && duplicated.snapshot) {
-      broadcastSessionSnapshot(duplicated.snapshot);
-    }
-    return duplicated;
-  });
-
-  ipcMain.handle("export-chat-session", async (_event, { sessionId } = {}) => {
-    debugLog("ipc:export-chat-session", { sessionId });
-    try {
-      const session = getChatSessionById(store, sessionId);
-      if (!session) {
-        return { ok: false, error: "Chat session not found." };
-      }
-      if (session.ephemeral) {
-        return { ok: false, error: "Geçici sohbetler dışa aktarılamaz." };
-      }
-
-      const markdown = formatChatExportMarkdown(session);
-      const parentWindow = panelWindow && !panelWindow.isDestroyed() ? panelWindow : null;
-      const saveResult = await dialog.showSaveDialog(parentWindow, {
-        title: "Sohbeti dışa aktar",
-        defaultPath: `${sanitizeExportFilename(session.title)}.md`,
-        filters: [{ name: "Markdown", extensions: ["md"] }],
-      });
-
-      if (saveResult.canceled || !saveResult.filePath) {
-        return { ok: false, canceled: true };
-      }
-
-      fs.writeFileSync(saveResult.filePath, markdown, "utf8");
-      return { ok: true, path: saveResult.filePath };
-    } catch (error) {
-      return { ok: false, error: error?.message || "Export failed." };
-    }
-  });
-
-  ipcMain.handle("start-goal-session", async (event, { text, images }) => {
-    const requestContext = createRequestContext("start-goal-session");
-    const startedAt = Date.now();
-    debugLog("ipc:start-goal-session", {
-      requestId: requestContext.requestId,
-      textLength: text?.length || 0,
-      imageCount: images?.length || 0,
-    });
-    if (currentAIController) currentAIController.abort();
-    currentAIController = new AbortController();
-    const runtimeSettings = await getRuntimeSettings();
-    if (Array.isArray(images) && images.length > 0) {
-      updatePointerCalibration(images);
-    }
-
-    try {
-      const result = await taskOrchestrator.startGoalSession({
-        text,
-        images,
-        settings: runtimeSettings,
-        signal: currentAIController.signal,
-        requestId: requestContext.requestId,
-      });
-      const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
-      recordPerformanceMetric("ipc.start-goal-session", startedAt, {
-        ok: true,
-        meta: { requestId: requestContext.requestId, imageCount: images?.length || 0 },
-      });
-      return { ...handled, requestId: requestContext.requestId };
-    } catch (err) {
-      recordPerformanceMetric("ipc.start-goal-session", startedAt, {
-        ok: false,
-        meta: { requestId: requestContext.requestId, errorName: err?.name || "Error" },
-      });
-      appLogger.error("ipc:start-goal-session failed", {
-        requestId: requestContext.requestId,
-        error: err,
-      });
-      throw wrapUserFacingError(err);
-    } finally {
-      currentAIController = null;
-    }
-  });
-
-  ipcMain.handle("submit-user-message", async (event, { text, images }) => {
-    const requestContext = createRequestContext("submit-user-message");
-    const startedAt = Date.now();
-    debugLog("ipc:submit-user-message", {
-      requestId: requestContext.requestId,
-      textLength: text?.length || 0,
-      imageCount: images?.length || 0,
-    });
-    if (currentAIController) currentAIController.abort();
-    currentAIController = new AbortController();
-    const runtimeSettings = await getRuntimeSettings();
-    if (Array.isArray(images) && images.length > 0) {
-      updatePointerCalibration(images);
-    }
-
-    try {
-      const result = await taskOrchestrator.submitUserMessage({
-        text,
-        images,
-        settings: runtimeSettings,
-        signal: currentAIController.signal,
-        requestId: requestContext.requestId,
-      });
-      const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
-      recordPerformanceMetric("ipc.submit-user-message", startedAt, {
-        ok: true,
-        meta: { requestId: requestContext.requestId, imageCount: images?.length || 0 },
-      });
-      return { ...handled, requestId: requestContext.requestId };
-    } catch (err) {
-      recordPerformanceMetric("ipc.submit-user-message", startedAt, {
-        ok: false,
-        meta: { requestId: requestContext.requestId, errorName: err?.name || "Error" },
-      });
-      appLogger.error("ipc:submit-user-message failed", {
-        requestId: requestContext.requestId,
-        error: err,
-      });
-      throw wrapUserFacingError(err);
-    } finally {
-      currentAIController = null;
-    }
-  });
-
-  ipcMain.handle("mark-step-done", async (event) => {
-    const requestContext = createRequestContext("mark-step-done");
-    debugLog("ipc:mark-step-done", { requestId: requestContext.requestId });
-    if (currentAIController) currentAIController.abort();
-    currentAIController = new AbortController();
-    const runtimeSettings = await getRuntimeSettings();
-
-    try {
-      const result = await taskOrchestrator.markStepDone({
-        settings: runtimeSettings,
-        signal: currentAIController.signal,
-        requestId: requestContext.requestId,
-      });
-      const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
-      return { ...handled, requestId: requestContext.requestId };
-    } catch (err) {
-      appLogger.error("ipc:mark-step-done failed", {
-        requestId: requestContext.requestId,
-        error: err,
-      });
-      throw wrapUserFacingError(err);
-    } finally {
-      currentAIController = null;
-    }
-  });
-
-  ipcMain.handle("request-step-help", async (event) => {
-    const requestContext = createRequestContext("request-step-help");
-    debugLog("ipc:request-step-help", { requestId: requestContext.requestId });
-    if (currentAIController) currentAIController.abort();
-    currentAIController = new AbortController();
-    const runtimeSettings = await getRuntimeSettings();
-
-    try {
-      const result = await taskOrchestrator.requestStepHelp({
-        settings: runtimeSettings,
-        signal: currentAIController.signal,
-        requestId: requestContext.requestId,
-      });
-      const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
-      return { ...handled, requestId: requestContext.requestId };
-    } catch (err) {
-      appLogger.error("ipc:request-step-help failed", {
-        requestId: requestContext.requestId,
-        error: err,
-      });
-      throw wrapUserFacingError(err);
-    } finally {
-      currentAIController = null;
-    }
-  });
-
-  ipcMain.handle("recheck-current-step", async (event) => {
-    const requestContext = createRequestContext("recheck-current-step");
-    debugLog("ipc:recheck-current-step", { requestId: requestContext.requestId });
-    if (currentAIController) currentAIController.abort();
-    currentAIController = new AbortController();
-    const runtimeSettings = await getRuntimeSettings();
-
-    try {
-      const result = await taskOrchestrator.recheckCurrentStep({
-        settings: runtimeSettings,
-        signal: currentAIController.signal,
-        requestId: requestContext.requestId,
-      });
-      const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
-      return { ...handled, requestId: requestContext.requestId };
-    } catch (err) {
-      appLogger.error("ipc:recheck-current-step failed", {
-        requestId: requestContext.requestId,
-        error: err,
-      });
-      throw wrapUserFacingError(err);
-    } finally {
-      currentAIController = null;
-    }
-  });
-
-  ipcMain.handle("skip-current-step", async (event) => {
-    const requestContext = createRequestContext("skip-current-step");
-    debugLog("ipc:skip-current-step", { requestId: requestContext.requestId });
-    if (currentAIController) currentAIController.abort();
-    currentAIController = new AbortController();
-    const runtimeSettings = await getRuntimeSettings();
-
-    try {
-      const result = await taskOrchestrator.skipCurrentStep({
-        settings: runtimeSettings,
-        signal: currentAIController.signal,
-        requestId: requestContext.requestId,
-      });
-      const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
-      return { ...handled, requestId: requestContext.requestId };
-    } catch (err) {
-      appLogger.error("ipc:skip-current-step failed", {
-        requestId: requestContext.requestId,
-        error: err,
-      });
-      throw wrapUserFacingError(err);
-    } finally {
-      currentAIController = null;
-    }
-  });
-
-  ipcMain.handle("previous-step", async (event) => {
-    const requestContext = createRequestContext("previous-step");
-    debugLog("ipc:previous-step", { requestId: requestContext.requestId });
-    if (currentAIController) currentAIController.abort();
-    currentAIController = new AbortController();
-    const runtimeSettings = await getRuntimeSettings();
-
-    try {
-      const result = await taskOrchestrator.previousStep({
-        settings: runtimeSettings,
-        signal: currentAIController.signal,
-        requestId: requestContext.requestId,
-      });
-      const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
-      return { ...handled, requestId: requestContext.requestId };
-    } catch (err) {
-      appLogger.error("ipc:previous-step failed", {
-        requestId: requestContext.requestId,
-        error: err,
-      });
-      throw wrapUserFacingError(err);
-    } finally {
-      currentAIController = null;
-    }
-  });
-
-  ipcMain.handle("regenerate-current-step", async (event) => {
-    const requestContext = createRequestContext("regenerate-current-step");
-    debugLog("ipc:regenerate-current-step", { requestId: requestContext.requestId });
-    if (currentAIController) currentAIController.abort();
-    currentAIController = new AbortController();
-    const runtimeSettings = await getRuntimeSettings();
-
-    try {
-      const result = await taskOrchestrator.regenerateCurrentStep({
-        settings: runtimeSettings,
-        signal: currentAIController.signal,
-        requestId: requestContext.requestId,
-      });
-      const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
-      return { ...handled, requestId: requestContext.requestId };
-    } catch (err) {
-      appLogger.error("ipc:regenerate-current-step failed", {
-        requestId: requestContext.requestId,
-        error: err,
-      });
-      throw wrapUserFacingError(err);
-    } finally {
-      currentAIController = null;
-    }
-  });
-
-  // ── AI streaming ─────────────────────────────────────────────────────────
-  ipcMain.handle("send-message", async (event, { text, images, history, fastMode, skipUserPersist, regenerate }) => {
-    const requestContext = createRequestContext("send-message");
-    const startedAt = Date.now();
-    debugLog("ipc:send-message start", {
-      requestId: requestContext.requestId,
-      textLength: text?.length || 0,
-      imageCount: images?.length || 0,
-      historyCount: history?.length || 0,
-      fastMode: Boolean(fastMode),
-      skipUserPersist: Boolean(skipUserPersist),
-      regenerate: Boolean(regenerate),
-    });
-    // Cancel any in-progress AI request
-    if (currentAIController) currentAIController.abort();
-    currentAIController = new AbortController();
-    if (Array.isArray(images) && images.length > 0) {
-      updatePointerCalibration(images);
-    }
-
-    const effectiveHistory = Array.isArray(history) && history.length > 0
-      ? history.slice(-MAX_AI_CONTEXT_MESSAGES)
-      : (sessionManager?.getSnapshot()?.messages || []).slice(-MAX_AI_CONTEXT_MESSAGES);
-
-    if (regenerate) {
-      sessionManager.removeLastAssistantMessage();
-    }
-
-    if (!skipUserPersist && text) {
-      sessionManager.addMessage({ role: "user", content: text });
-      sessionManager.trimMessages(MAX_STORED_MESSAGES);
-    }
-
-    broadcastAgentState("thinking");
-    updateWidgetState("thinking");
-    const settings = await getRuntimeSettings();
-    const requestSettings = { ...settings };
-    if (fastMode !== false) {
-      const userPrompt = settings.systemPromptOverride || "";
-      requestSettings.systemPromptOverride = `${userPrompt}\n\n${ASSISTANT_CHAT_PROMPT}`.trim();
-    }
-    try {
-      // ── Pre-LLM layer: enrich prompt with OCR & window context ──
-      const layerManager = taskOrchestrator?.isAwareAssistanceEnabled?.()
-        ? taskOrchestrator.interactionPipeline
-        : null;
-      let enrichedText = text;
-      if (layerManager && Array.isArray(images) && images.length > 0) {
-        try {
-          const preContext = await layerManager.preprocess({
-            images,
-            step: null,
-            sessionId: sessionManager?.getSnapshot?.().sessionId || "fast",
-            signal: currentAIController.signal,
-          });
-          if (preContext.ocrResult || preContext.windowInfo) {
-            enrichedText = await layerManager.distillContext(text, preContext, requestSettings);
-          }
-        } catch (preErr) {
-          appLogger.warn("send-message pre-layer error (non-fatal)", { error: preErr });
-        }
-      }
-
-      const fullText = await streamAIResponse({
-        text: enrichedText, images, history: effectiveHistory, settings: requestSettings,
-        signal: currentAIController.signal,
-        onChunk: (chunk) => {
-          if (!event.sender.isDestroyed())
-            event.sender.send("ai-chunk", chunk);
-        },
-      });
-
-      const parsed = parsePointTag(fullText);
-      const assistantContent = parsed.spokenText || fullText;
-      sessionManager.addMessage({ role: "assistant", content: assistantContent });
-      sessionManager.trimMessages(MAX_STORED_MESSAGES);
-
-      if (!event.sender.isDestroyed())
-        event.sender.send("ai-done", { ...parsed, requestId: requestContext.requestId });
-      broadcastAgentState("idle");
-
-      debugLog("ipc:send-message done", {
-        requestId: requestContext.requestId,
-        hasCoordinate: Boolean(parsed.coordinate),
-        textLength: fullText.length,
-      });
-      updateWidgetState("idle");
-
-      // ── Post-LLM layer: validate & snap coordinates ──
-      let finalCoordinate = parsed.coordinate;
-      if (layerManager && parsed.coordinate) {
-        try {
-          const postResult = await layerManager.postprocess({
-            coordinate: parsed.coordinate,
-            label: parsed.label,
-            step: null,
-            sessionId: sessionManager?.getSnapshot?.().sessionId || "fast",
-            signal: currentAIController?.signal,
-          });
-          if (postResult.confidence > 0.5 && postResult.coordinate) {
-            finalCoordinate = postResult.coordinate;
-          }
-        } catch (postErr) {
-          appLogger.warn("send-message post-layer error (non-fatal)", { error: postErr });
-        }
-      }
-
-      if (finalCoordinate) {
-        showPointer({
-          coordinate: finalCoordinate,
-          label: parsed.label,
-          explanation: parsed.spokenText,
-          shouldPoint: true,
-        });
-      }
-
-      await speakAssistantResponse(parsed.spokenText || fullText, settings, event.sender);
-      recordPerformanceMetric("ipc.send-message", startedAt, {
-        ok: true,
-        meta: {
-          requestId: requestContext.requestId,
-          textLength: text?.length || 0,
-          responseLength: fullText.length,
-          imageCount: images?.length || 0,
-        },
-      });
-    } catch (err) {
-      recordPerformanceMetric("ipc.send-message", startedAt, {
-        ok: false,
-        meta: {
-          requestId: requestContext.requestId,
-          errorName: err?.name || "Error",
-          imageCount: images?.length || 0,
-        },
-      });
-      appLogger.error("ipc:send-message failed", {
-        requestId: requestContext.requestId,
-        error: err,
-      });
-      if (err.name !== "AbortError" && !event.sender.isDestroyed())
-        event.sender.send("ai-error", toUiErrorPayload(err, requestContext));
-      broadcastAgentState("idle");
-    } finally {
-      currentAIController = null;
-    }
-  });
-
-  // ── Abort current AI request ──────────────────────────────────────────────
-  ipcMain.handle("abort-message", () => {
-    debugLog("ipc:abort-message");
-    if (currentAIController) {
-      currentAIController.abort();
-      currentAIController = null;
-    }
-    if (taskOrchestrator && typeof taskOrchestrator.abortActiveExecution === "function") {
-      taskOrchestrator.abortActiveExecution();
-    }
-  });
-
-  // ── TTS ───────────────────────────────────────────────────────────────────
-  ipcMain.on("stop-tts", (event, options) => {
-    debugLog("ipc:stop-tts");
-    if (!event.sender.isDestroyed()) event.sender.send("tts-webspeech-stop", options || {});
-  });
-
-  // ── Cursor ────────────────────────────────────────────────────────────────
-  ipcMain.on("show-cursor-at", (_e, data) => {
-    debugLog("ipc:show-cursor-at", data?.label || "element");
-    const overlay = ensureCursorOverlay();
-    if (overlay && !overlay.isDestroyed()) {
-      overlay.show();
-      overlay.webContents.send("show-cursor-at", data);
-    }
-  });
-  ipcMain.on("hide-cursor", () => {
-    debugLog("ipc:hide-cursor");
-    if (cursorOverlayWindow && !cursorOverlayWindow.isDestroyed())
-      cursorOverlayWindow.hide();
-  });
-
-  // ── AssemblyAI token (direct API key only) ────────────────────────────────
-  ipcMain.handle("get-assemblyai-token", async () => {
-    debugLog("ipc:get-assemblyai-token");
-    const settings = await getRuntimeSettings();
-    if (settings.assemblyaiApiKey) {
-      const resp = await fetch("https://streaming.assemblyai.com/v3/token?expires_in_seconds=480", {
-        headers: { authorization: settings.assemblyaiApiKey },
-      });
-      if (!resp.ok) {
-        const errBody = await resp.text().catch(() => "");
-        throw new Error(`AssemblyAI token request failed (${resp.status}): ${errBody || resp.statusText}`);
-      }
-      const json = await resp.json();
-      return json.token;
-    }
-    throw new Error("No AssemblyAI API key configured. Go to Settings → Voice and add your key.");
-  });
-
-  // ── Ollama model list ─────────────────────────────────────────────────────
-  ipcMain.handle("get-ollama-models", async () => {
-    debugLog("ipc:get-ollama-models");
-    const ollamaUrl = store.get("ollamaUrl") || "http://localhost:11434";
-    return fetchOllamaModels(ollamaUrl);
-  });
-
-  // ── Window controls ───────────────────────────────────────────────────────
   ipcMain.handle("open-settings",  () => {
     debugLog("ipc:open-settings");
     return createSettingsWindow();
-  });
-  ipcMain.handle("open-external-link", async (_event, url) => {
-    const target = String(url || "").trim();
-    if (!/^https?:\/\//i.test(target)) {
-      throw new Error("Invalid URL");
-    }
-    await shell.openExternal(target);
-    return true;
-  });
-
-  ipcMain.handle("pick-workspace-folder", async () => {
-    debugLog("ipc:pick-workspace-folder");
-    const parentWindow = panelWindow && !panelWindow.isDestroyed()
-      ? panelWindow
-      : (settingsWindow && !settingsWindow.isDestroyed() ? settingsWindow : null);
-    const result = await dialog.showOpenDialog(parentWindow, {
-      properties: ["openDirectory"],
-      title: "Select Workspace Folder",
-    });
-    if (result.canceled || !result.filePaths?.[0]) {
-      return { ok: false, canceled: true };
-    }
-    const selectedPath = result.filePaths[0];
-    store.set("workspacePath", selectedPath);
-    return { ok: true, path: selectedPath };
-  });
-
-  ipcMain.handle("install-workspace-stack", async (_event, options = {}) => {
-    debugLog("ipc:install-workspace-stack", options);
-    try {
-      const result = installWorkspaceStack({ force: Boolean(options?.force) });
-      const prerequisites = checkWorkspacePrerequisites();
-      return { ...result, prerequisites };
-    } catch (error) {
-      return {
-        ok: false,
-        error: error?.message || "Workspace stack installation failed.",
-      };
-    }
-  });
-
-  ipcMain.handle("check-workspace-prerequisites", () => {
-    debugLog("ipc:check-workspace-prerequisites");
-    try {
-      return { ok: true, ...checkWorkspacePrerequisites() };
-    } catch (error) {
-      return {
-        ok: false,
-        error: error?.message || "Workspace prerequisite check failed.",
-      };
-    }
-  });
-
-  ipcMain.handle("get-handoff-status", (_event, { workspacePath, handoffFileName } = {}) => {
-    const resolvedPath = String(workspacePath || store.get("workspacePath") || "").trim();
-    if (!resolvedPath || !handoffFileName) {
-      return { ok: false, error: "Missing workspace path or handoff file name." };
-    }
-    return {
-      ok: true,
-      workspacePath: resolvedPath,
-      ...getHandoffStatus(resolvedPath, handoffFileName),
-    };
-  });
-
-  ipcMain.handle("focus-workspace-vscode", async () => {
-    debugLog("ipc:focus-workspace-vscode");
-    try {
-      const workspacePath = String(store.get("workspacePath") || "").trim();
-      if (!workspacePath || !fs.existsSync(workspacePath)) {
-        return { ok: false, error: "Workspace path is not configured or missing." };
-      }
-      await focusVSCodeWorkspace(workspacePath);
-      return { ok: true, workspacePath };
-    } catch (error) {
-      return { ok: false, error: error?.message || "Failed to focus VS Code." };
-    }
-  });
-
-  ipcMain.handle("open-workspace-handoff", async (_event, options = {}) => {
-    debugLog("ipc:open-workspace-handoff", options);
-    try {
-      const force = Boolean(options?.force);
-      let workspacePath = String(store.get("workspacePath") || "").trim();
-
-      if (!workspacePath) {
-        const parentWindow = panelWindow && !panelWindow.isDestroyed() ? panelWindow : null;
-        const pickResult = await dialog.showOpenDialog(parentWindow, {
-          properties: ["openDirectory"],
-          title: "Select Workspace Folder for Çalışma Kısmı",
-        });
-        if (pickResult.canceled || !pickResult.filePaths?.[0]) {
-          return { ok: false, error: "Workspace folder not selected." };
-        }
-        workspacePath = pickResult.filePaths[0];
-        store.set("workspacePath", workspacePath);
-      }
-
-      if (!fs.existsSync(workspacePath)) {
-        return { ok: false, error: `Workspace path does not exist: ${workspacePath}` };
-      }
-
-      let prerequisites = checkWorkspacePrerequisites();
-      if (!prerequisites.canOpenWorkspace) {
-        return {
-          ok: false,
-          error: "VS Code CLI (code) bulunamadı. Kurulum adımları için uyarıyı kontrol edin.",
-          prerequisites,
-        };
-      }
-
-      if (!prerequisites.bridgeExtension) {
-        const installResult = installWorkspaceStack();
-        if (!installResult.ok) {
-          return {
-            ok: false,
-            error: installResult.error || "Sauron Bridge kurulamadı.",
-            prerequisites: checkWorkspacePrerequisites(),
-          };
-        }
-        prerequisites = checkWorkspacePrerequisites();
-      }
-
-      const pending = listPendingHandoffs(workspacePath);
-      if (!force && pending.length > 0) {
-        return {
-          ok: false,
-          needsConfirm: true,
-          pendingCount: pending.length,
-          message: "Önceki görev henüz VS Code tarafında işlenmedi. Yine de devam edilsin mi?",
-        };
-      }
-
-      if (force && pending.length > 0) {
-        rejectPendingHandoffs(workspacePath);
-      }
-
-      const snapshot = sessionManager ? sessionManager.getSnapshot() : {};
-      persistActiveSession(store, snapshot);
-      const runtimeSettings = await getRuntimeSettings();
-      const enrichedSnapshot = {
-        ...snapshot,
-        chatSessionTitle: getActiveChatSessionTitle(store),
-      };
-      const payload = buildHandoffPayload(enrichedSnapshot, workspacePath, undefined, runtimeSettings);
-      await bootstrapWorkspace(workspacePath, runtimeSettings);
-      const written = writeHandoff(workspacePath, payload);
-      const launchResult = await launchVSCode(workspacePath, { newWindow: true });
-
-      return {
-        ok: true,
-        workspacePath,
-        handoffPath: written.handoffPath,
-        handoffId: written.handoffId,
-        handoffFileName: written.fileName,
-        launchResult,
-        prerequisites,
-        setupWarnings: prerequisites.warnings,
-      };
-    } catch (error) {
-      appLogger.error("open-workspace-handoff failed", { error: error?.message || error });
-      return {
-        ok: false,
-        error: error?.message || "Failed to open workspace.",
-      };
-    }
   });
   ipcMain.handle("close-settings", () => {
     debugLog("ipc:close-settings");
@@ -2100,11 +1566,6 @@ function setupIPC() {
     resizeWidgetPreservingPosition(nextHeight);
     return true;
   });
-  ipcMain.handle("cancel-active-plan", (_event, options) => {
-    debugLog("ipc:cancel-active-plan");
-    const result = taskOrchestrator.cancelActivePlan(options || {});
-    return result;
-  });
   ipcMain.on("widget-loaded",      () => {
     debugLog("ipc:widget-loaded");
     if (widgetWindow) widgetWindow.webContents.send("widget-ready");
@@ -2125,77 +1586,24 @@ function setupIPC() {
     updateWidgetState(state);
   });
 
-  // ── Browser Agent ─────────────────────────────────────────────────────────────
-  ipcMain.handle("restart-browser-agent", async () => {
-    debugLog("ipc:restart-browser-agent");
-    try {
-      const plugin = registry.getPlugin("browser");
-      const runtimeSettings = await getRuntimeSettings();
-      await plugin.shutdown();
-      await syncBrowserPluginWithRuntimeSettings(runtimeSettings, { forceRestart: false });
-      return { ok: true };
-    } catch (err) {
-      appLogger.error("restart-browser-agent-failed", { error: err });
-      return { ok: false, error: err.message };
-    }
+  ipcMain.on("stop-tts", (event, options) => {
+    debugLog("ipc:stop-tts");
+    if (!event.sender.isDestroyed()) event.sender.send("tts-webspeech-stop", options || {});
   });
 
-  ipcMain.handle("get-browser-agent-status", () => {
-    try {
-      const status = registry.getStatus("browser");
-      if (status === "ok") {
-        const plugin = registry.getPlugin("browser");
-        return plugin._sidecar?.isRunning ? "running" : "stopped";
-      }
-      return status || "stopped";
-    } catch (_) {
-      return "stopped";
+  ipcMain.on("show-cursor-at", (_e, data) => {
+    debugLog("ipc:show-cursor-at", data?.label || "element");
+    const overlay = ensureCursorOverlay();
+    if (overlay && !overlay.isDestroyed()) {
+      overlay.show();
+      overlay.webContents.send("show-cursor-at", data);
     }
   });
-
-  ipcMain.handle("download-browser-agent", async (event) => {
-    debugLog("ipc:download-browser-agent");
-    return new Promise((resolve) => {
-      const { spawn } = require("child_process");
-      const scriptPath = resolveChildProcessAssetPath("scripts", "download-browser-agent.js");
-      const targetDir = getBrowserRuntimeInstallDir();
-      const child = spawn(process.execPath, [scriptPath, "--target", targetDir], {
-        env: {
-          ...process.env,
-          ELECTRON_RUN_AS_NODE: "1",
-          OPENGUIDER_BROWSER_RUNTIME_DIR: targetDir,
-        },
-      });
-
-      child.stdout.on("data", (data) => {
-        const lines = data.toString().split("\n");
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const parsed = JSON.parse(line);
-            event.sender.send("browser-agent-download-progress", parsed);
-          } catch (e) {}
-        }
-      });
-
-      child.on("close", async (code) => {
-        if (code === 0) {
-          try {
-            const runtimeSettings = await getRuntimeSettings();
-            await syncBrowserPluginWithRuntimeSettings(runtimeSettings, { forceRestart: true });
-            resolve({ ok: true, targetDir });
-          } catch (err) {
-            appLogger.error("download-browser-agent-restart-failed", { error: err?.message });
-            resolve({ ok: false, error: err?.message || "Runtime downloaded but restart failed" });
-          }
-          return;
-        }
-
-        resolve({ ok: false, error: `Exit code ${code}` });
-      });
-
-      child.on("error", (err) => resolve({ ok: false, error: err.message }));
-    });
+  ipcMain.on("hide-cursor", () => {
+    debugLog("ipc:hide-cursor");
+    if (cursorOverlayWindow && !cursorOverlayWindow.isDestroyed()) {
+      cursorOverlayWindow.hide();
+    }
   });
 }
 
@@ -2318,6 +1726,7 @@ app.whenReady().then(async () => {
   broadcastSessionSnapshot(sessionManager.getSnapshot());
   setupIPC();
   registerHotkeys();
+  void maybeAutoBackupChatSessions("startup");
   app.on("activate", () => {
     debugLog("app:activate");
     showPanel();
@@ -2352,6 +1761,7 @@ app.on("before-quit", (e) => {
 
   registry.shutdownAll()
     .catch((err) => appLogger.error('shutdown-error', { error: err?.message }))
+    .then(() => maybeAutoBackupChatSessions("shutdown"))
     .finally(() => {
       clearTimeout(shutdownTimeout);
       app.quit();

@@ -2568,6 +2568,195 @@ kbd {
   padding: 8px 4px;
 }
 
+.chat-drawer-create-folder {
+  width: 100%;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.chat-drawer-create-folder:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.chat-drawer-folder {
+  margin-bottom: 12px;
+}
+
+.chat-drawer-folder-header {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  padding: 4px 6px 6px;
+}
+
+.chat-drawer-folder-empty {
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 4px 8px 8px;
+}
+
+.chat-drawer-item-move {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  opacity: 0.7;
+  font-size: 12px;
+}
+
+.message-action-btn,
+.user-meta-actions,
+.assistant-meta-actions .message-action-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  opacity: 0.65;
+  font-size: 11px;
+  padding: 0 2px;
+}
+
+.message.user:hover .user-meta-actions,
+.message.assistant:hover .message-action-btn {
+  opacity: 1;
+}
+
+.user-meta-actions {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 8px;
+}
+
+.attachment-preview-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px 0;
+}
+
+.attachment-preview-strip.hidden {
+  display: none;
+}
+
+.attachment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.03);
+  font-size: 11px;
+}
+
+.attachment-chip-thumb {
+  width: 24px;
+  height: 24px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.attachment-chip-remove {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.chat-area.is-dragover {
+  outline: 2px dashed rgba(124, 58, 237, 0.45);
+  outline-offset: -4px;
+}
+
+.code-artifact-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 10px;
+  margin-right: 6px;
+  padding: 2px 6px;
+}
+
+.artifact-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: min(420px, 92vw);
+  height: 100vh;
+  background: rgba(18, 20, 32, 0.98);
+  border-left: 1px solid var(--border);
+  z-index: 10001;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -8px 0 24px rgba(0,0,0,0.35);
+}
+
+.artifact-panel.hidden {
+  display: none;
+}
+
+.artifact-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.artifact-panel-header h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.artifact-panel-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.artifact-panel-btn {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.artifact-panel-btn.ghost {
+  color: var(--text-dim);
+}
+
+.artifact-panel-content {
+  flex: 1;
+  width: 100%;
+  border: none;
+  resize: none;
+  background: rgba(0,0,0,0.2);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 12px;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
 /* ── Toast notification ──────────────────────────────────────────────────── */
 .toast {
   position: fixed;

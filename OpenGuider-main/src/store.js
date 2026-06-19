@@ -65,6 +65,7 @@ const schema = {
   awareAssistanceEnabled: { type:"boolean", default:false },
   includeScreenshotByDefault: { type:"boolean", default:true },
   systemPromptOverride: { type:"string", default:"" },
+  userMemoryFacts: { type:"array", default: [], items: { type:"string" } },
   planningModeEnabled: { type:"boolean", default:false },
   assistantMode: { type:"string", enum:["planning","fast"], default:"fast" },
   onboardingCompleted: { type:"boolean", default:false },
@@ -88,6 +89,8 @@ const schema = {
   finopsDailyBudgetTl: { type: "number", default: 0 },
   finopsOptimizerModels: { type: "object", default: {} },
   agentMatrixVersion: { type: "number", default: 1 },
+  chatBackupEnabled: { type: "boolean", default: false },
+  chatBackupPath: { type: "string", default: "" },
 };
 function createStore() { return new Store({ schema, clearInvalidConfig: true }); }
 module.exports = { createStore, schema };

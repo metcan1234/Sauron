@@ -72,6 +72,16 @@
           <summary style="cursor:pointer;font-weight:600;">Gelişmiş (legacy provider)</summary>
           <div style="margin-top:12px;">
             <div class="form-group">
+              <label>Asistan kişiliği (system prompt)</label>
+              <textarea class="form-input" id="systemPromptOverride" rows="4" placeholder="Opsiyonel — asistanın tonu ve davranışı"></textarea>
+              <span class="hint">Boş bırakılırsa varsayılan sistem promptu kullanılır.</span>
+            </div>
+            <div class="form-group">
+              <label>Kullanıcı hafızası (satır başına bir gerçek)</label>
+              <textarea class="form-input" id="userMemoryFacts" rows="4" placeholder="Örn: Adım Can&#10;Tercih ettiğim dil Türkçe"></textarea>
+              <span class="hint">Her satır ayrı bir hatıra olarak modele eklenir.</span>
+            </div>
+            <div class="form-group">
               <label>Provider (legacy)</label>
               <select class="form-select" id="providerSelect">
                 <option value="gemini">Gemini (Google)</option>
@@ -192,6 +202,20 @@
             <span class="hint" id="workspace-stack-status">Durum kontrol ediliyor…</span>
           </div>
           <span class="hint">⌘ Çalışma Kısmı basıldığında Bridge otomatik kurulur. Sorun olursa bu düğmeyi kullanın.</span>
+        </div>
+        <div class="form-group">
+          <label>Sohbet yedekleme</label>
+          <label class="checkbox-row">
+            <input type="checkbox" id="chatBackupEnabled"/>
+            Otomatik yerel yedekleme
+          </label>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+            <input class="form-input" id="chatBackupPath" type="text" placeholder="Yedek klasörü" style="flex:1;"/>
+            <button class="btn btn-secondary" id="btn-browse-backup" type="button">Browse</button>
+            <button class="btn btn-secondary" id="btn-backup-now" type="button">Şimdi yedekle</button>
+            <button class="btn btn-secondary" id="btn-import-backup" type="button">İçe aktar</button>
+          </div>
+          <span class="hint">Uygulama açılış/kapanışta timestamp'li JSON yedek oluşturur.</span>
         </div>
       </div>
     </div>

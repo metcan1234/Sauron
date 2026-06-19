@@ -8,6 +8,7 @@ export function createPanelState() {
     agentState: "idle",
     pointer: null,
     pendingScreenshots: null,
+    pendingAttachments: [],
     includeScreen: false,
     isRecording: false,
     isStreaming: false,
@@ -105,6 +106,29 @@ export function createPanelState() {
 
   function setPendingScreenshots(screenshots) {
     state.pendingScreenshots = screenshots;
+  }
+
+  function getPendingAttachments() {
+    return state.pendingAttachments;
+  }
+
+  function setPendingAttachments(attachments) {
+    state.pendingAttachments = Array.isArray(attachments) ? attachments : [];
+  }
+
+  function addPendingAttachment(attachment) {
+    if (!attachment) {
+      return;
+    }
+    state.pendingAttachments.push(attachment);
+  }
+
+  function removePendingAttachment(index) {
+    state.pendingAttachments.splice(index, 1);
+  }
+
+  function clearPendingAttachments() {
+    state.pendingAttachments = [];
   }
 
   function getIncludeScreen() {
@@ -234,6 +258,9 @@ export function createPanelState() {
     getGoogleAudioQueueLength,
     getGoogleCurrentAudio,
     getIncludeScreen,
+    addPendingAttachment,
+    clearPendingAttachments,
+    getPendingAttachments,
     getPendingScreenshots,
     getPointer,
     getRecognition,
@@ -255,6 +282,8 @@ export function createPanelState() {
     setBrowserExecution,
     setGoogleCurrentAudio,
     setIncludeScreen,
+    removePendingAttachment,
+    setPendingAttachments,
     setPendingScreenshots,
     setPointer,
     setPttCleanup,

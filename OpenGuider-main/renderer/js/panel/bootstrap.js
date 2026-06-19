@@ -1,4 +1,5 @@
 import { createChatHistoryController } from "./chat-history.js";
+import { applyI18nToDocument, t } from "../i18n/index.js";
 import { createMessagingController } from "./messaging.js";
 import { createPlanView } from "./plan-view.js";
 import { createPttController } from "./ptt.js";
@@ -93,8 +94,8 @@ function getBrowserExecutionTerminalSummary(browserExecution) {
   }
 
   return browserExecution?.status === "success"
-    ? "Task completed."
-    : "Task finished with issues.";
+    ? t("taskCompleted")
+    : t("taskFinishedIssues");
 }
 
 function createStepApprovalController({ dom, log, win = window }) {
@@ -343,13 +344,13 @@ export function createPanelController({
 
   function getActionShortcutMap() {
     return [
-      { settingKey: "previousStepShortcut", action: () => api.invoke("previous-step"), button: dom.btnPlanPrev, title: "Previous step" },
-      { settingKey: "markStepDoneShortcut", action: () => api.invoke("mark-step-done"), button: dom.btnPlanDone, title: "Mark done" },
-      { settingKey: "skipCurrentStepShortcut", action: () => api.invoke("skip-current-step"), button: dom.btnPlanSkip, title: "Skip step" },
-      { settingKey: "requestStepHelpShortcut", action: () => api.invoke("request-step-help"), button: dom.btnPlanHelp, title: "Need help" },
-      { settingKey: "regenerateCurrentStepShortcut", action: () => api.invoke("regenerate-current-step"), button: dom.btnPlanRegenerate, title: "Regenerate step" },
-      { settingKey: "recheckCurrentStepShortcut", action: () => api.invoke("recheck-current-step"), button: dom.btnPlanRecheck, title: "Re-check" },
-      { settingKey: "cancelActivePlanShortcut", action: () => api.invoke("cancel-active-plan"), button: dom.btnPlanCancel, title: "Cancel plan" },
+      { settingKey: "previousStepShortcut", action: () => api.invoke("previous-step"), button: dom.btnPlanPrev, title: t("shortcutPlanPrev") },
+      { settingKey: "markStepDoneShortcut", action: () => api.invoke("mark-step-done"), button: dom.btnPlanDone, title: t("shortcutPlanDone") },
+      { settingKey: "skipCurrentStepShortcut", action: () => api.invoke("skip-current-step"), button: dom.btnPlanSkip, title: t("shortcutPlanSkip") },
+      { settingKey: "requestStepHelpShortcut", action: () => api.invoke("request-step-help"), button: dom.btnPlanHelp, title: t("shortcutPlanHelp") },
+      { settingKey: "regenerateCurrentStepShortcut", action: () => api.invoke("regenerate-current-step"), button: dom.btnPlanRegenerate, title: t("shortcutPlanRegenerate") },
+      { settingKey: "recheckCurrentStepShortcut", action: () => api.invoke("recheck-current-step"), button: dom.btnPlanRecheck, title: t("shortcutPlanRecheck") },
+      { settingKey: "cancelActivePlanShortcut", action: () => api.invoke("cancel-active-plan"), button: dom.btnPlanCancel, title: t("shortcutPlanCancel") },
     ];
   }
 
@@ -379,11 +380,16 @@ export function createPanelController({
     dom.btnPlanCancel.disabled = !enabled;
   }
 
-  function updatePlanActionVisibility(_assistantMode, _sessionSnapshot = null) {
+  function updatePlanActionVisibility(_assistantMode, sessionSnapshot = null) {
     if (!dom.panelActions) {
       return;
     }
-    dom.panelActions.classList.add("hidden");
+    const snapshot = sessionSnapshot || state.getSessionSnapshot();
+    const hasActivePlan = Boolean(snapshot?.activePlan);
+    const waitingUser = snapshot?.status === "waiting_user";
+    const browserActive = isActiveBrowserExecution(snapshot?.browserExecution || state.getBrowserExecution());
+    const shouldShow = hasActivePlan && waitingUser && !browserActive;
+    dom.panelActions.classList.toggle("hidden", !shouldShow);
   }
 
   function updateModeBarStepCounter(stepNumber) {
@@ -491,6 +497,91 @@ export function createPanelController({
     }
     stepApproval.syncBrowserExecution(browserExecution || null);
     updatePlanActionVisibility(state.getSetting("assistantMode") || "fast");
+  }
+
+  function setupAttachmentHandlers() {
+    const MAX_ATTACHMENTS = 5;
+    const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+
+    function refreshAttachmentStrip() {
+      ui.renderAttachmentPreviewStrip(state.getPendingAttachments(), (index) => {
+        state.removePendingAttachment(index);
+        refreshAttachmentStrip();
+      });
+    }
+
+    async function readFileAsAttachment(file) {
+      if (file.type.startsWith("image/")) {
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ""));
+          reader.onerror = () => reject(reader.error || new Error("read failed"));
+          reader.readAsDataURL(file);
+        });
+        const base64Jpeg = dataUrl.split(",")[1] || "";
+        return { type: "image", name: file.name, base64Jpeg, size: file.size };
+      }
+
+      const content = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(reader.error || new Error("read failed"));
+        reader.readAsText(file);
+      });
+      return { type: "text", name: file.name, content, size: file.size };
+    }
+
+    async function addFiles(fileList) {
+      const files = Array.from(fileList || []);
+      for (const file of files) {
+        if (state.getPendingAttachments().length >= MAX_ATTACHMENTS) {
+          ui.showToast("En fazla 5 ek eklenebilir", true);
+          break;
+        }
+        if (file.size > MAX_ATTACHMENT_BYTES) {
+          ui.showToast(`${file.name} çok büyük (max 5MB)`, true);
+          continue;
+        }
+        try {
+          const attachment = await readFileAsAttachment(file);
+          state.addPendingAttachment(attachment);
+        } catch (error) {
+          log("attachment-read-error", error);
+          ui.showToast(`${file.name} okunamadı`, true);
+        }
+      }
+      refreshAttachmentStrip();
+    }
+
+    const dropTargets = [dom.chatArea, dom.chatMessages].filter(Boolean);
+    for (const target of dropTargets) {
+      target.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        target.classList.add("is-dragover");
+      });
+      target.addEventListener("dragleave", () => {
+        target.classList.remove("is-dragover");
+      });
+      target.addEventListener("drop", (event) => {
+        event.preventDefault();
+        target.classList.remove("is-dragover");
+        if (event.dataTransfer?.files?.length) {
+          void addFiles(event.dataTransfer.files);
+        }
+      });
+    }
+
+    dom.chatArea?.addEventListener("paste", (event) => {
+      const items = Array.from(event.clipboardData?.items || []);
+      const files = items
+        .filter((item) => item.kind === "file")
+        .map((item) => item.getAsFile())
+        .filter(Boolean);
+      if (files.length > 0) {
+        event.preventDefault();
+        void addFiles(files);
+      }
+    });
   }
 
   function bindEvents() {
@@ -612,11 +703,34 @@ export function createPanelController({
       void messaging.regenerateLastResponse();
     });
 
+    doc.addEventListener("openguide:edit-message", (event) => {
+      const index = Number(event.detail?.index);
+      if (!Number.isFinite(index)) {
+        return;
+      }
+      void messaging.editMessage(index);
+    });
+
+    doc.addEventListener("openguide:delete-message", (event) => {
+      const index = Number(event.detail?.index);
+      if (!Number.isFinite(index)) {
+        return;
+      }
+      void messaging.deleteMessage(index);
+    });
+
+    setupAttachmentHandlers();
+
     doc.addEventListener("keydown", (event) => {
       const isMod = event.ctrlKey || event.metaKey;
       if (isMod && event.key.toLowerCase() === "n" && !event.shiftKey) {
         event.preventDefault();
         void chatHistory.createNewChat();
+        return;
+      }
+      if (isMod && event.key.toLowerCase() === "k" && !event.shiftKey) {
+        event.preventDefault();
+        chatHistory.openDrawer();
         return;
       }
       if (isMod && event.shiftKey && event.key.toLowerCase() === "f") {
@@ -675,6 +789,20 @@ export function createPanelController({
     api.on("finops-budget-alert", (payload) => {
       const message = payload?.message || "AI bütçe uyarısı";
       ui.showToast(message, payload?.level === "exhausted" || payload?.level === "warning");
+    });
+
+    api.on("browser-agent-status-changed", (status) => {
+      const statusText = String(status || "");
+      if (!statusText.startsWith("crashed")) {
+        return;
+      }
+      const detail = statusText.replace(/^crashed:\s*/i, "").trim();
+      ui.showErrorBanner({
+        title: t("browserCrashTitle"),
+        message: detail || t("browserCrashMessage"),
+        actionLabel: t("openSettings"),
+        onAction: () => api.invoke("open-settings"),
+      });
     });
 
     api.on("session-updated", (snapshot) => {
@@ -740,6 +868,7 @@ export function createPanelController({
 
   async function init() {
     log("init:start");
+    applyI18nToDocument(doc);
     const settings = await api.invoke("get-settings");
     const session = await api.invoke("get-active-session");
     state.setSettings(settings);

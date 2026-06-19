@@ -96,6 +96,37 @@ class SessionManager extends EventEmitter {
     }
   }
 
+  updateMessage(index, content) {
+    const targetIndex = Number(index);
+    const message = this.session.messages[targetIndex];
+    if (!message || !content) {
+      return false;
+    }
+    message.content = String(content);
+    this.emitUpdate();
+    return true;
+  }
+
+  deleteMessage(index) {
+    const targetIndex = Number(index);
+    if (targetIndex < 0 || targetIndex >= this.session.messages.length) {
+      return false;
+    }
+    this.session.messages.splice(targetIndex, 1);
+    this.emitUpdate();
+    return true;
+  }
+
+  truncateAfter(index) {
+    const targetIndex = Number(index);
+    if (targetIndex < 0 || targetIndex >= this.session.messages.length) {
+      return false;
+    }
+    this.session.messages = this.session.messages.slice(0, targetIndex + 1);
+    this.emitUpdate();
+    return true;
+  }
+
   setMessages(messages) {
     this.session.messages = Array.isArray(messages) ? messages.slice() : [];
     this.emitUpdate();

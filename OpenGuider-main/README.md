@@ -34,6 +34,16 @@ It combines chat, planning, screenshot context, pointer hints, optional voice fe
 - Supports multiple model providers so you can switch based on speed/cost/quality.
 - Adds optional speech-to-text and text-to-speech for hands-free usage.
 
+## v1.0 Highlights
+
+- **Chat UX:** Edit/delete messages, regenerate, drag-drop attachments, chat folders
+- **Artifacts:** Side panel for code blocks (open, edit, copy, download)
+- **Persona & memory:** Custom system prompt and per-line user memory facts in Settings
+- **Local backup:** Export/import all chat sessions as JSON (auto backup on startup/shutdown)
+- **FinOps:** Session vs total spend in the header badge
+- **Stability:** Panel and Settings renderer crash recovery
+- **Docs:** [Turkish user guide](docs/user-guide-tr.md) · [Manual test checklist](docs/MANUAL-TEST-CHECKLIST.md)
+
 ## Feature Breakdown
 
 ### 1) Multi-Provider AI Layer

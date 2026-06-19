@@ -496,7 +496,7 @@ async function runProviderStream({ text, images, history, settings, onChunk, sig
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
-async function streamAIResponse({ text, images, history, settings, onChunk, signal, operation = "chat", complexityHint = "low" }) {
+async function streamAIResponse({ text, images, history, settings, onChunk, signal, operation = "chat", complexityHint = "low", sessionId = "" }) {
   const liveSettings = await prepareLlmCall(settings || {}, { operation, complexityHint });
   const provider = liveSettings.aiProvider || "claude";
   const model = liveSettings.aiModel || "default";
@@ -525,6 +525,7 @@ async function streamAIResponse({ text, images, history, settings, onChunk, sign
       completionText: fullText,
       providerUsage,
       latencyMs: Date.now() - startMs,
+      sessionId,
     }).catch(() => {});
   });
 

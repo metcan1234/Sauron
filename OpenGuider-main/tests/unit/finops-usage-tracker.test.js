@@ -8,6 +8,7 @@ const {
   resolveUsageLogPath,
   trackCall,
   getTotalSpentTl,
+  getUsageSummary,
   resetWriteQueueForTests,
 } = require("../../src/sauron/finops/usage-tracker");
 
@@ -59,6 +60,25 @@ test("trackCall writes jsonl records through write queue", async () => {
 
   const total = await getTotalSpentTl(settings);
   assert.equal(total, 0.5);
+
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test("getUsageSummary separates sessionSpentTl from totalSpentTl", async () => {
+  resetWriteQueueForTests();
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "finops-session-"));
+  const settings = { workspacePath: tempRoot, finopsTotalBudgetTl: 100 };
+
+  trackCall({ costTl: 1.5, operation: "chat", sessionId: "session-a" }, settings);
+  trackCall({ costTl: 2.0, operation: "chat", sessionId: "session-b" }, settings);
+  trackCall({ costTl: 0.5, operation: "chat" }, settings);
+
+  await new Promise((resolve) => setTimeout(resolve, 500));
+
+  const summary = await getUsageSummary(settings, { chatSessionId: "session-a" });
+  assert.equal(summary.totalSpentTl, 4);
+  assert.equal(summary.sessionSpentTl, 1.5);
+  assert.equal(summary.chatSessionId, "session-a");
 
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });

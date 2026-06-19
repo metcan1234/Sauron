@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
@@ -8,44 +8,41 @@
 </head>
 <body>
 <div class="panel">
-  <!-- Header -->
   <div class="header">
     <div class="header-logo">
       <img src="assets/logo.png" alt="Sauron">
     </div>
-    <span class="header-title">Sauron Core</span>
-    <span class="finops-badge hidden" id="finops-badge" title="FinOps"></span>
-    <span class="agent-status" id="agent-status">idle</span>
+    <span class="header-title" data-i18n="appTitle">Sauron Core</span>
+    <span class="finops-badge hidden" id="finops-badge" data-i18n="finopsTitle" data-i18n-attr="title" title="FinOps"></span>
+    <span class="agent-status" id="agent-status" data-i18n="agentIdle">boşta</span>
     <div class="header-actions">
-      <button class="icon-btn" id="btn-chat-history" title="Sohbet geçmişi">☰</button>
-      <button class="icon-btn workspace-btn" id="btn-workspace" title="Çalışma Kısmı">⌘</button>
-      <button class="icon-btn" id="btn-settings"   title="Settings">⚙</button>
-      <button class="icon-btn" id="btn-close"      title="Hide" style="-webkit-app-region:no-drag">✕</button>
+      <button class="icon-btn" id="btn-chat-history" data-i18n="chatHistory" data-i18n-attr="title" title="Sohbet geçmişi">☰</button>
+      <button class="icon-btn workspace-btn" id="btn-workspace" data-i18n="workspace" data-i18n-attr="title" title="Çalışma Kısmı">⌘</button>
+      <button class="icon-btn" id="btn-settings" data-i18n="settings" data-i18n-attr="title" title="Ayarlar">⚙</button>
+      <button class="icon-btn" id="btn-close" data-i18n="hide" data-i18n-attr="title" title="Gizle" style="-webkit-app-region:no-drag">✕</button>
     </div>
   </div>
 
-  <!-- Model bar -->
   <div class="model-bar">
-    <span class="model-badge">Model</span>
+    <span class="model-badge" data-i18n="model">Model</span>
     <span class="provider-dot" id="provider-dot"></span>
     <select class="model-select" id="model-select"></select>
-    <button class="clear-btn" id="btn-clear" title="Clear Conversation">🗑</button>
+    <button class="clear-btn" id="btn-clear" data-i18n="clearConversation" data-i18n-attr="title" title="Sohbeti temizle">🗑</button>
   </div>
 
   <div class="mode-bar hidden" id="mode-bar" aria-hidden="true">
-    <div class="mode-bar-section mode-bar-left" id="mode-bar-plugin">⬡ BROWSER EXECUTING</div>
+    <div class="mode-bar-section mode-bar-left" id="mode-bar-plugin" data-i18n="browserExecuting">⬡ TARAYICI ÇALIŞIYOR</div>
     <div class="mode-bar-section mode-bar-center">
-      <span class="mode-bar-badge" id="mode-bar-trust">● AUTOPILOT</span>
+      <span class="mode-bar-badge" id="mode-bar-trust" data-i18n="autopilot">● OTOPİLOT</span>
     </div>
-    <div class="mode-bar-section mode-bar-right" id="mode-bar-step">STEP 0 / ?</div>
+    <div class="mode-bar-section mode-bar-right" id="mode-bar-step" data-i18n="stepCounter">ADIM 0 / ?</div>
   </div>
 
-  <!-- Chat messages -->
   <div class="chat-area" id="chat-area">
     <div class="chat-background" id="chat-background">
       <div class="empty-state" id="chat-background-content">
         <img src="assets/logo.png" alt="Sauron" class="empty-logo" id="chat-background-logo">
-        <p>Ask me anything.<br/><strong>Type</strong> below or hold <kbd>Ctrl+Shift+Space</kbd> to speak.</p>
+        <p id="empty-state-hint">Bana bir şey sor.<br/><strong>Yaz</strong> veya <kbd>Ctrl+Shift+Space</kbd> ile konuş.</p>
       </div>
     </div>
     <div class="chat-messages" id="chat-messages"></div>
@@ -65,13 +62,13 @@
   </div>
 
   <div class="panel-actions hidden" id="panel-actions">
-    <button class="action-btn" id="btn-plan-prev" title="Previous step" type="button"><span class="action-icon">←</span><span>Back</span></button>
-    <button class="action-btn primary" id="btn-plan-done" title="Mark done" type="button"><span class="action-icon">✓</span><span>Done</span></button>
-    <button class="action-btn" id="btn-plan-skip" title="Skip step" type="button"><span class="action-icon">⤼</span><span>Skip</span></button>
-    <button class="action-btn" id="btn-plan-help" title="Need help" type="button"><span class="action-icon">?</span><span>Help</span></button>
-    <button class="action-btn" id="btn-plan-regenerate" title="Regenerate step" type="button"><span class="action-icon">⟳</span><span>Redo</span></button>
-    <button class="action-btn" id="btn-plan-recheck" title="Re-check" type="button"><span class="action-icon">↻</span><span>Re-check</span></button>
-    <button class="action-btn danger" id="btn-plan-cancel" title="Cancel plan" type="button"><span class="action-icon">✕</span><span>Cancel</span></button>
+    <button class="action-btn" id="btn-plan-prev" data-i18n="planPrev" data-i18n-attr="title" type="button"><span class="action-icon">←</span><span data-i18n="planBack">Geri</span></button>
+    <button class="action-btn primary" id="btn-plan-done" data-i18n="planMarkDone" data-i18n-attr="title" type="button"><span class="action-icon">✓</span><span data-i18n="planDone">Tamamlandı</span></button>
+    <button class="action-btn" id="btn-plan-skip" data-i18n="planSkip" data-i18n-attr="title" type="button"><span class="action-icon">⤼</span><span data-i18n="planSkip">Atla</span></button>
+    <button class="action-btn" id="btn-plan-help" data-i18n="planHelp" data-i18n-attr="title" type="button"><span class="action-icon">?</span><span data-i18n="planHelp">Yardım</span></button>
+    <button class="action-btn" id="btn-plan-regenerate" data-i18n="planRegenerate" data-i18n-attr="title" type="button"><span class="action-icon">⟳</span><span data-i18n="planRedo">Yeniden dene</span></button>
+    <button class="action-btn" id="btn-plan-recheck" data-i18n="planRecheck" data-i18n-attr="title" type="button"><span class="action-icon">↻</span><span data-i18n="planRecheck">Tekrar kontrol</span></button>
+    <button class="action-btn danger" id="btn-plan-cancel" data-i18n="planCancel" data-i18n-attr="title" type="button"><span class="action-icon">✕</span><span data-i18n="planCancel">İptal</span></button>
   </div>
 
   <div class="workspace-status-banner hidden" id="workspace-status-banner">
@@ -81,28 +78,28 @@
     </div>
     <div class="workspace-status-actions">
       <button class="workspace-status-btn" id="workspace-status-focus" type="button">VS Code'a git</button>
-      <button class="workspace-status-btn ghost" id="workspace-status-dismiss" type="button">Kapat</button>
+      <button class="workspace-status-btn ghost" id="workspace-status-dismiss" type="button" data-i18n="dismiss">Kapat</button>
     </div>
   </div>
 
   <div class="error-banner hidden" id="error-banner">
     <div class="error-banner-main">
-      <strong id="error-banner-title">Something went wrong</strong>
+      <strong id="error-banner-title" data-i18n="errorDefaultTitle">Bir hata oluştu</strong>
       <span id="error-banner-message"></span>
       <span class="error-banner-request" id="error-banner-request"></span>
     </div>
     <div class="error-banner-actions">
-      <button class="error-banner-btn" id="error-banner-action" type="button">Open settings</button>
-      <button class="error-banner-btn ghost" id="error-banner-dismiss" type="button">Dismiss</button>
+      <button class="error-banner-btn" id="error-banner-action" type="button" data-i18n="openSettings">Ayarları aç</button>
+      <button class="error-banner-btn ghost" id="error-banner-dismiss" type="button" data-i18n="dismiss">Kapat</button>
     </div>
   </div>
 
-  <!-- Input area -->
   <div class="input-area">
+    <div class="attachment-preview-strip hidden" id="attachment-preview-strip"></div>
     <div class="input-row">
       <span class="mode-badge" id="assistant-mode-badge" title="Sohbet, rehberlik ve asistanlık">Asistan</span>
-      <textarea class="text-input" id="text-input" placeholder="Ask anything..." rows="1"></textarea>
-      <button class="ptt-btn" id="ptt-btn" title="Hold to talk">⏺
+      <textarea class="text-input" id="text-input" data-i18n-placeholder="askPlaceholder" placeholder="Bana bir şey sor…" rows="1"></textarea>
+      <button class="ptt-btn" id="ptt-btn" data-i18n="holdToTalk" data-i18n-attr="title" title="Konuşmak için basılı tut">⏺
         <span class="waveform" id="waveform" style="display:none">
           <span class="waveform-bar" id="wb1"></span>
           <span class="waveform-bar" id="wb2"></span>
@@ -111,11 +108,23 @@
           <span class="waveform-bar" id="wb5"></span>
         </span>
       </button>
-      <button class="send-btn" id="send-btn" title="Send">➤</button>
-      <button class="stop-btn hidden" id="stop-btn" title="Stop">⏹</button>
+      <button class="send-btn" id="send-btn" data-i18n="send" data-i18n-attr="title" title="Gönder">➤</button>
+      <button class="stop-btn hidden" id="stop-btn" data-i18n="stop" data-i18n-attr="title" title="Durdur">⏹</button>
     </div>
   </div>
 </div>
+
+<aside class="artifact-panel hidden" id="artifact-panel" aria-hidden="true">
+  <div class="artifact-panel-header">
+    <h3 id="artifact-panel-title">Artifact</h3>
+    <div class="artifact-panel-actions">
+      <button class="artifact-panel-btn" id="artifact-panel-copy" type="button">Kopyala</button>
+      <button class="artifact-panel-btn" id="artifact-panel-download" type="button">İndir</button>
+      <button class="artifact-panel-btn ghost" id="artifact-panel-close" type="button">✕</button>
+    </div>
+  </div>
+  <textarea class="artifact-panel-content" id="artifact-panel-content" spellcheck="false"></textarea>
+</aside>
 
 <div class="chat-drawer-overlay hidden" id="chat-drawer-overlay" aria-hidden="true">
   <aside class="chat-drawer" id="chat-drawer" role="dialog" aria-labelledby="chat-drawer-title">
@@ -125,6 +134,7 @@
     </div>
     <input class="chat-drawer-search" id="chat-drawer-search" type="search" placeholder="Sohbetlerde ara..." autocomplete="off" />
     <button class="chat-drawer-new" id="chat-drawer-new" type="button">+ Yeni sohbet</button>
+    <button class="chat-drawer-create-folder" id="chat-drawer-create-folder" type="button">📁 Yeni klasör</button>
     <button class="chat-drawer-ephemeral" id="chat-drawer-ephemeral" type="button">⏱ Geçici sohbet</button>
     <div class="chat-drawer-list" id="chat-drawer-list"></div>
     <div class="chat-drawer-footer">
@@ -137,26 +147,26 @@
 
 <div class="onboarding-overlay hidden" id="onboarding-overlay" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
   <div class="onboarding-modal">
-    <h3 id="onboarding-title">Welcome to Sauron</h3>
-    <p id="onboarding-subtitle">Before first use, review these setup and security notes.</p>
+    <h3 id="onboarding-title" data-i18n="onboardingTitle">Sauron'a hoş geldin</h3>
+    <p id="onboarding-subtitle" data-i18n="onboardingSubtitle">İlk kullanımdan önce kurulum ve güvenlik notlarına göz at.</p>
     <ol class="onboarding-steps">
-      <li>Open <strong>Settings</strong> and add your AI provider API key. API keys are obtained directly from your selected provider dashboard (OpenAI, Anthropic, Google, Groq, OpenRouter, Ollama, etc.).</li>
-      <li>Required permissions are microphone access (push-to-talk) and optional screen capture guidance. Installer metadata can document these permissions; runtime prompts are requested only when needed.</li>
-      <li>Your API keys are stored locally using secure OS storage when available (with encrypted fallback). Sauron Core only sends HTTPS requests to the AI providers you configure.</li>
+      <li data-i18n="onboardingStep1">Ayarlar'dan AI sağlayıcı API anahtarını ekle. Anahtarlar yalnızca yerelde saklanır.</li>
+      <li data-i18n="onboardingStep2">Mikrofon (bas-konuş) ve isteğe bağlı ekran görüntüsü izinleri gerekebilir.</li>
+      <li data-i18n="onboardingStep3">API anahtarların güvenli depolamada tutulur; yalnızca seçtiğin sağlayıcıya HTTPS istekleri gider.</li>
     </ol>
     <div class="onboarding-actions">
-      <button class="confirm-btn" id="onboarding-open-settings" type="button">Open settings</button>
+      <button class="confirm-btn" id="onboarding-open-settings" type="button" data-i18n="openSettings">Ayarları aç</button>
     </div>
   </div>
 </div>
 
 <div class="confirm-overlay hidden" id="confirm-overlay" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
   <div class="confirm-modal">
-    <h3 id="confirm-title">Clear Conversation?</h3>
-    <p id="confirm-message">This will remove all chat history and active plan progress.</p>
+    <h3 id="confirm-title" data-i18n="confirmClearTitle">Sohbet temizlensin mi?</h3>
+    <p id="confirm-message" data-i18n="confirmClearMessage">Tüm sohbet geçmişi ve aktif plan ilerlemesi silinecek.</p>
     <div class="confirm-actions">
-      <button class="confirm-btn ghost" id="confirm-cancel" type="button">Cancel</button>
-      <button class="confirm-btn danger" id="confirm-confirm" type="button">Clear</button>
+      <button class="confirm-btn ghost" id="confirm-cancel" type="button" data-i18n="cancel">İptal</button>
+      <button class="confirm-btn danger" id="confirm-confirm" type="button" data-i18n="confirmClear">Temizle</button>
     </div>
   </div>
 </div>
@@ -167,7 +177,7 @@
     <p id="prompt-message"></p>
     <input class="prompt-input" id="prompt-input" type="text" autocomplete="off" />
     <div class="confirm-actions">
-      <button class="confirm-btn ghost" id="prompt-cancel" type="button">İptal</button>
+      <button class="confirm-btn ghost" id="prompt-cancel" type="button" data-i18n="cancel">İptal</button>
       <button class="confirm-btn" id="prompt-confirm" type="button">Kaydet</button>
     </div>
   </div>
@@ -177,4 +187,3 @@
 <script type="module" src="js/app.js"></script>
 </body>
 </html>
-
