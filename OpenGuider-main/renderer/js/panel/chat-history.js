@@ -45,7 +45,13 @@ export function createChatHistoryController({ api, doc = document, dom, log, ui,
 
   async function promptRename(session) {
     const currentTitle = session.title || "Yeni sohbet";
-    const nextTitle = win.prompt("Sohbet adını düzenle:", currentTitle);
+    const nextTitle = await ui.promptDialog({
+      title: "Sohbet adını düzenle",
+      message: "Yeni sohbet adını girin:",
+      defaultValue: currentTitle,
+      confirmLabel: "Kaydet",
+      cancelLabel: "İptal",
+    });
     if (nextTitle === null) {
       return;
     }
@@ -138,6 +144,9 @@ export function createChatHistoryController({ api, doc = document, dom, log, ui,
       if (session.pinned) {
         item.classList.add("is-pinned");
       }
+      if (session.ephemeral) {
+        item.classList.add("is-ephemeral");
+      }
       item.dataset.sessionId = session.id;
 
       const body = doc.createElement("div");
@@ -145,7 +154,9 @@ export function createChatHistoryController({ api, doc = document, dom, log, ui,
 
       const title = doc.createElement("div");
       title.className = "chat-drawer-item-title";
-      title.textContent = session.title || "Yeni sohbet";
+      title.textContent = session.ephemeral
+        ? `${session.title || "Geçici sohbet"} · geçici`
+        : (session.title || "Yeni sohbet");
 
       const meta = doc.createElement("div");
       meta.className = "chat-drawer-item-meta";
@@ -169,6 +180,10 @@ export function createChatHistoryController({ api, doc = document, dom, log, ui,
       pinBtn.className = `chat-drawer-item-pin${session.pinned ? " is-pinned" : ""}`;
       pinBtn.title = session.pinned ? "Sabitlemeyi kaldır" : "Sabitle";
       pinBtn.textContent = "📌";
+      if (session.ephemeral) {
+        pinBtn.disabled = true;
+        pinBtn.title = "Geçici sohbetler sabitlenemez";
+      }
       pinBtn.addEventListener("click", async (event) => {
         event.stopPropagation();
         try {
@@ -189,6 +204,10 @@ export function createChatHistoryController({ api, doc = document, dom, log, ui,
       renameBtn.className = "chat-drawer-item-rename";
       renameBtn.title = "Yeniden adlandır";
       renameBtn.textContent = "✏️";
+      if (session.ephemeral) {
+        renameBtn.disabled = true;
+        renameBtn.title = "Geçici sohbetler yeniden adlandırılamaz";
+      }
       renameBtn.addEventListener("click", async (event) => {
         event.stopPropagation();
         await promptRename(session);
@@ -209,6 +228,10 @@ export function createChatHistoryController({ api, doc = document, dom, log, ui,
       exportBtn.className = "chat-drawer-item-export";
       exportBtn.title = "Markdown olarak dışa aktar";
       exportBtn.textContent = "⬇";
+      if (session.ephemeral) {
+        exportBtn.disabled = true;
+        exportBtn.title = "Geçici sohbetler dışa aktarılamaz";
+      }
       exportBtn.addEventListener("click", async (event) => {
         event.stopPropagation();
         await exportSession(session.id);
@@ -352,12 +375,38 @@ export function createChatHistoryController({ api, doc = document, dom, log, ui,
     }
   }
 
+  async function createEphemeralChat() {
+    try {
+      const result = await api.invoke("create-ephemeral-chat-session");
+      if (!result?.ok && result?.session === undefined) {
+        ui.showToast(result?.error || "Geçici sohbet açılamadı", true);
+        return;
+      }
+      const snapshot = result.snapshot || result.session?.snapshot || { messages: [] };
+      state.setSessionSnapshot(snapshot);
+      ui.renderConversation(snapshot.messages || []);
+      ui.renderAgentState("idle");
+      ui.hideErrorBanner();
+      renderSessionList(result.sessions || []);
+      closeDrawer();
+      dom.textInput?.focus();
+      ui.showToast("Geçici sohbet — yeniden başlatınca kaybolur");
+    } catch (error) {
+      log("create-ephemeral-chat-session error", error);
+      ui.showToast("Geçici sohbet açılamadı", true);
+    }
+  }
+
   async function exportActiveSession() {
     try {
       const result = await api.invoke("list-chat-sessions");
       const active = (result?.sessions || []).find((entry) => entry.isActive);
       if (!active?.id) {
         ui.showToast("Aktif sohbet bulunamadı", true);
+        return;
+      }
+      if (active.ephemeral) {
+        ui.showToast("Geçici sohbetler dışa aktarılamaz", true);
         return;
       }
       await exportSession(active.id);
@@ -372,6 +421,9 @@ export function createChatHistoryController({ api, doc = document, dom, log, ui,
     dom.chatDrawerClose?.addEventListener("click", closeDrawer);
     dom.chatDrawerNew?.addEventListener("click", () => {
       void createNewChat();
+    });
+    dom.chatDrawerEphemeral?.addEventListener("click", () => {
+      void createEphemeralChat();
     });
     dom.chatDrawerExportActive?.addEventListener("click", () => {
       void exportActiveSession();
@@ -394,6 +446,7 @@ export function createChatHistoryController({ api, doc = document, dom, log, ui,
   return {
     bindEvents,
     closeDrawer,
+    createEphemeralChat,
     createNewChat,
     isDrawerOpen,
     openDrawer,

@@ -29,6 +29,8 @@ const {
   focusVSCodeWorkspace,
 } = require("./src/sauron/handoff");
 const { checkWorkspacePrerequisites } = require("./src/sauron/workspace-setup");
+const { bootstrapWorkspace } = require("./src/sauron/workspace-bootstrap");
+const { installWorkspaceStack } = require("./src/sauron/workspace-stack-installer");
 const { SessionManager } = require("./src/session/session-manager");
 const {
   clearSessionSnapshot,
@@ -36,6 +38,7 @@ const {
   saveSessionSnapshot,
 } = require("./src/session/session-persistence");
 const {
+  createEphemeralChatSession,
   createNewChatSession,
   deleteChatSession,
   listChatSessionSummaries,
@@ -51,8 +54,11 @@ const {
   toggleChatSessionPin,
   ensureChatSessionsState,
   loadChatSessionsState,
+  MAX_AI_CONTEXT_MESSAGES,
+  MAX_STORED_MESSAGES,
 } = require("./src/session/chat-sessions");
 const { emitPointerTool } = require("./src/agent/tools/pointer-tool");
+const { TaskOrchestrator } = require("./src/agent/task-orchestrator");
 const { formatStructuredUserError } = require("./src/ai/structured");
 const { configureFinOpsContext } = require("./src/sauron/finops/llm-tracker");
 const { getUsageSummary } = require("./src/sauron/finops/usage-tracker");
@@ -381,6 +387,37 @@ function attachWindowCrashHandlers(windowRef, name) {
       reason: details?.reason,
       exitCode: details?.exitCode,
     });
+
+    if (name === "widget") {
+      setTimeout(() => {
+        try {
+          if (widgetWindow && !widgetWindow.isDestroyed()) {
+            widgetWindow.destroy();
+          }
+        } catch (destroyError) {
+          appLogger.warn("widget-crash-destroy-failed", { error: destroyError });
+        }
+        widgetWindow = null;
+        ensureWidgetWindow();
+        if (isPanelVisible && widgetWindow && !widgetWindow.isDestroyed()) {
+          widgetWindow.show();
+        }
+      }, 400);
+      return;
+    }
+
+    if (name === "cursor-overlay") {
+      setTimeout(() => {
+        try {
+          if (cursorOverlayWindow && !cursorOverlayWindow.isDestroyed()) {
+            cursorOverlayWindow.destroy();
+          }
+        } catch (destroyError) {
+          appLogger.warn("cursor-overlay-crash-destroy-failed", { error: destroyError });
+        }
+        cursorOverlayWindow = null;
+      }, 400);
+    }
   });
   windowRef.webContents.on("unresponsive", () => {
     appLogger.warn("renderer-unresponsive", { window: name });
@@ -505,6 +542,13 @@ function createCursorOverlay() {
   screen.on("display-metrics-changed", resizeCursorOverlayToVirtualBounds);
 }
 
+function ensureCursorOverlay() {
+  if (!cursorOverlayWindow || cursorOverlayWindow.isDestroyed()) {
+    createCursorOverlay();
+  }
+  return cursorOverlayWindow;
+}
+
 // ── Widget window ─────────────────────────────────────────────────────────────
 function createWidgetWindow() {
   if (widgetWindow && !widgetWindow.isDestroyed()) return;
@@ -534,6 +578,13 @@ function createWidgetWindow() {
   widgetWindow.setPosition(wa.x + wa.width - WIDGET_WIDTH - 20, wa.y + 20);
 
   widgetWindow.on("closed", () => { widgetWindow = null; });
+}
+
+function ensureWidgetWindow() {
+  if (!widgetWindow || widgetWindow.isDestroyed()) {
+    createWidgetWindow();
+  }
+  return widgetWindow;
 }
 
 function positionWidgetBottomRight(nextHeight) {
@@ -1289,6 +1340,23 @@ function setupIPC() {
     return { ok: true, ...created, snapshot };
   });
 
+  ipcMain.handle("create-ephemeral-chat-session", () => {
+    debugLog("ipc:create-ephemeral-chat-session");
+    const created = createEphemeralChatSession(store, sessionManager);
+    const snapshot = sessionManager.getSnapshot();
+    broadcastSessionSnapshot(snapshot);
+    return { ok: true, ...created, snapshot };
+  });
+
+  ipcMain.handle("remove-last-assistant-message", () => {
+    debugLog("ipc:remove-last-assistant-message");
+    const removed = sessionManager.removeLastAssistantMessage();
+    persistActiveSession(store, sessionManager.getSnapshot());
+    const snapshot = sessionManager.getSnapshot();
+    broadcastSessionSnapshot(snapshot);
+    return { ok: removed, snapshot };
+  });
+
   ipcMain.handle("load-chat-session", (_event, { sessionId } = {}) => {
     debugLog("ipc:load-chat-session", { sessionId });
     const loaded = loadChatSession(store, sessionManager, sessionId);
@@ -1333,6 +1401,9 @@ function setupIPC() {
       const session = getChatSessionById(store, sessionId);
       if (!session) {
         return { ok: false, error: "Chat session not found." };
+      }
+      if (session.ephemeral) {
+        return { ok: false, error: "Geçici sohbetler dışa aktarılamaz." };
       }
 
       const markdown = formatChatExportMarkdown(session);
@@ -1599,7 +1670,7 @@ function setupIPC() {
   });
 
   // ── AI streaming ─────────────────────────────────────────────────────────
-  ipcMain.handle("send-message", async (event, { text, images, history, fastMode }) => {
+  ipcMain.handle("send-message", async (event, { text, images, history, fastMode, skipUserPersist, regenerate }) => {
     const requestContext = createRequestContext("send-message");
     const startedAt = Date.now();
     debugLog("ipc:send-message start", {
@@ -1608,12 +1679,27 @@ function setupIPC() {
       imageCount: images?.length || 0,
       historyCount: history?.length || 0,
       fastMode: Boolean(fastMode),
+      skipUserPersist: Boolean(skipUserPersist),
+      regenerate: Boolean(regenerate),
     });
     // Cancel any in-progress AI request
     if (currentAIController) currentAIController.abort();
     currentAIController = new AbortController();
     if (Array.isArray(images) && images.length > 0) {
       updatePointerCalibration(images);
+    }
+
+    const effectiveHistory = Array.isArray(history) && history.length > 0
+      ? history.slice(-MAX_AI_CONTEXT_MESSAGES)
+      : (sessionManager?.getSnapshot()?.messages || []).slice(-MAX_AI_CONTEXT_MESSAGES);
+
+    if (regenerate) {
+      sessionManager.removeLastAssistantMessage();
+    }
+
+    if (!skipUserPersist && text) {
+      sessionManager.addMessage({ role: "user", content: text });
+      sessionManager.trimMessages(MAX_STORED_MESSAGES);
     }
 
     broadcastAgentState("thinking");
@@ -1647,7 +1733,7 @@ function setupIPC() {
       }
 
       const fullText = await streamAIResponse({
-        text: enrichedText, images, history, settings: requestSettings,
+        text: enrichedText, images, history: effectiveHistory, settings: requestSettings,
         signal: currentAIController.signal,
         onChunk: (chunk) => {
           if (!event.sender.isDestroyed())
@@ -1656,6 +1742,10 @@ function setupIPC() {
       });
 
       const parsed = parsePointTag(fullText);
+      const assistantContent = parsed.spokenText || fullText;
+      sessionManager.addMessage({ role: "assistant", content: assistantContent });
+      sessionManager.trimMessages(MAX_STORED_MESSAGES);
+
       if (!event.sender.isDestroyed())
         event.sender.send("ai-done", { ...parsed, requestId: requestContext.requestId });
       broadcastAgentState("idle");
@@ -1747,9 +1837,10 @@ function setupIPC() {
   // ── Cursor ────────────────────────────────────────────────────────────────
   ipcMain.on("show-cursor-at", (_e, data) => {
     debugLog("ipc:show-cursor-at", data?.label || "element");
-    if (cursorOverlayWindow && !cursorOverlayWindow.isDestroyed()) {
-      cursorOverlayWindow.show();
-      cursorOverlayWindow.webContents.send("show-cursor-at", data);
+    const overlay = ensureCursorOverlay();
+    if (overlay && !overlay.isDestroyed()) {
+      overlay.show();
+      overlay.webContents.send("show-cursor-at", data);
     }
   });
   ipcMain.on("hide-cursor", () => {
@@ -1814,6 +1905,20 @@ function setupIPC() {
     return { ok: true, path: selectedPath };
   });
 
+  ipcMain.handle("install-workspace-stack", async (_event, options = {}) => {
+    debugLog("ipc:install-workspace-stack", options);
+    try {
+      const result = installWorkspaceStack({ force: Boolean(options?.force) });
+      const prerequisites = checkWorkspacePrerequisites();
+      return { ...result, prerequisites };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error?.message || "Workspace stack installation failed.",
+      };
+    }
+  });
+
   ipcMain.handle("check-workspace-prerequisites", () => {
     debugLog("ipc:check-workspace-prerequisites");
     try {
@@ -1875,13 +1980,25 @@ function setupIPC() {
         return { ok: false, error: `Workspace path does not exist: ${workspacePath}` };
       }
 
-      const prerequisites = checkWorkspacePrerequisites();
+      let prerequisites = checkWorkspacePrerequisites();
       if (!prerequisites.canOpenWorkspace) {
         return {
           ok: false,
           error: "VS Code CLI (code) bulunamadı. Kurulum adımları için uyarıyı kontrol edin.",
           prerequisites,
         };
+      }
+
+      if (!prerequisites.bridgeExtension) {
+        const installResult = installWorkspaceStack();
+        if (!installResult.ok) {
+          return {
+            ok: false,
+            error: installResult.error || "Sauron Bridge kurulamadı.",
+            prerequisites: checkWorkspacePrerequisites(),
+          };
+        }
+        prerequisites = checkWorkspacePrerequisites();
       }
 
       const pending = listPendingHandoffs(workspacePath);
@@ -1906,16 +2023,9 @@ function setupIPC() {
         chatSessionTitle: getActiveChatSessionTitle(store),
       };
       const payload = buildHandoffPayload(enrichedSnapshot, workspacePath, undefined, runtimeSettings);
+      await bootstrapWorkspace(workspacePath, runtimeSettings);
       const written = writeHandoff(workspacePath, payload);
-      seedSauronRules(workspacePath);
       const launchResult = await launchVSCode(workspacePath, { newWindow: true });
-      try {
-        await syncFinOpsConfigToWorkspace({ ...runtimeSettings, workspacePath });
-      } catch (syncError) {
-        appLogger.warn("finops-config-sync-on-handoff-failed", {
-          error: syncError?.message || syncError,
-        });
-      }
 
       return {
         ok: true,
@@ -2169,8 +2279,7 @@ app.whenReady().then(async () => {
   });
   createTray();
   createPanelWindow();
-  createCursorOverlay();
-  createWidgetWindow();
+  showPanel();
 
   // ── Register & initialize plugins [NEW] ───────────────────────────
   try {

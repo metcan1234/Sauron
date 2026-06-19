@@ -161,6 +161,57 @@ async function init() {
     }
   });
 
+  async function refreshWorkspaceStackStatus() {
+    const statusEl = document.getElementById("workspace-stack-status");
+    if (!statusEl) {
+      return;
+    }
+    try {
+      const prerequisites = await window.openguider.invoke("check-workspace-prerequisites");
+      const bridgeOk = Boolean(prerequisites?.bridgeExtension);
+      const clineOk = Boolean(prerequisites?.clineExtension);
+      if (bridgeOk && clineOk) {
+        statusEl.textContent = "Hazır — Bridge + Cline kurulu";
+      } else if (bridgeOk) {
+        statusEl.textContent = "Bridge kurulu — Cline eksik";
+      } else if (clineOk) {
+        statusEl.textContent = "Cline kurulu — Bridge eksik (⌘ ile otomatik kurulur)";
+      } else {
+        statusEl.textContent = "Bridge ve Cline eksik";
+      }
+    } catch {
+      statusEl.textContent = "Durum okunamadı";
+    }
+  }
+
+  document.getElementById("btn-install-workspace-stack")?.addEventListener("click", async () => {
+    const statusEl = document.getElementById("workspace-stack-status");
+    const button = document.getElementById("btn-install-workspace-stack");
+    if (button) {
+      button.disabled = true;
+    }
+    if (statusEl) {
+      statusEl.textContent = "Bridge kuruluyor…";
+    }
+    try {
+      const result = await window.openguider.invoke("install-workspace-stack", { force: true });
+      if (result?.ok) {
+        if (statusEl) {
+          statusEl.textContent = "Bridge kuruldu";
+        }
+      } else if (statusEl) {
+        statusEl.textContent = result?.error || "Kurulum başarısız";
+      }
+      await refreshWorkspaceStackStatus();
+    } finally {
+      if (button) {
+        button.disabled = false;
+      }
+    }
+  });
+
+  void refreshWorkspaceStackStatus();
+
   bindSettingsTabs();
   bindPluginCards();
   bindShortcutRecordButtons();

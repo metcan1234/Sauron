@@ -145,7 +145,7 @@ export function createPanelController({
   let workspacePollTimer = null;
 
   const HANDOFF_POLL_INTERVAL_MS = 2000;
-  const HANDOFF_POLL_TIMEOUT_MS = 60000;
+  const HANDOFF_POLL_TIMEOUT_MS = 90000;
 
   function stopWorkspaceHandoffPoll() {
     if (workspacePollTimer) {
@@ -204,7 +204,7 @@ export function createPanelController({
             stopWorkspaceHandoffPoll();
             ui.showWorkspaceStatus({
               title: "Bridge yanıt vermedi",
-              message: "VS Code açıldı ama handoff henüz işlenmedi. Bridge + Cline kurulumunu kontrol edin.",
+              message: "VS Code açıldı ama handoff henüz işlenmedi. Cline sidebar'ını açın (saoudrizwan.claude-dev) ve Bridge kurulumunu kontrol edin.",
               tone: "warning",
               onFocus: () => api.invoke("focus-workspace-vscode"),
             });
@@ -251,7 +251,7 @@ export function createPanelController({
     ui.hideWorkspaceStatus();
 
     try {
-      const prerequisites = await api.invoke("check-workspace-prerequisites");
+      let prerequisites = await api.invoke("check-workspace-prerequisites");
       if (!prerequisites?.canOpenWorkspace) {
         ui.showErrorBanner({
           title: "VS Code kurulumu eksik",
@@ -262,15 +262,31 @@ export function createPanelController({
         return;
       }
 
-      if (!prerequisites?.ok) {
-        const proceedWithoutBridge = await ui.confirmDialog({
-          title: "Eklenti kurulumu eksik",
-          message: `${formatSetupWarnings(prerequisites)}\n\nVS Code açılır ama Cline görevi otomatik başlamayabilir. Yine de devam edilsin mi?`,
+      if (!prerequisites?.bridgeExtension) {
+        ui.showToast("Sauron Bridge kuruluyor…", false);
+        const installResult = await api.invoke("install-workspace-stack");
+        if (!installResult?.ok) {
+          ui.showErrorBanner({
+            title: "Bridge kurulamadı",
+            message: installResult?.error || formatSetupWarnings(installResult?.prerequisites) || "VS Code eklentisi kurulamadı.",
+            actionLabel: "Kurulum rehberi",
+            onAction: () => api.invoke("open-external-link", "https://github.com/metcan1234/Sauron#kurulum"),
+          });
+          return;
+        }
+        prerequisites = installResult.prerequisites || await api.invoke("check-workspace-prerequisites");
+        ui.showToast("Sauron Bridge kuruldu", false);
+      }
+
+      if (!prerequisites?.clineExtension) {
+        const proceedWithoutCline = await ui.confirmDialog({
+          title: "Cline extension eksik",
+          message: "Cline yüklü değil. VS Code açılır ama görev otomatik başlamaz.\n\nMarketplace'ten Cline (saoudrizwan.claude-dev) kurup devam edilsin mi?",
           confirmLabel: "Devam",
           cancelLabel: "İptal",
           confirmDanger: false,
         });
-        if (!proceedWithoutBridge) {
+        if (!proceedWithoutCline) {
           return;
         }
       }
@@ -592,6 +608,37 @@ export function createPanelController({
       await api.invoke("open-settings");
     });
 
+    doc.addEventListener("openguide:regenerate-response", () => {
+      void messaging.regenerateLastResponse();
+    });
+
+    doc.addEventListener("keydown", (event) => {
+      const isMod = event.ctrlKey || event.metaKey;
+      if (isMod && event.key.toLowerCase() === "n" && !event.shiftKey) {
+        event.preventDefault();
+        void chatHistory.createNewChat();
+        return;
+      }
+      if (isMod && event.shiftKey && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        chatHistory.openDrawer();
+        return;
+      }
+      if (isMod && event.key === "Enter" && document.activeElement === dom.textInput) {
+        event.preventDefault();
+        messaging.sendMessage();
+        return;
+      }
+      if (event.key === "Escape") {
+        if (chatHistory.isDrawerOpen()) {
+          chatHistory.closeDrawer();
+          return;
+        }
+        if (state.isStreaming()) {
+          messaging.cancelMessage();
+        }
+      }
+    });
   }
 
   function setupIPCListeners() {
@@ -640,9 +687,8 @@ export function createPanelController({
       ui.renderAgentState(snapshot?.status === "executing" ? "idle" : (snapshot?.status || "idle"));
       updatePlanActionVisibility("fast", snapshot);
       updatePlanActionButtons(snapshot);
-      if (chatHistory.isDrawerOpen()) {
-        void chatHistory.refreshSessionList();
-      }
+      void chatHistory.refreshSessionList();
+      void ui.refreshFinOpsBadge();
     });
 
     api.on("execution:substep-progress", (substep) => {
@@ -679,9 +725,9 @@ export function createPanelController({
       const permissionState = await api.invoke("ensure-runtime-permissions");
       if (permissionState?.screenNeedsSettings) {
         ui.showErrorBanner({
-          title: "Screen recording permission needed",
-          message: "Sauron Core needs macOS Screen Recording permission for accurate screenshot guidance.",
-          actionLabel: "Open system settings",
+          title: "Ekran kaydı izni gerekli",
+          message: "Sauron Core, ekran görüntüsü rehberliği için macOS Ekran Kaydı iznine ihtiyaç duyar.",
+          actionLabel: "Sistem ayarlarını aç",
           onAction: () => {
             api.invoke("open-permission-settings", "screen");
           },
@@ -732,6 +778,7 @@ export function createPanelController({
     }
     await ensureRuntimePermissions();
     await updateWorkspaceButtonState();
+    await ui.refreshFinOpsBadge();
     dom.textInput.focus();
     log("init:complete");
   }

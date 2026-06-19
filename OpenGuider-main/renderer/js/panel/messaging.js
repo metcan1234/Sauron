@@ -1,3 +1,5 @@
+import { MAX_AI_CONTEXT_MESSAGES, MAX_STORED_MESSAGES } from "./constants.js";
+
 export function createMessagingController({
   api,
   doc = document,
@@ -51,6 +53,10 @@ export function createMessagingController({
     state.setSessionSnapshot(session);
     const nextMessages = state.getConversationHistory();
 
+    if (state.isStreaming()) {
+      return;
+    }
+
     if (
       previousMessages.length > nextMessages.length ||
       !nextMessages.every((message, index) =>
@@ -80,20 +86,26 @@ export function createMessagingController({
   }
 
   async function captureScreenshot() {
-    ui.showToast("Capturing screen…");
+    ui.showToast("Ekran görüntüsü alınıyor…");
     log("ipc:capture-screenshot invoke");
 
     try {
       const screens = await api.invoke("capture-screenshot");
       state.setPendingScreenshots(screens);
-      ui.showToast(`📷 ${screens.length} screen(s) captured — will attach to next message`);
+      ui.showToast(`📷 ${screens.length} ekran yakalandı — sonraki mesaja eklenecek`);
     } catch (error) {
-      ui.showToast("Screenshot failed: " + error.message, true);
+      ui.showToast("Ekran görüntüsü alınamadı: " + error.message, true);
       log("ipc:capture-screenshot error", error);
     }
   }
 
-  async function sendMessage(overrideText) {
+  function trimLocalHistory() {
+    if (state.getConversationHistory().length > MAX_STORED_MESSAGES) {
+      state.replaceConversationHistory(state.getConversationHistory().slice(-MAX_STORED_MESSAGES));
+    }
+  }
+
+  async function sendMessage(overrideText, options = {}) {
     const rawText = typeof overrideText === "string"
       ? overrideText
       : dom.textInput.value.trim();
@@ -101,6 +113,9 @@ export function createMessagingController({
     if (!rawText || state.isStreaming()) {
       return;
     }
+
+    const skipUserPersist = Boolean(options.skipUserPersist);
+    const regenerate = Boolean(options.regenerate);
 
     let images = state.getPendingScreenshots();
     if (state.getIncludeScreen() && !images) {
@@ -130,7 +145,7 @@ export function createMessagingController({
       if (state.isStreaming()) {
         log("ai:send-message timeout 60s triggered");
         cancelMessage();
-        ui.showToast("Request timed out", true);
+        ui.showToast("İstek zaman aşımına uğradı", true);
       }
     }, 60000);
 
@@ -139,18 +154,28 @@ export function createMessagingController({
       hasImages: Boolean(images && images.length),
       historyCount: state.getConversationHistory().length,
       textLength: rawText.length,
+      skipUserPersist,
+      regenerate,
     });
 
     try {
-      ui.appendUserMessage(rawText);
-      state.addConversationMessage({ role: "user", content: rawText });
+      if (!skipUserPersist) {
+        ui.appendUserMessage(rawText);
+        state.addConversationMessage({ role: "user", content: rawText });
+      }
       typingId = ui.showTypingIndicator();
+
+      const historyForRequest = skipUserPersist
+        ? state.getConversationHistory().slice(-MAX_AI_CONTEXT_MESSAGES)
+        : state.getConversationHistory().slice(-MAX_AI_CONTEXT_MESSAGES);
 
       await api.invoke("send-message", {
         text: rawText,
         images: images || [],
-        history: state.getConversationHistory().slice(-8),
+        history: historyForRequest,
         fastMode: true,
+        skipUserPersist,
+        regenerate,
       });
     } catch (error) {
       onAIError(error.message);
@@ -163,6 +188,55 @@ export function createMessagingController({
         ui.removeTypingIndicator(typingId);
       }
     }
+  }
+
+  async function regenerateLastResponse() {
+    if (state.isStreaming()) {
+      return;
+    }
+
+    const history = state.getConversationHistory().slice();
+    let lastUser = null;
+    for (let index = history.length - 1; index >= 0; index -= 1) {
+      if (history[index]?.role === "user") {
+        lastUser = history[index];
+        break;
+      }
+    }
+
+    if (!lastUser?.content) {
+      ui.showToast("Yeniden üretilecek kullanıcı mesajı yok", true);
+      return;
+    }
+
+    let removedAssistant = false;
+    for (let index = history.length - 1; index >= 0; index -= 1) {
+      if (history[index]?.role === "assistant") {
+        history.splice(index, 1);
+        removedAssistant = true;
+        break;
+      }
+    }
+
+    if (!removedAssistant) {
+      ui.showToast("Yeniden üretilecek yanıt yok", true);
+      return;
+    }
+
+    const assistantMessages = dom.chatMessages.querySelectorAll(".message.assistant");
+    if (assistantMessages.length > 0) {
+      assistantMessages[assistantMessages.length - 1].remove();
+    }
+
+    state.replaceConversationHistory(history);
+
+    try {
+      await api.invoke("remove-last-assistant-message");
+    } catch (error) {
+      log("remove-last-assistant-message error", error);
+    }
+
+    await sendMessage(lastUser.content, { skipUserPersist: true, regenerate: true });
   }
 
   function appendStreamChunk(chunk) {
@@ -202,10 +276,12 @@ export function createMessagingController({
       state.clearStreamingSession();
     }
 
-    state.addConversationMessage({ role: "assistant", content: finalText });
-    if (state.getConversationHistory().length > 40) {
-      state.replaceConversationHistory(state.getConversationHistory().slice(-40));
+    const localHistory = state.getConversationHistory();
+    const lastMessage = localHistory[localHistory.length - 1];
+    if (!lastMessage || lastMessage.role !== "assistant" || lastMessage.content !== finalText) {
+      state.addConversationMessage({ role: "assistant", content: finalText });
     }
+    trimLocalHistory();
 
     if (result.coordinate) {
       window.setTimeout(() => api.send("hide-cursor"), 6000);
@@ -223,7 +299,7 @@ export function createMessagingController({
     const payload = typeof errorMessage === "string"
       ? { message: errorMessage, code: "unknown_error", action: "open-settings", requestId: "" }
       : (errorMessage || {});
-    const safeMessage = payload.message || "Unexpected error";
+    const safeMessage = payload.message || "Beklenmeyen hata";
     if (requestTimeoutId) {
       clearTimeout(requestTimeoutId);
       requestTimeoutId = null;
@@ -242,10 +318,10 @@ export function createMessagingController({
 
     ui.appendErrorMessage(safeMessage);
     ui.showErrorBanner({
-      title: "Request failed",
+      title: "İstek başarısız",
       message: safeMessage,
       requestId: payload.requestId || "",
-      actionLabel: payload.actionLabel || "Open settings",
+      actionLabel: payload.actionLabel || "Ayarları aç",
       onAction: () => {
         if (payload.action === "retry") {
           ui.hideErrorBanner();
@@ -263,7 +339,8 @@ export function createMessagingController({
     syncSession,
     onAIDone,
     onAIError,
-    sendMessage,
     cancelMessage,
+    regenerateLastResponse,
+    sendMessage,
   };
 }

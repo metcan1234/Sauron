@@ -19,11 +19,13 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "node --import tsx --test src/test/*.test.ts"
+    "test": "node --import tsx --test src/test/*.test.ts",
+    "package:vsix": "npm run compile && vsce package --no-dependencies --out dist/sauron-vscode-bridge.vsix"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/vscode": "^1.84.0",
+    "@vscode/vsce": "^3.6.0",
     "tsx": "^4.19.0",
     "typescript": "^5.4.0"
   }

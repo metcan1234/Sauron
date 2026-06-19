@@ -69,6 +69,7 @@ export function queryPanelDom(doc = document) {
     chatDrawerClose: doc.getElementById("chat-drawer-close"),
     chatDrawerSearch: doc.getElementById("chat-drawer-search"),
     chatDrawerNew: doc.getElementById("chat-drawer-new"),
+    chatDrawerEphemeral: doc.getElementById("chat-drawer-ephemeral"),
     chatDrawerList: doc.getElementById("chat-drawer-list"),
     chatDrawerExportActive: doc.getElementById("chat-drawer-export-active"),
     onboardingOverlay: doc.getElementById("onboarding-overlay"),
@@ -78,6 +79,13 @@ export function queryPanelDom(doc = document) {
     confirmMessage: doc.getElementById("confirm-message"),
     confirmCancel: doc.getElementById("confirm-cancel"),
     confirmConfirm: doc.getElementById("confirm-confirm"),
+    promptOverlay: doc.getElementById("prompt-overlay"),
+    promptTitle: doc.getElementById("prompt-title"),
+    promptMessage: doc.getElementById("prompt-message"),
+    promptInput: doc.getElementById("prompt-input"),
+    promptCancel: doc.getElementById("prompt-cancel"),
+    promptConfirm: doc.getElementById("prompt-confirm"),
+    finopsBadge: doc.getElementById("finops-badge"),
     toast: doc.getElementById("toast"),
   };
 }
@@ -122,8 +130,8 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     const button = doc.createElement("button");
     button.type = "button";
     button.className = "copy-icon-btn";
-    button.title = "Copy response";
-    button.setAttribute("aria-label", "Copy response");
+    button.title = "Yanıtı kopyala";
+    button.setAttribute("aria-label", "Yanıtı kopyala");
     button.textContent = "⧉";
 
     button.addEventListener("click", async (event) => {
@@ -136,13 +144,28 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
       try {
         await navigator.clipboard.writeText(text);
         button.classList.add("copied");
-        showToast("Copied");
+        showToast("Kopyalandı");
         window.setTimeout(() => button.classList.remove("copied"), 700);
       } catch (error) {
-        showToast("Copy failed", true);
+        showToast("Kopyalama başarısız", true);
       }
     });
 
+    return button;
+  }
+
+  function makeRegenerateButton() {
+    const button = doc.createElement("button");
+    button.type = "button";
+    button.className = "regenerate-icon-btn";
+    button.title = "Yeniden üret";
+    button.setAttribute("aria-label", "Yeniden üret");
+    button.textContent = "↻";
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      doc.dispatchEvent(new CustomEvent("openguide:regenerate-response"));
+    });
     return button;
   }
 
@@ -196,6 +219,7 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
 
     const actions = doc.createElement("span");
     actions.className = "assistant-meta-actions";
+    actions.appendChild(makeRegenerateButton());
     actions.appendChild(makeCopyButton(messageElement));
 
     meta.appendChild(time);
@@ -499,6 +523,39 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     dom.chatMessages.scrollTop = dom.chatMessages.scrollHeight;
   }
 
+  function highlightCode(code, language) {
+    let html = escapeHtml(code);
+    const lang = String(language || "text").toLowerCase();
+
+    if (["javascript", "js", "typescript", "ts", "jsx", "tsx"].includes(lang)) {
+      html = html.replace(/\b(const|let|var|function|return|if|else|async|await|import|from|export|class|new|try|catch|throw|typeof|instanceof)\b/g, '<span class="tok-keyword">$1</span>');
+      html = html.replace(/(\/\/[^\n]*)/g, '<span class="tok-comment">$1</span>');
+      html = html.replace(/(&quot;[^&]*?&quot;|'[^']*'|`[^`]*`)/g, '<span class="tok-string">$1</span>');
+    } else if (["python", "py"].includes(lang)) {
+      html = html.replace(/\b(def|class|return|if|elif|else|for|while|import|from|as|try|except|with|async|await|pass|raise|True|False|None)\b/g, '<span class="tok-keyword">$1</span>');
+      html = html.replace(/(#[^\n]*)/g, '<span class="tok-comment">$1</span>');
+      html = html.replace(/(&quot;[^&]*?&quot;|'[^']*')/g, '<span class="tok-string">$1</span>');
+    } else if (["bash", "sh", "shell", "powershell", "ps1"].includes(lang)) {
+      html = html.replace(/(#[^\n]*)/g, '<span class="tok-comment">$1</span>');
+      html = html.replace(/(&quot;[^&]*?&quot;|'[^']*')/g, '<span class="tok-string">$1</span>');
+    }
+
+    return html;
+  }
+
+  function buildCodeBlock(language, code) {
+    const lang = String(language || "text").trim() || "text";
+    const highlighted = highlightCode(code, lang);
+    const encoded = encodeURIComponent(String(code || ""));
+    return [
+      '<div class="code-block">',
+      `<div class="code-block-header"><span class="code-lang">${escapeHtml(lang)}</span>`,
+      `<button type="button" class="code-copy-btn" data-code="${encoded}" title="Kopyala" aria-label="Kodu kopyala">⧉</button></div>`,
+      `<pre><code class="language-${escapeHtml(lang)}">${highlighted}</code></pre>`,
+      "</div>",
+    ].join("");
+  }
+
   function simpleMarkdown(text) {
     const placeholders = [];
     const stash = (html) => {
@@ -516,8 +573,8 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
-      .replace(/```[\w]*\n([\s\S]*?)```/g, (_match, code) => stash(`<pre><code>${code}</code></pre>`))
-      .replace(/`([^`]+)`/g, (_match, code) => stash(`<code>${code}</code>`))
+      .replace(/```([\w+-]*)\n([\s\S]*?)```/g, (_match, lang, code) => stash(buildCodeBlock(lang, code)))
+      .replace(/`([^`]+)`/g, (_match, code) => stash(`<code class="inline-code">${code}</code>`))
       .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_match, label, url) => {
         return stash(buildLink(url, label));
       });
@@ -564,10 +621,10 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
   }
 
   function showErrorBanner({
-    title = "Something went wrong",
-    message = "Unknown error",
+    title = "Bir hata oluştu",
+    message = "Bilinmeyen hata",
     requestId = "",
-    actionLabel = "Open settings",
+    actionLabel = "Ayarları aç",
     onAction = null,
   } = {}) {
     if (!dom.errorBanner) {
@@ -710,12 +767,102 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
 
   function confirmClearConversation() {
     return confirmDialog({
-      title: "Clear Conversation?",
-      message: "This will remove all chat history and active plan progress.",
-      confirmLabel: "Clear",
-      cancelLabel: "Cancel",
+      title: "Sohbet temizlensin mi?",
+      message: "Tüm sohbet geçmişi ve aktif plan ilerlemesi silinecek.",
+      confirmLabel: "Temizle",
+      cancelLabel: "İptal",
       confirmDanger: true,
     });
+  }
+
+  function promptDialog({
+    title = "Giriş",
+    message = "",
+    defaultValue = "",
+    confirmLabel = "Kaydet",
+    cancelLabel = "İptal",
+  } = {}) {
+    if (!dom.promptOverlay || !dom.promptInput) {
+      return Promise.resolve(window.prompt(message, defaultValue));
+    }
+
+    return new Promise((resolve) => {
+      dom.promptTitle.textContent = title;
+      if (dom.promptMessage) {
+        dom.promptMessage.textContent = message;
+      }
+      dom.promptInput.value = defaultValue;
+      dom.promptConfirm.textContent = confirmLabel;
+      dom.promptCancel.textContent = cancelLabel;
+      dom.promptOverlay.classList.remove("hidden");
+
+      const finish = (value) => {
+        dom.promptOverlay.classList.add("hidden");
+        dom.promptCancel.removeEventListener("click", onCancel);
+        dom.promptConfirm.removeEventListener("click", onConfirm);
+        dom.promptOverlay.removeEventListener("click", onBackdrop);
+        doc.removeEventListener("keydown", onKeydown);
+        resolve(value);
+      };
+
+      const onCancel = () => finish(null);
+      const onConfirm = () => finish(dom.promptInput.value);
+      const onBackdrop = (event) => {
+        if (event.target === dom.promptOverlay) {
+          finish(null);
+        }
+      };
+      const onKeydown = (event) => {
+        if (event.key === "Escape") {
+          finish(null);
+        } else if (event.key === "Enter") {
+          event.preventDefault();
+          finish(dom.promptInput.value);
+        }
+      };
+
+      dom.promptCancel.addEventListener("click", onCancel);
+      dom.promptConfirm.addEventListener("click", onConfirm);
+      dom.promptOverlay.addEventListener("click", onBackdrop);
+      doc.addEventListener("keydown", onKeydown);
+      window.setTimeout(() => {
+        dom.promptInput.focus();
+        dom.promptInput.select();
+      }, 0);
+    });
+  }
+
+  function renderFinOpsBadge(summary) {
+    if (!dom.finopsBadge) {
+      return;
+    }
+    const budget = Number(summary?.budgetTl) || 0;
+    const spent = Number(summary?.totalSpentTl) || 0;
+    if (budget <= 0) {
+      dom.finopsBadge.textContent = spent > 0 ? `${spent.toFixed(2)} ₺` : "";
+      dom.finopsBadge.classList.toggle("hidden", spent <= 0);
+      dom.finopsBadge.title = "Oturum maliyeti (bütçe ayarlanmadı)";
+      return;
+    }
+    const remainingPct = Number(summary?.remainingPct);
+    const pctLabel = Number.isFinite(remainingPct) ? `%${Math.round(remainingPct)}` : "";
+    dom.finopsBadge.textContent = `${spent.toFixed(2)} ₺ · ${pctLabel}`;
+    dom.finopsBadge.classList.remove("hidden");
+    dom.finopsBadge.title = `Harcanan: ${spent.toFixed(2)} ₺ / Bütçe: ${budget.toFixed(2)} ₺`;
+    dom.finopsBadge.classList.toggle("is-warning", remainingPct <= 20);
+    dom.finopsBadge.classList.toggle("is-danger", remainingPct <= 5);
+  }
+
+  async function refreshFinOpsBadge() {
+    if (!dom.finopsBadge) {
+      return;
+    }
+    try {
+      const summary = await api.invoke("get-finops-summary");
+      renderFinOpsBadge(summary);
+    } catch (error) {
+      log("get-finops-summary error", error);
+    }
   }
 
   function startWaveformAnimation() {
@@ -736,6 +883,20 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
   }
 
   dom.chatMessages.addEventListener("click", (event) => {
+    const copyButton = event.target.closest(".code-copy-btn");
+    if (copyButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      const encoded = copyButton.getAttribute("data-code") || "";
+      const text = decodeURIComponent(encoded);
+      navigator.clipboard.writeText(text).then(() => {
+        copyButton.classList.add("copied");
+        showToast("Kod kopyalandı");
+        window.setTimeout(() => copyButton.classList.remove("copied"), 700);
+      }).catch(() => showToast("Kopyalama başarısız", true));
+      return;
+    }
+
     const linkElement = event.target.closest("a[data-external-link]");
     if (!linkElement) {
       return;
@@ -748,7 +909,7 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     }
     api.invoke("open-external-link", url).catch((error) => {
       log("ipc:open-external-link error", error);
-      showToast("Failed to open link", true);
+      showToast("Bağlantı açılamadı", true);
     });
   });
 
@@ -778,6 +939,9 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     showOnboarding,
     hideOnboarding,
     confirmClearConversation,
+    promptDialog,
+    refreshFinOpsBadge,
+    renderFinOpsBadge,
     confirmDialog,
     showTypingIndicator,
     simpleMarkdown,

@@ -1,6 +1,11 @@
 import * as path from "path"
 import * as vscode from "vscode"
 import type { ClineAPI } from "./cline"
+import {
+	deliverHandoffPrompt,
+	probeClineCapabilities,
+	safeHasActiveTask,
+} from "./cline-capabilities"
 import { cleanupOldHandoffArtifacts } from "./handoff/cleanup"
 import {
 	getLatestPendingHandoff,
@@ -26,6 +31,8 @@ import { startCostMonitor } from "./usage/monitor"
 const CLINE_EXTENSION_ID = "saoudrizwan.claude-dev"
 const CLINE_SIDEBAR_FOCUS = "claude-dev.SidebarProvider.focus"
 const DEBOUNCE_MS = 500
+const CLINE_READY_ATTEMPTS = 3
+const CLINE_READY_DELAY_MS = 2000
 
 let processing = false
 const debounceTimers = new Map<string, NodeJS.Timeout>()
@@ -38,20 +45,43 @@ export function getClineApi(): ClineAPI | undefined {
 	return ext.exports
 }
 
-async function ensureClineReady(): Promise<ClineAPI | undefined> {
-	let ext = vscode.extensions.getExtension<ClineAPI>(CLINE_EXTENSION_ID)
-	if (!ext) {
-		vscode.window.showErrorMessage("Cline extension is not installed.")
-		return undefined
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+export async function ensureClineReady(): Promise<ClineAPI | undefined> {
+	for (let attempt = 1; attempt <= CLINE_READY_ATTEMPTS; attempt += 1) {
+		let ext = vscode.extensions.getExtension<ClineAPI>(CLINE_EXTENSION_ID)
+		if (!ext) {
+			vscode.window.showErrorMessage("Cline extension yüklü değil. Marketplace'ten Cline kurun.")
+			return undefined
+		}
+		if (!ext.isActive) {
+			await ext.activate()
+		}
+		const api = ext.exports
+		if (api && (probeClineCapabilities(api).canStartTask || probeClineCapabilities(api).canAddToInput)) {
+			return api
+		}
+		if (attempt < CLINE_READY_ATTEMPTS) {
+			await sleep(CLINE_READY_DELAY_MS)
+		}
 	}
-	if (!ext.isActive) {
-		await ext.activate()
-	}
-	return ext.exports
+
+	const ext = vscode.extensions.getExtension<ClineAPI>(CLINE_EXTENSION_ID)
+	return ext?.exports
 }
 
 async function focusClineSidebar(): Promise<void> {
-	await vscode.commands.executeCommand(CLINE_SIDEBAR_FOCUS)
+	try {
+		await vscode.commands.executeCommand(CLINE_SIDEBAR_FOCUS)
+	} catch {
+		// Sidebar command may be unavailable during cold start.
+	}
+}
+
+async function copyHandoffToClipboard(prompt: string): Promise<void> {
+	await vscode.env.clipboard.writeText(prompt)
 }
 
 async function promptForActiveTaskChoice(): Promise<HandoffUserChoice | undefined> {
@@ -82,7 +112,7 @@ export async function handleIncomingHandoffWithActiveTask(
 	await logCostOptimizerHint(workspaceRoot, handoff, finopsConfig).catch(() => {})
 	await applyClineModelBeforeHandoff(cline, handoff, finopsConfig, workspaceRoot).catch(() => {})
 
-	const action = resolveHandoffAction(cline.hasActiveTask(), handoff.autoStart, userChoice)
+	const action = resolveHandoffAction(safeHasActiveTask(cline), handoff.autoStart, userChoice)
 	if (action === "waitForUser") {
 		const choice = await promptForActiveTaskChoice()
 		return handleIncomingHandoffWithActiveTask(cline, fullPath, choice)
@@ -97,16 +127,25 @@ export async function handleIncomingHandoffWithActiveTask(
 	}
 
 	await focusClineSidebar()
-	if (action === "startNewTask") {
-		await cline.startNewTask(prompt)
+
+	const delivery = await deliverHandoffPrompt(cline, prompt, action)
+	if (delivery === "clipboard") {
+		await copyHandoffToClipboard(prompt)
 		await markHandoffConsumed(fullPath)
-		vscode.window.showInformationMessage("Sauron'dan gelen görev Cline'a yüklendi.")
+		vscode.window.showInformationMessage(
+			"Sauron görev özeti panoya kopyalandı. Cline sidebar'ına yapıştırıp gönderin.",
+		)
 		return true
 	}
 
-	await cline.addToInput(prompt)
 	await markHandoffConsumed(fullPath)
-	vscode.window.showInformationMessage("Sauron'dan gelen görev giriş alanına eklendi — göndermek için onaylayın.")
+	if (delivery === "startNewTask") {
+		vscode.window.showInformationMessage("Sauron'dan gelen görev Cline'a yüklendi.")
+	} else {
+		vscode.window.showInformationMessage(
+			"Sauron görevi Cline giriş alanına eklendi — göndermek için onaylayın.",
+		)
+	}
 	return true
 }
 
@@ -136,7 +175,7 @@ async function processWorkspace(workspaceRoot: string): Promise<void> {
 	}
 }
 
-function scheduleProcess(workspaceRoot: string): void {
+export function scheduleProcess(workspaceRoot: string): void {
 	const existing = debounceTimers.get(workspaceRoot)
 	if (existing) {
 		clearTimeout(existing)
@@ -168,6 +207,21 @@ export async function scanAllWorkspaces(context: vscode.ExtensionContext): Promi
 	watcher.onDidCreate(onHandoffEvent)
 	watcher.onDidChange(onHandoffEvent)
 	context.subscriptions.push(watcher)
+
+	context.subscriptions.push(
+		vscode.window.onDidChangeWindowState((state) => {
+			if (!state.focused) {
+				return
+			}
+			for (const folder of vscode.workspace.workspaceFolders ?? []) {
+				void listPendingHandoffs(folder.uri.fsPath).then((pending) => {
+					if (pending.length > 0) {
+						scheduleProcess(folder.uri.fsPath)
+					}
+				})
+			}
+		}),
+	)
 }
 
 export function activate(context: vscode.ExtensionContext): void {

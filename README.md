@@ -14,10 +14,10 @@ Sauron, üç ayrı bileşeni ortak bir workspace üzerinden birleştiren bir AI 
 
 - Node.js
 - VS Code + `code` CLI
-- **Cline** — bu repodaki fork (`cline-main/apps/vscode`) derlenmiş hali veya Marketplace + [`PATCHES.md`](cline-main/PATCHES.md) patch'leri
-- **Sauron VS Code Bridge** — `sauron-vscode-bridge/`
+- **Cline** — Marketplace `saoudrizwan.claude-dev` (⌘ ile hazır akış) veya fork ([`PATCHES.md`](cline-main/PATCHES.md)) tam model routing için
+- **Sauron VS Code Bridge** — ⌘ basınca otomatik kurulur veya Settings → Workspace → **Bridge'i kur / yenile**
 
-> Marketplace Cline sürümünde `hasActiveTask()` / `addToInput()` yoktur. Bridge'in tam çalışması için fork derlemesi gerekir.
+> Marketplace Cline'da model routing (`setActiveModel`) yoktur; görev başlatma ve handoff çalışır. Tam otomatik model seçimi için Cline fork gerekir.
 
 ## Kurulum
 
@@ -29,7 +29,29 @@ npm install
 npm start
 ```
 
-### 2. Cline (fork)
+### 2. Cline (Marketplace — önerilen)
+
+VS Code Extensions → **Cline** (`saoudrizwan.claude-dev`) kurun. API key'leri Cline Settings'te bir kez girin.
+
+### 3. Sauron Bridge (otomatik)
+
+İlk ⌘ **Çalışma Kısmı** basışında Bridge otomatik kurulur. Manuel derleme:
+
+```powershell
+cd OpenGuider-main/scripts
+./build-workspace-stack.ps1
+```
+
+veya:
+
+```bash
+cd sauron-vscode-bridge
+npm install
+npm run package:vsix
+code --install-extension dist/sauron-vscode-bridge.vsix --force
+```
+
+### 4. Cline fork (isteğe bağlı — tam routing)
 
 ```bash
 cd cline-main/apps/vscode
@@ -37,27 +59,9 @@ npm install
 npm run compile
 ```
 
-F5 ile Extension Development Host'ta çalıştırın veya `.vsix` üretin.
-
 Patch listesi: [`cline-main/PATCHES.md`](cline-main/PATCHES.md)
 
-### 3. Sauron VS Code Bridge
-
-```bash
-cd sauron-vscode-bridge
-npm install
-npm run compile
-```
-
-VS Code'da `sauron-vscode-bridge` klasörünü açıp **Run Extension** ile yükleyin veya:
-
-```bash
-code --install-extension sauron-vscode-bridge
-```
-
-(CI/vsce paketleme sonrası.)
-
-### 4. Workspace path
+### 5. Workspace path
 
 Sauron Core → Settings → Workspace → proje kök klasörünü seçin.
 

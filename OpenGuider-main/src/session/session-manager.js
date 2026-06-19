@@ -74,6 +74,28 @@ class SessionManager extends EventEmitter {
     this.emitUpdate();
   }
 
+  removeLastAssistantMessage() {
+    for (let index = this.session.messages.length - 1; index >= 0; index -= 1) {
+      if (this.session.messages[index]?.role === "assistant") {
+        this.session.messages.splice(index, 1);
+        this.emitUpdate();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  trimMessages(maxCount) {
+    const limit = Number(maxCount);
+    if (!Number.isFinite(limit) || limit <= 0) {
+      return;
+    }
+    if (this.session.messages.length > limit) {
+      this.session.messages = this.session.messages.slice(-limit);
+      this.emitUpdate();
+    }
+  }
+
   setMessages(messages) {
     this.session.messages = Array.isArray(messages) ? messages.slice() : [];
     this.emitUpdate();

@@ -1,4 +1,4 @@
-const { execFileSync } = require("child_process");
+const { execFileSync, execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const { resolveVSCodeCommand } = require("./handoff");
@@ -18,13 +18,13 @@ const SETUP_STEPS = [
   },
   {
     id: "cline",
-    title: "Cline extension (fork önerilir)",
-    docHint: "cline-main/apps/vscode derleyip yükleyin veya Marketplace Cline + PATCHES.md",
+    title: "Cline extension (Marketplace)",
+    docHint: "VS Code Extensions → Cline (saoudrizwan.claude-dev)",
   },
   {
     id: "bridge",
     title: "Sauron VS Code Bridge",
-    docHint: "sauron-vscode-bridge → npm run compile → VS Code'da Run Extension veya .vsix",
+    docHint: "⌘ ile otomatik kurulur veya Settings → Workspace → Bridge'i kur / yenile",
   },
 ];
 
@@ -33,12 +33,18 @@ function listInstalledExtensions(codeCmd) {
     return [];
   }
   try {
-    const result = execFileSync(codeCmd, ["--list-extensions"], {
-      encoding: "utf8",
-      timeout: 15000,
-      stdio: ["ignore", "pipe", "ignore"],
-      shell: process.platform === "win32",
-    });
+    const result = process.platform === "win32"
+      ? execSync(`"${codeCmd}" --list-extensions`, {
+        encoding: "utf8",
+        timeout: 15000,
+        stdio: ["ignore", "pipe", "ignore"],
+        windowsHide: true,
+      })
+      : execFileSync(codeCmd, ["--list-extensions"], {
+        encoding: "utf8",
+        timeout: 15000,
+        stdio: ["ignore", "pipe", "ignore"],
+      });
     return result
       .trim()
       .split(/\r?\n/)

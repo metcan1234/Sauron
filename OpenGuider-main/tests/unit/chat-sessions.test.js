@@ -7,6 +7,7 @@ const path = require("path");
 const {
   deriveSessionTitle,
   deriveSessionPreview,
+  createEphemeralChatSession,
   createNewChatSession,
   duplicateChatSession,
   formatChatExportMarkdown,
@@ -19,7 +20,26 @@ const {
   sanitizeExportFilename,
   toggleChatSessionPin,
   sessionMatchesQuery,
+  MAX_STORED_MESSAGES,
+  resetRuntimeChatStateForTests,
 } = require("../../src/session/chat-sessions");
+const { SessionManager } = require("../../src/session/session-manager");
+
+function makeStore() {
+  return {
+    data: {},
+    get(key, fallback) {
+      return Object.prototype.hasOwnProperty.call(this.data, key) ? this.data[key] : fallback;
+    },
+    set(key, value) {
+      this.data[key] = value;
+    },
+  };
+}
+
+test.beforeEach(() => {
+  resetRuntimeChatStateForTests();
+});
 
 test("deriveSessionTitle uses first user message", () => {
   const title = deriveSessionTitle([
@@ -216,4 +236,105 @@ test("getActiveChatSessionTitle returns active session title", () => {
   });
 
   assert.equal(getActiveChatSessionTitle(store), "başlık testi");
+});
+
+test("createEphemeralChatSession stays in memory and is excluded from disk save", () => {
+  const store = {
+    data: {},
+    get(key, fallback) {
+      return Object.prototype.hasOwnProperty.call(this.data, key) ? this.data[key] : fallback;
+    },
+    set(key, value) {
+      this.data[key] = value;
+    },
+  };
+
+  const sessionManager = {
+    snapshot: {
+      sessionId: "old",
+      messages: [{ role: "user", content: "kalıcı mesaj" }],
+      goalIntent: "",
+      status: "idle",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+    getSnapshot() {
+      return this.snapshot;
+    },
+    hydrateSession(snapshot) {
+      this.snapshot = snapshot;
+    },
+  };
+
+  migrateLegacySessionSnapshot(store, sessionManager, sessionManager.getSnapshot());
+  const persistedId = store.get("chatSessionsV1").activeSessionId;
+
+  const created = createEphemeralChatSession(store, sessionManager);
+  assert.equal(created.session.ephemeral, true);
+  assert.notEqual(created.activeSessionId, persistedId);
+
+  persistActiveSession(store, {
+    messages: [{ role: "user", content: "geçici mesaj" }],
+    updatedAt: "2026-01-02T00:00:00.000Z",
+  });
+
+  const saved = store.get("chatSessionsV1");
+  assert.equal(saved.activeSessionId, persistedId);
+  assert.equal(saved.sessions[created.activeSessionId], undefined);
+
+  const summaries = listChatSessionSummaries(store);
+  const ephemeralSummary = summaries.find((entry) => entry.id === created.activeSessionId);
+  assert.equal(ephemeralSummary?.ephemeral, true);
+});
+
+test("toggleChatSessionPin rejects ephemeral sessions", () => {
+  const store = {
+    data: {},
+    get(key, fallback) {
+      return Object.prototype.hasOwnProperty.call(this.data, key) ? this.data[key] : fallback;
+    },
+    set(key, value) {
+      this.data[key] = value;
+    },
+  };
+
+  const sessionManager = {
+    snapshot: { sessionId: "x", messages: [], goalIntent: "", status: "idle", updatedAt: "2026-01-01T00:00:00.000Z" },
+    getSnapshot() { return this.snapshot; },
+    hydrateSession(snapshot) { this.snapshot = snapshot; },
+  };
+
+  migrateLegacySessionSnapshot(store, sessionManager, sessionManager.getSnapshot());
+  const ephemeral = createEphemeralChatSession(store, sessionManager);
+  const result = toggleChatSessionPin(store, ephemeral.activeSessionId);
+  assert.equal(result.ok, false);
+});
+
+test("send-message style persist keeps messages within MAX_STORED_MESSAGES", () => {
+  const manager = new SessionManager();
+  for (let index = 0; index < MAX_STORED_MESSAGES + 5; index += 1) {
+    manager.addMessage({ role: index % 2 === 0 ? "user" : "assistant", content: `msg-${index}` });
+  }
+  manager.trimMessages(MAX_STORED_MESSAGES);
+  assert.equal(manager.getSnapshot().messages.length, MAX_STORED_MESSAGES);
+  assert.equal(manager.getSnapshot().messages[0].content, "msg-5");
+});
+
+test("SessionManager removeLastAssistantMessage removes only the latest assistant turn", () => {
+  const manager = new SessionManager();
+  manager.addMessage({ role: "user", content: "selam" });
+  manager.addMessage({ role: "assistant", content: "merhaba" });
+  manager.addMessage({ role: "user", content: "nasılsın" });
+  manager.addMessage({ role: "assistant", content: "iyiyim" });
+
+  assert.equal(manager.removeLastAssistantMessage(), true);
+  assert.deepEqual(
+    manager.getSnapshot().messages.map((entry) => entry.content),
+    ["selam", "merhaba", "nasılsın"],
+  );
+  assert.equal(manager.removeLastAssistantMessage(), true);
+  assert.deepEqual(
+    manager.getSnapshot().messages.map((entry) => entry.content),
+    ["selam", "nasılsın"],
+  );
+  assert.equal(manager.removeLastAssistantMessage(), false);
 });

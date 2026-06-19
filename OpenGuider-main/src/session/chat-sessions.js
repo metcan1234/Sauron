@@ -3,7 +3,29 @@ const { createEmptySession } = require("../session/session-schema");
 
 const CHAT_SESSIONS_STORE_KEY = "chatSessionsV1";
 const MAX_STORED_MESSAGES = 80;
+const MAX_AI_CONTEXT_MESSAGES = 20;
 const MAX_SESSIONS = 100;
+
+let runtimeChatState = null;
+
+function resetRuntimeChatStateForTests() {
+  runtimeChatState = null;
+}
+
+function resolveRuntimeChatState(store) {
+  if (runtimeChatState) {
+    return runtimeChatState;
+  }
+
+  const loaded = loadChatSessionsState(store);
+  runtimeChatState = loaded || createDefaultState();
+  if (!loaded && store) {
+    saveChatSessionsState(store, runtimeChatState);
+  } else if (loaded && runtimeChatState.lastPersistedActiveId === undefined) {
+    runtimeChatState.lastPersistedActiveId = null;
+  }
+  return runtimeChatState;
+}
 
 function createDefaultState() {
   const id = randomUUID();
@@ -114,16 +136,29 @@ function saveChatSessionsState(store, state) {
   if (!store || !state) {
     return;
   }
-  store.set(CHAT_SESSIONS_STORE_KEY, state);
+  const persistableOrder = state.order.filter((sessionId) => !state.sessions[sessionId]?.ephemeral);
+  const persistableSessions = {};
+  for (const sessionId of persistableOrder) {
+    if (state.sessions[sessionId]) {
+      persistableSessions[sessionId] = state.sessions[sessionId];
+    }
+  }
+  let activeSessionId = state.activeSessionId;
+  if (state.sessions[activeSessionId]?.ephemeral) {
+    activeSessionId = state.lastPersistedActiveId
+      || persistableOrder.find((id) => persistableSessions[id])
+      || activeSessionId;
+  }
+  store.set(CHAT_SESSIONS_STORE_KEY, {
+    activeSessionId,
+    order: persistableOrder,
+    sessions: persistableSessions,
+    lastPersistedActiveId: state.lastPersistedActiveId || null,
+  });
 }
 
 function ensureChatSessionsState(store) {
-  let state = loadChatSessionsState(store);
-  if (!state) {
-    state = createDefaultState();
-    saveChatSessionsState(store, state);
-  }
-  return state;
+  return resolveRuntimeChatState(store);
 }
 
 function normalizeSearchText(value) {
@@ -161,6 +196,7 @@ function listChatSessionSummaries(store, options = {}) {
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
       pinned: Boolean(session.pinned),
+      ephemeral: Boolean(session.ephemeral),
       messageCount: Array.isArray(session.snapshot?.messages) ? session.snapshot.messages.length : 0,
       preview: deriveSessionPreview(session.snapshot?.messages),
       isActive: session.id === state.activeSessionId,
@@ -189,11 +225,16 @@ function persistActiveSession(store, sessionSnapshot) {
     createdAt: existing?.createdAt || now,
     updatedAt: now,
     pinned: Boolean(existing?.pinned),
+    ephemeral: Boolean(existing?.ephemeral),
     snapshot: createChatSnapshot(sessionSnapshot),
   };
 
   if (!state.order.includes(activeId)) {
     state.order.unshift(activeId);
+  }
+
+  if (existing?.ephemeral) {
+    return state.sessions[activeId];
   }
 
   saveChatSessionsState(store, state);
@@ -230,6 +271,45 @@ function createNewChatSession(store, sessionManager) {
   }
 
   saveChatSessionsState(store, state);
+
+  if (sessionManager) {
+    sessionManager.hydrateSession(emptySnapshot);
+  }
+
+  return {
+    activeSessionId: id,
+    session: state.sessions[id],
+    sessions: listChatSessionSummaries(store),
+  };
+}
+
+function createEphemeralChatSession(store, sessionManager) {
+  const state = ensureChatSessionsState(store);
+  if (sessionManager) {
+    persistActiveSession(store, sessionManager.getSnapshot());
+  }
+
+  const current = state.sessions[state.activeSessionId];
+  if (current && !current.ephemeral) {
+    state.lastPersistedActiveId = state.activeSessionId;
+  }
+
+  const id = randomUUID();
+  const now = new Date().toISOString();
+  const emptySnapshot = createChatSnapshot(createEmptySession());
+
+  state.sessions[id] = {
+    id,
+    title: "Geçici sohbet",
+    titleManuallySet: true,
+    createdAt: now,
+    updatedAt: now,
+    pinned: false,
+    ephemeral: true,
+    snapshot: emptySnapshot,
+  };
+  state.activeSessionId = id;
+  state.order = [id, ...state.order.filter((entry) => entry !== id)];
 
   if (sessionManager) {
     sessionManager.hydrateSession(emptySnapshot);
@@ -346,6 +426,9 @@ function toggleChatSessionPin(store, sessionId) {
   if (!target) {
     return { ok: false, error: "Chat session not found." };
   }
+  if (target.ephemeral) {
+    return { ok: false, error: "Geçici sohbetler sabitlenemez." };
+  }
 
   target.pinned = !Boolean(target.pinned);
   target.updatedAt = new Date().toISOString();
@@ -417,6 +500,9 @@ function migrateLegacySessionSnapshot(store, sessionManager, legacySnapshot) {
 
 module.exports = {
   CHAT_SESSIONS_STORE_KEY,
+  MAX_AI_CONTEXT_MESSAGES,
+  MAX_STORED_MESSAGES,
+  createEphemeralChatSession,
   createNewChatSession,
   deleteChatSession,
   duplicateChatSession,
@@ -432,6 +518,7 @@ module.exports = {
   migrateLegacySessionSnapshot,
   persistActiveSession,
   renameChatSession,
+  resetRuntimeChatStateForTests,
   sanitizeExportFilename,
   saveChatSessionsState,
   sessionMatchesQuery,

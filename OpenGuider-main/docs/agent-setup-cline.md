@@ -38,7 +38,33 @@ Sauron Core otomatik olarak modelleri seçer; Cline extension'da aynı API anaht
 - Cline **Ollama** → Base URL Sauron ile aynı (`http://localhost:11434`).
 - Yerel model: `ollama pull qwen2.5-coder:7b` (veya `llama3.2` fallback).
 
-## Otomatik routing (bridge)
+## Marketplace modu (önerilen basit kurulum)
+
+⌘ **Çalışma Kısmı** basıldığında Sauron Core:
+
+1. **Sauron Bridge**'i otomatik kurar (`code --install-extension` ile `.vsix`)
+2. Workspace'i hazırlar (`.sauron/finops-config.json`, `.clinerules/`, `.vscode/extensions.json`)
+3. Handoff dosyasını yazar ve VS Code'u açar
+4. Bridge Cline sidebar'ını odaklar ve görevi başlatır
+
+### Marketplace sınırlamaları
+
+Marketplace Cline (`saoudrizwan.claude-dev`) ile:
+
+- `setActiveModel` / `setPlanModeModel` yok → **model otomatik değişmez** (Cline'da bir kez provider seçin)
+- `hasActiveTask` yok → aktif görev çakışma uyarısı atlanır
+- `startNewTask` varsa görev otomatik başlar; yoksa handoff metni **panoya kopyalanır**
+
+### Tek seferlik kullanıcı adımları
+
+1. Sauron Settings → Workspace path seçin
+2. Marketplace'ten **Cline** kurun (yoksa)
+3. Cline → API Configuration → Gemini / DeepSeek / OpenAI key'lerini **bir kez** girin
+4. ⌘ ile Çalışma Kısmı'nı açın — Bridge ilk seferde otomatik kurulur
+
+Settings → Workspace → **Bridge'i kur / yenile** düğmesi sorun giderme içindir.
+
+## Otomatik routing (bridge + Cline fork)
 
 Handoff geldiğinde `sauron-vscode-bridge` karmaşıklığa göre Cline modelini değiştirir:
 

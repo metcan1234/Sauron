@@ -14,6 +14,7 @@
       <img src="assets/logo.png" alt="Sauron">
     </div>
     <span class="header-title">Sauron Core</span>
+    <span class="finops-badge hidden" id="finops-badge" title="FinOps"></span>
     <span class="agent-status" id="agent-status">idle</span>
     <div class="header-actions">
       <button class="icon-btn" id="btn-chat-history" title="Sohbet geçmişi">☰</button>
@@ -124,6 +125,7 @@
     </div>
     <input class="chat-drawer-search" id="chat-drawer-search" type="search" placeholder="Sohbetlerde ara..." autocomplete="off" />
     <button class="chat-drawer-new" id="chat-drawer-new" type="button">+ Yeni sohbet</button>
+    <button class="chat-drawer-ephemeral" id="chat-drawer-ephemeral" type="button">⏱ Geçici sohbet</button>
     <div class="chat-drawer-list" id="chat-drawer-list"></div>
     <div class="chat-drawer-footer">
       <button class="chat-drawer-footer-btn" id="chat-drawer-export-active" type="button">⬇ Aktif sohbeti dışa aktar</button>
@@ -155,6 +157,18 @@
     <div class="confirm-actions">
       <button class="confirm-btn ghost" id="confirm-cancel" type="button">Cancel</button>
       <button class="confirm-btn danger" id="confirm-confirm" type="button">Clear</button>
+    </div>
+  </div>
+</div>
+
+<div class="confirm-overlay hidden" id="prompt-overlay" role="dialog" aria-modal="true" aria-labelledby="prompt-title">
+  <div class="confirm-modal">
+    <h3 id="prompt-title">Başlık</h3>
+    <p id="prompt-message"></p>
+    <input class="prompt-input" id="prompt-input" type="text" autocomplete="off" />
+    <div class="confirm-actions">
+      <button class="confirm-btn ghost" id="prompt-cancel" type="button">İptal</button>
+      <button class="confirm-btn" id="prompt-confirm" type="button">Kaydet</button>
     </div>
   </div>
 </div>

@@ -1,6 +1,7 @@
 import type { ClineAPI } from "../cline"
 import type { FinOpsConfig } from "../usage/types"
 import type { SauronHandoff } from "../handoff/types"
+import { probeClineCapabilities } from "../cline-capabilities"
 import { appendUsageRecord } from "../usage/export"
 import { resolveBudgetDowngrade } from "./governor"
 import { resolveClineAgent } from "./router"
@@ -28,7 +29,8 @@ export async function applyClineModelBeforeHandoff(
 	workspaceRoot: string,
 ): Promise<ApplyClineModelResult> {
 	const optimizer = finopsConfig.costOptimizer
-	if (!optimizer?.enabled || !cline.setActiveModel) {
+	const caps = probeClineCapabilities(cline)
+	if (!optimizer?.enabled || !caps.canRouteModel) {
 		return { applied: false }
 	}
 
@@ -53,13 +55,13 @@ export async function applyClineModelBeforeHandoff(
 	}
 
 	try {
-		if (planSelection && cline.setPlanModeModel) {
+		if (planSelection && caps.canRouteModel && cline.setPlanModeModel) {
 			await cline.setPlanModeModel({
 				providerId: planSelection.providerId,
 				modelId: planSelection.modelId,
 			})
 		}
-		await cline.setActiveModel({
+		await cline.setActiveModel!({
 			providerId: actSelection.providerId,
 			modelId: actSelection.modelId,
 		})
