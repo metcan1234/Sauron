@@ -16,6 +16,7 @@
     <span class="header-title">Sauron Core</span>
     <span class="agent-status" id="agent-status">idle</span>
     <div class="header-actions">
+      <button class="icon-btn" id="btn-chat-history" title="Sohbet geçmişi">☰</button>
       <button class="icon-btn workspace-btn" id="btn-workspace" title="Çalışma Kısmı">⌘</button>
       <button class="icon-btn" id="btn-settings"   title="Settings">⚙</button>
       <button class="icon-btn" id="btn-close"      title="Hide" style="-webkit-app-region:no-drag">✕</button>
@@ -62,14 +63,25 @@
     <div class="plan-steps" id="plan-steps"></div>
   </div>
 
-  <div class="panel-actions" id="panel-actions">
-    <button class="action-btn" id="btn-plan-prev" title="Previous step"><span class="action-icon">←</span><span>Back</span></button>
-    <button class="action-btn primary" id="btn-plan-done" title="Mark done"><span class="action-icon">✓</span><span>Done</span></button>
-    <button class="action-btn" id="btn-plan-skip" title="Skip step"><span class="action-icon">⤼</span><span>Skip</span></button>
-    <button class="action-btn" id="btn-plan-help" title="Need help"><span class="action-icon">?</span><span>Help</span></button>
-    <button class="action-btn" id="btn-plan-regenerate" title="Regenerate step"><span class="action-icon">⟳</span><span>Redo</span></button>
-    <button class="action-btn" id="btn-plan-recheck" title="Re-check"><span class="action-icon">↻</span><span>Re-check</span></button>
-    <button class="action-btn danger" id="btn-plan-cancel" title="Cancel plan"><span class="action-icon">✕</span><span>Cancel</span></button>
+  <div class="panel-actions hidden" id="panel-actions">
+    <button class="action-btn" id="btn-plan-prev" title="Previous step" type="button"><span class="action-icon">←</span><span>Back</span></button>
+    <button class="action-btn primary" id="btn-plan-done" title="Mark done" type="button"><span class="action-icon">✓</span><span>Done</span></button>
+    <button class="action-btn" id="btn-plan-skip" title="Skip step" type="button"><span class="action-icon">⤼</span><span>Skip</span></button>
+    <button class="action-btn" id="btn-plan-help" title="Need help" type="button"><span class="action-icon">?</span><span>Help</span></button>
+    <button class="action-btn" id="btn-plan-regenerate" title="Regenerate step" type="button"><span class="action-icon">⟳</span><span>Redo</span></button>
+    <button class="action-btn" id="btn-plan-recheck" title="Re-check" type="button"><span class="action-icon">↻</span><span>Re-check</span></button>
+    <button class="action-btn danger" id="btn-plan-cancel" title="Cancel plan" type="button"><span class="action-icon">✕</span><span>Cancel</span></button>
+  </div>
+
+  <div class="workspace-status-banner hidden" id="workspace-status-banner">
+    <div class="workspace-status-main">
+      <strong id="workspace-status-title">Çalışma Kısmı</strong>
+      <span id="workspace-status-message"></span>
+    </div>
+    <div class="workspace-status-actions">
+      <button class="workspace-status-btn" id="workspace-status-focus" type="button">VS Code'a git</button>
+      <button class="workspace-status-btn ghost" id="workspace-status-dismiss" type="button">Kapat</button>
+    </div>
   </div>
 
   <div class="error-banner hidden" id="error-banner">
@@ -87,11 +99,7 @@
   <!-- Input area -->
   <div class="input-area">
     <div class="input-row">
-      <select class="mode-select" id="assistant-mode-select" title="Assistant mode">
-        <option value="" selected disabled hidden>Mode</option>
-        <option value="planning">Planning</option>
-        <option value="fast">Fast</option>
-      </select>
+      <span class="mode-badge" id="assistant-mode-badge" title="Sohbet, rehberlik ve asistanlık">Asistan</span>
       <textarea class="text-input" id="text-input" placeholder="Ask anything..." rows="1"></textarea>
       <button class="ptt-btn" id="ptt-btn" title="Hold to talk">⏺
         <span class="waveform" id="waveform" style="display:none">
@@ -106,6 +114,21 @@
       <button class="stop-btn hidden" id="stop-btn" title="Stop">⏹</button>
     </div>
   </div>
+</div>
+
+<div class="chat-drawer-overlay hidden" id="chat-drawer-overlay" aria-hidden="true">
+  <aside class="chat-drawer" id="chat-drawer" role="dialog" aria-labelledby="chat-drawer-title">
+    <div class="chat-drawer-header">
+      <h3 id="chat-drawer-title">Sohbetler</h3>
+      <button class="icon-btn chat-drawer-close" id="chat-drawer-close" type="button" title="Kapat">✕</button>
+    </div>
+    <input class="chat-drawer-search" id="chat-drawer-search" type="search" placeholder="Sohbetlerde ara..." autocomplete="off" />
+    <button class="chat-drawer-new" id="chat-drawer-new" type="button">+ Yeni sohbet</button>
+    <div class="chat-drawer-list" id="chat-drawer-list"></div>
+    <div class="chat-drawer-footer">
+      <button class="chat-drawer-footer-btn" id="chat-drawer-export-active" type="button">⬇ Aktif sohbeti dışa aktar</button>
+    </div>
+  </aside>
 </div>
 
 <div class="toast hidden" id="toast"></div>

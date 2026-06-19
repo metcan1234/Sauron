@@ -22,7 +22,7 @@ const DEFAULT_AGENT_MATRIX: AgentMatrix = {
 	agents: [
 		{
 			id: "gemini",
-			core: { provider: "gemini", model: "gemini-2.0-flash" },
+			core: { provider: "gemini", model: "gemini-2.5-flash-lite" },
 			cline: { providerId: "gemini", modelId: "gemini-2.5-flash" },
 			configured: true,
 		},

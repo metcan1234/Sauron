@@ -207,6 +207,21 @@ html, body {
   background: var(--accent-soft);
 }
 
+.mode-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 112px;
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 10px 10px;
+  user-select: none;
+}
+
 .mode-select {
   width: 112px;
   background: #000;
@@ -543,6 +558,72 @@ html, body {
 }
 
 .error-banner-btn.ghost {
+  border-color: rgba(255, 255, 255, 0.24);
+  color: var(--text-dim);
+}
+
+.workspace-status-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 8px 14px 0;
+  padding: 10px;
+  border: 1px solid rgba(198, 90, 58, 0.45);
+  background: rgba(198, 90, 58, 0.1);
+  border-radius: 4px;
+}
+
+.workspace-status-banner.hidden {
+  display: none;
+  pointer-events: none;
+}
+
+.workspace-status-banner.is-success {
+  border-color: rgba(34, 197, 94, 0.45);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.workspace-status-banner.is-warning {
+  border-color: rgba(234, 179, 8, 0.45);
+  background: rgba(234, 179, 8, 0.08);
+}
+
+.workspace-status-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.workspace-status-main strong {
+  color: var(--accent);
+}
+
+.workspace-status-banner.is-success .workspace-status-main strong {
+  color: #86efac;
+}
+
+.workspace-status-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.workspace-status-btn {
+  height: 26px;
+  border: 1px solid rgba(198, 90, 58, 0.5);
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--text);
+  border-radius: 2px;
+  padding: 0 8px;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.workspace-status-btn.ghost {
   border-color: rgba(255, 255, 255, 0.24);
   color: var(--text-dim);
 }
@@ -2196,6 +2277,223 @@ kbd {
   color: #ffad87;
   border-bottom-color: rgba(255, 173, 135, 0.9);
   text-shadow: 0 0 8px rgba(198, 90, 58, 0.5);
+}
+
+/* ── Chat history drawer ─────────────────────────────────────────────────── */
+.chat-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  z-index: 9998;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.chat-drawer-overlay.hidden {
+  display: none;
+  pointer-events: none;
+}
+
+.chat-drawer {
+  width: min(280px, 88vw);
+  height: 100%;
+  background: #0b0b0b;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 14px 12px;
+  box-shadow: 8px 0 24px rgba(0, 0, 0, 0.35);
+}
+
+.chat-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.chat-drawer-header h3 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+}
+
+.chat-drawer-close {
+  width: 28px;
+  height: 28px;
+  font-size: 12px;
+}
+
+.chat-drawer-search {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 9px 10px;
+  font-family: inherit;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+.chat-drawer-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.chat-drawer-new {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: rgba(198, 90, 58, 0.12);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+
+.chat-drawer-new:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chat-drawer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.chat-drawer-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 4px;
+  padding: 8px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.chat-drawer-item:hover {
+  border-color: rgba(198, 90, 58, 0.35);
+}
+
+.chat-drawer-item.is-active {
+  border-color: var(--accent);
+  background: rgba(198, 90, 58, 0.12);
+}
+
+.chat-drawer-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-drawer-item-title {
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-drawer-item-meta {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.chat-drawer-item.is-pinned {
+  border-color: rgba(234, 179, 8, 0.35);
+}
+
+.chat-drawer-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.icon-btn.workspace-btn.workspace-ready {
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.45);
+}
+
+.icon-btn.workspace-btn.workspace-warning {
+  box-shadow: 0 0 0 1px rgba(234, 179, 8, 0.45);
+}
+
+.chat-drawer-footer {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.chat-drawer-footer-btn {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-dim);
+  border-radius: 4px;
+  padding: 9px 10px;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.chat-drawer-footer-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.chat-drawer-item-preview {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.9;
+}
+
+.chat-drawer-item-pin,
+.chat-drawer-item-rename,
+.chat-drawer-item-export,
+.chat-drawer-item-duplicate,
+.chat-drawer-item-delete {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+}
+
+.chat-drawer-item-pin.is-pinned {
+  color: #facc15;
+}
+
+.chat-drawer-item-pin:hover,
+.chat-drawer-item-rename:hover,
+.chat-drawer-item-export:hover,
+.chat-drawer-item-duplicate:hover,
+.chat-drawer-item-delete:hover {
+  color: var(--accent);
+}
+
+.chat-drawer-item-delete:hover {
+  color: #fca5a5;
+}
+
+.chat-drawer-empty {
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 8px 4px;
 }
 
 /* ── Toast notification ──────────────────────────────────────────────────── */

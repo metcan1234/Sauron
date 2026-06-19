@@ -104,6 +104,38 @@ function truncateTaskSummary(full, maxChars) {
   return [preserved, rest.slice(0, remainder)].filter(Boolean).join("\n\n");
 }
 
+function truncateMessageText(text, maxChars = 400) {
+  const normalized = String(text || "").trim().replace(/\s+/g, " ");
+  if (!normalized) {
+    return "";
+  }
+  if (normalized.length <= maxChars) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxChars)}…`;
+}
+
+function appendRecentChatContext(snapshot, parts, options = {}) {
+  const maxCharsPerMessage = Number.isFinite(Number(options.maxCharsPerMessage))
+    ? Math.max(80, Number(options.maxCharsPerMessage))
+    : 400;
+  const messages = Array.isArray(snapshot?.messages) ? snapshot.messages : [];
+  const lastUser = [...messages].reverse().find((entry) => entry?.role === "user" && entry?.content);
+  const lastAssistant = [...messages].reverse().find((entry) => entry?.role === "assistant" && entry?.content);
+  const lines = [];
+
+  if (lastUser?.content) {
+    lines.push(`User: ${truncateMessageText(lastUser.content, maxCharsPerMessage)}`);
+  }
+  if (lastAssistant?.content) {
+    lines.push(`Assistant: ${truncateMessageText(lastAssistant.content, maxCharsPerMessage)}`);
+  }
+
+  if (lines.length > 0) {
+    parts.push(`Latest chat context:\n${lines.join("\n")}`);
+  }
+}
+
 function buildTaskSummary(snapshot, options = {}) {
   const includeTranscript = options.includeTranscript === true;
   const handoffMaxChars = Number.isFinite(Number(options.handoffMaxChars))
@@ -111,6 +143,10 @@ function buildTaskSummary(snapshot, options = {}) {
     : 4000;
 
   const parts = [];
+
+  if (snapshot?.chatSessionTitle) {
+    parts.push(`Chat session: ${String(snapshot.chatSessionTitle).trim()}`);
+  }
 
   const finalMessage = snapshot?.browserExecution?.finalMessage;
   if (finalMessage) {
@@ -152,6 +188,10 @@ function buildTaskSummary(snapshot, options = {}) {
         .join("\n");
       parts.push(`Recent conversation:\n${transcript}`);
     }
+  } else {
+    appendRecentChatContext(snapshot, parts, {
+      maxCharsPerMessage: Math.min(600, Math.floor(handoffMaxChars / 4)),
+    });
   }
 
   const summary = parts.filter(Boolean).join("\n\n").trim();
@@ -282,7 +322,45 @@ function resolveVSCodeCommand() {
   return "code";
 }
 
-function launchVSCode(workspacePath) {
+function rejectPendingHandoffs(workspacePath) {
+  const pending = listPendingHandoffs(workspacePath);
+  for (const item of pending) {
+    const rejectedPath = `${item.path}.rejected`;
+    try {
+      fs.renameSync(item.path, rejectedPath);
+    } catch {
+      try {
+        fs.unlinkSync(item.path);
+      } catch {
+        // ignore cleanup failures
+      }
+    }
+  }
+  return pending.length;
+}
+
+function getHandoffStatus(workspacePath, handoffFileName) {
+  if (!workspacePath || !handoffFileName) {
+    return { status: "unknown", handoffFileName: handoffFileName || "" };
+  }
+
+  const sauronDir = getSauronDir(workspacePath);
+  const pendingPath = path.join(sauronDir, handoffFileName);
+
+  if (fs.existsSync(pendingPath)) {
+    return { status: "pending", handoffFileName, handoffPath: pendingPath };
+  }
+  if (fs.existsSync(`${pendingPath}.consumed`)) {
+    return { status: "consumed", handoffFileName, handoffPath: `${pendingPath}.consumed` };
+  }
+  if (fs.existsSync(`${pendingPath}.rejected`)) {
+    return { status: "rejected", handoffFileName, handoffPath: `${pendingPath}.rejected` };
+  }
+
+  return { status: "not_found", handoffFileName };
+}
+
+function launchVSCode(workspacePath, options = {}) {
   if (!workspacePath || !fs.existsSync(workspacePath)) {
     throw new Error("Workspace path is invalid or does not exist.");
   }
@@ -294,16 +372,45 @@ function launchVSCode(workspacePath) {
     );
   }
 
+  const newWindow = options.newWindow !== false;
+
   return new Promise((resolve, reject) => {
-    const child = spawn(codeCmd, [workspacePath], {
+    const launchArgs = newWindow ? ["-n", workspacePath] : [workspacePath];
+
+    if (process.platform === "win32") {
+      const child = spawn("cmd.exe", ["/c", "start", "", codeCmd, ...launchArgs], {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      child.on("error", reject);
+      child.unref();
+      resolve({ codeCmd, focused: true, newWindow });
+      return;
+    }
+
+    const child = spawn(codeCmd, launchArgs, {
       detached: true,
       stdio: "ignore",
       windowsHide: true,
     });
     child.on("error", reject);
     child.unref();
-    resolve({ codeCmd });
+    resolve({ codeCmd, focused: false, newWindow });
   });
+}
+
+function focusVSCodeWorkspace(workspacePath) {
+  if (!workspacePath || !fs.existsSync(workspacePath)) {
+    throw new Error("Workspace path is invalid or does not exist.");
+  }
+
+  const codeCmd = resolveVSCodeCommand();
+  if (!codeCmd) {
+    throw new Error("VS Code CLI (code) not found.");
+  }
+
+  return launchVSCode(workspacePath, { newWindow: false });
 }
 
 module.exports = {
@@ -317,8 +424,11 @@ module.exports = {
   truncateTaskSummary,
   collectTouchedFiles,
   listPendingHandoffs,
+  rejectPendingHandoffs,
+  getHandoffStatus,
   writeHandoff,
   seedSauronRules,
   launchVSCode,
+  focusVSCodeWorkspace,
   resolveVSCodeCommand,
 };

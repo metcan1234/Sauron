@@ -24,14 +24,34 @@ const {
   seedSauronRules,
   launchVSCode,
   listPendingHandoffs,
+  rejectPendingHandoffs,
+  getHandoffStatus,
+  focusVSCodeWorkspace,
 } = require("./src/sauron/handoff");
+const { checkWorkspacePrerequisites } = require("./src/sauron/workspace-setup");
 const { SessionManager } = require("./src/session/session-manager");
 const {
   clearSessionSnapshot,
   loadSessionSnapshot,
   saveSessionSnapshot,
 } = require("./src/session/session-persistence");
-const { TaskOrchestrator } = require("./src/agent/task-orchestrator");
+const {
+  createNewChatSession,
+  deleteChatSession,
+  listChatSessionSummaries,
+  loadChatSession,
+  migrateLegacySessionSnapshot,
+  persistActiveSession,
+  duplicateChatSession,
+  formatChatExportMarkdown,
+  getActiveChatSessionTitle,
+  getChatSessionById,
+  renameChatSession,
+  sanitizeExportFilename,
+  toggleChatSessionPin,
+  ensureChatSessionsState,
+  loadChatSessionsState,
+} = require("./src/session/chat-sessions");
 const { emitPointerTool } = require("./src/agent/tools/pointer-tool");
 const { formatStructuredUserError } = require("./src/ai/structured");
 const { configureFinOpsContext } = require("./src/sauron/finops/llm-tracker");
@@ -56,10 +76,13 @@ const PANEL_HEIGHT = 660;
 const WIDGET_WIDTH = 220;
 const WIDGET_COLLAPSED_HEIGHT = 58;
 const WIDGET_EXPANDED_HEIGHT = 248;
-const FAST_MODE_PROMPT = [
-  "FAST MODE:",
-  "Do NOT create long plans.",
-  "Give only the next best action in maximum two short sentences.",
+const ASSISTANT_CHAT_PROMPT = [
+  "ASSISTANT CHAT MODE:",
+  "This panel is for conversation, guidance, and questions only — not coding tasks.",
+  "Do NOT create step-by-step plans, task lists, or file-edit instructions.",
+  "Do NOT ask the user to create files, write code, or run terminal commands in this panel.",
+  "When the user wants coding, refactoring, git, or terminal work, briefly explain and direct them to the Çalışma Kısmı (Workspace) button.",
+  "For casual greetings or small talk, reply naturally and briefly.",
   "Always append a [POINT:x,y:label] tag when a clickable target is likely on screen.",
   "If uncertain, still provide your best click estimate with a concise label.",
 ].join(" ");
@@ -1244,7 +1267,91 @@ function setupIPC() {
   ipcMain.handle("reset-session", () => {
     debugLog("ipc:reset-session");
     hideCursorOverlay();
-    return taskOrchestrator.resetSession();
+    const result = taskOrchestrator.resetSession();
+    persistActiveSession(store, sessionManager.getSnapshot());
+    return result;
+  });
+
+  ipcMain.handle("list-chat-sessions", (_event, { query } = {}) => {
+    debugLog("ipc:list-chat-sessions", { query: query || "" });
+    return {
+      ok: true,
+      activeSessionId: store.get("chatSessionsV1")?.activeSessionId || null,
+      sessions: listChatSessionSummaries(store, { query }),
+    };
+  });
+
+  ipcMain.handle("create-chat-session", () => {
+    debugLog("ipc:create-chat-session");
+    const created = createNewChatSession(store, sessionManager);
+    const snapshot = sessionManager.getSnapshot();
+    broadcastSessionSnapshot(snapshot);
+    return { ok: true, ...created, snapshot };
+  });
+
+  ipcMain.handle("load-chat-session", (_event, { sessionId } = {}) => {
+    debugLog("ipc:load-chat-session", { sessionId });
+    const loaded = loadChatSession(store, sessionManager, sessionId);
+    if (!loaded.ok) {
+      return loaded;
+    }
+    broadcastSessionSnapshot(loaded.snapshot);
+    return loaded;
+  });
+
+  ipcMain.handle("delete-chat-session", (_event, { sessionId } = {}) => {
+    debugLog("ipc:delete-chat-session", { sessionId });
+    const deleted = deleteChatSession(store, sessionManager, sessionId);
+    if (deleted.ok && deleted.snapshot) {
+      broadcastSessionSnapshot(deleted.snapshot);
+    }
+    return deleted;
+  });
+
+  ipcMain.handle("toggle-pin-chat-session", (_event, { sessionId } = {}) => {
+    debugLog("ipc:toggle-pin-chat-session", { sessionId });
+    return toggleChatSessionPin(store, sessionId);
+  });
+
+  ipcMain.handle("rename-chat-session", (_event, { sessionId, title } = {}) => {
+    debugLog("ipc:rename-chat-session", { sessionId, title });
+    return renameChatSession(store, sessionId, title);
+  });
+
+  ipcMain.handle("duplicate-chat-session", (_event, { sessionId } = {}) => {
+    debugLog("ipc:duplicate-chat-session", { sessionId });
+    const duplicated = duplicateChatSession(store, sessionManager, sessionId);
+    if (duplicated.ok && duplicated.snapshot) {
+      broadcastSessionSnapshot(duplicated.snapshot);
+    }
+    return duplicated;
+  });
+
+  ipcMain.handle("export-chat-session", async (_event, { sessionId } = {}) => {
+    debugLog("ipc:export-chat-session", { sessionId });
+    try {
+      const session = getChatSessionById(store, sessionId);
+      if (!session) {
+        return { ok: false, error: "Chat session not found." };
+      }
+
+      const markdown = formatChatExportMarkdown(session);
+      const parentWindow = panelWindow && !panelWindow.isDestroyed() ? panelWindow : null;
+      const saveResult = await dialog.showSaveDialog(parentWindow, {
+        title: "Sohbeti dışa aktar",
+        defaultPath: `${sanitizeExportFilename(session.title)}.md`,
+        filters: [{ name: "Markdown", extensions: ["md"] }],
+      });
+
+      if (saveResult.canceled || !saveResult.filePath) {
+        return { ok: false, canceled: true };
+      }
+
+      fs.writeFileSync(saveResult.filePath, markdown, "utf8");
+      return { ok: true, path: saveResult.filePath };
+    } catch (error) {
+      return { ok: false, error: error?.message || "Export failed." };
+    }
   });
 
   ipcMain.handle("start-goal-session", async (event, { text, images }) => {
@@ -1513,9 +1620,9 @@ function setupIPC() {
     updateWidgetState("thinking");
     const settings = await getRuntimeSettings();
     const requestSettings = { ...settings };
-    if (fastMode) {
+    if (fastMode !== false) {
       const userPrompt = settings.systemPromptOverride || "";
-      requestSettings.systemPromptOverride = `${userPrompt}\n\n${FAST_MODE_PROMPT}`.trim();
+      requestSettings.systemPromptOverride = `${userPrompt}\n\n${ASSISTANT_CHAT_PROMPT}`.trim();
     }
     try {
       // ── Pre-LLM layer: enrich prompt with OCR & window context ──
@@ -1551,8 +1658,8 @@ function setupIPC() {
       const parsed = parsePointTag(fullText);
       if (!event.sender.isDestroyed())
         event.sender.send("ai-done", { ...parsed, requestId: requestContext.requestId });
-      broadcastAgentState("executing");
-      
+      broadcastAgentState("idle");
+
       debugLog("ipc:send-message done", {
         requestId: requestContext.requestId,
         hasCoordinate: Boolean(parsed.coordinate),
@@ -1707,6 +1814,44 @@ function setupIPC() {
     return { ok: true, path: selectedPath };
   });
 
+  ipcMain.handle("check-workspace-prerequisites", () => {
+    debugLog("ipc:check-workspace-prerequisites");
+    try {
+      return { ok: true, ...checkWorkspacePrerequisites() };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error?.message || "Workspace prerequisite check failed.",
+      };
+    }
+  });
+
+  ipcMain.handle("get-handoff-status", (_event, { workspacePath, handoffFileName } = {}) => {
+    const resolvedPath = String(workspacePath || store.get("workspacePath") || "").trim();
+    if (!resolvedPath || !handoffFileName) {
+      return { ok: false, error: "Missing workspace path or handoff file name." };
+    }
+    return {
+      ok: true,
+      workspacePath: resolvedPath,
+      ...getHandoffStatus(resolvedPath, handoffFileName),
+    };
+  });
+
+  ipcMain.handle("focus-workspace-vscode", async () => {
+    debugLog("ipc:focus-workspace-vscode");
+    try {
+      const workspacePath = String(store.get("workspacePath") || "").trim();
+      if (!workspacePath || !fs.existsSync(workspacePath)) {
+        return { ok: false, error: "Workspace path is not configured or missing." };
+      }
+      await focusVSCodeWorkspace(workspacePath);
+      return { ok: true, workspacePath };
+    } catch (error) {
+      return { ok: false, error: error?.message || "Failed to focus VS Code." };
+    }
+  });
+
   ipcMain.handle("open-workspace-handoff", async (_event, options = {}) => {
     debugLog("ipc:open-workspace-handoff", options);
     try {
@@ -1730,6 +1875,15 @@ function setupIPC() {
         return { ok: false, error: `Workspace path does not exist: ${workspacePath}` };
       }
 
+      const prerequisites = checkWorkspacePrerequisites();
+      if (!prerequisites.canOpenWorkspace) {
+        return {
+          ok: false,
+          error: "VS Code CLI (code) bulunamadı. Kurulum adımları için uyarıyı kontrol edin.",
+          prerequisites,
+        };
+      }
+
       const pending = listPendingHandoffs(workspacePath);
       if (!force && pending.length > 0) {
         return {
@@ -1740,12 +1894,21 @@ function setupIPC() {
         };
       }
 
+      if (force && pending.length > 0) {
+        rejectPendingHandoffs(workspacePath);
+      }
+
       const snapshot = sessionManager ? sessionManager.getSnapshot() : {};
+      persistActiveSession(store, snapshot);
       const runtimeSettings = await getRuntimeSettings();
-      const payload = buildHandoffPayload(snapshot, workspacePath, undefined, runtimeSettings);
+      const enrichedSnapshot = {
+        ...snapshot,
+        chatSessionTitle: getActiveChatSessionTitle(store),
+      };
+      const payload = buildHandoffPayload(enrichedSnapshot, workspacePath, undefined, runtimeSettings);
       const written = writeHandoff(workspacePath, payload);
       seedSauronRules(workspacePath);
-      await launchVSCode(workspacePath);
+      const launchResult = await launchVSCode(workspacePath, { newWindow: true });
       try {
         await syncFinOpsConfigToWorkspace({ ...runtimeSettings, workspacePath });
       } catch (syncError) {
@@ -1759,6 +1922,10 @@ function setupIPC() {
         workspacePath,
         handoffPath: written.handoffPath,
         handoffId: written.handoffId,
+        handoffFileName: written.fileName,
+        launchResult,
+        prerequisites,
+        setupWarnings: prerequisites.warnings,
       };
     } catch (error) {
       appLogger.error("open-workspace-handoff failed", { error: error?.message || error });
@@ -1969,13 +2136,25 @@ app.whenReady().then(async () => {
   });
   sessionManager = new SessionManager();
   const persistedSession = loadSessionSnapshot(store);
-  if (persistedSession) {
-    sessionManager.hydrateSession(persistedSession);
-    appLogger.info("restored-session-from-disk", {
-      messageCount: persistedSession?.messages?.length || 0,
-      hasPlan: Boolean(persistedSession?.activePlan),
-    });
+  const chatState = loadChatSessionsState(store);
+
+  if (chatState?.activeSessionId && chatState.sessions?.[chatState.activeSessionId]) {
+    sessionManager.hydrateSession(chatState.sessions[chatState.activeSessionId].snapshot);
+  } else if (persistedSession) {
+    migrateLegacySessionSnapshot(store, sessionManager, persistedSession);
+  } else {
+    ensureChatSessionsState(store);
+    const freshState = loadChatSessionsState(store);
+    const active = freshState?.sessions?.[freshState.activeSessionId];
+    if (active?.snapshot) {
+      sessionManager.hydrateSession(active.snapshot);
+    }
   }
+
+  appLogger.info("restored-chat-sessions", {
+    sessionCount: listChatSessionSummaries(store).length,
+    messageCount: sessionManager.getSnapshot()?.messages?.length || 0,
+  });
   taskOrchestrator = new TaskOrchestrator({
     captureAllScreens,
     sessionManager,
@@ -2014,6 +2193,7 @@ app.whenReady().then(async () => {
   }
   sessionManager.on("updated", (snapshot) => {
     saveSessionSnapshot(store, snapshot);
+    persistActiveSession(store, snapshot);
     if (Array.isArray(snapshot?.lastScreenshots) && snapshot.lastScreenshots.length > 0) {
       updatePointerCalibration(snapshot.lastScreenshots);
     }

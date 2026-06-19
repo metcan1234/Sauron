@@ -19,7 +19,7 @@ export function queryPanelDom(doc = document) {
   return {
     panelRoot: doc.querySelector(".panel"),
     agentStatus: doc.getElementById("agent-status"),
-    assistantModeSelect: doc.getElementById("assistant-mode-select"),
+    assistantModeBadge: doc.getElementById("assistant-mode-badge"),
     modeBar: doc.getElementById("mode-bar"),
     modeBarPlugin: doc.getElementById("mode-bar-plugin"),
     modeBarTrust: doc.getElementById("mode-bar-trust"),
@@ -38,6 +38,7 @@ export function queryPanelDom(doc = document) {
     pttBtn: doc.getElementById("ptt-btn"),
     waveform: doc.getElementById("waveform"),
     btnSettings: doc.getElementById("btn-settings"),
+    btnChatHistory: doc.getElementById("btn-chat-history"),
     btnWorkspace: doc.getElementById("btn-workspace"),
     btnClose: doc.getElementById("btn-close"),
     btnClear: doc.getElementById("btn-clear"),
@@ -59,9 +60,21 @@ export function queryPanelDom(doc = document) {
     errorBannerRequest: doc.getElementById("error-banner-request"),
     errorBannerAction: doc.getElementById("error-banner-action"),
     errorBannerDismiss: doc.getElementById("error-banner-dismiss"),
+    workspaceStatusBanner: doc.getElementById("workspace-status-banner"),
+    workspaceStatusTitle: doc.getElementById("workspace-status-title"),
+    workspaceStatusMessage: doc.getElementById("workspace-status-message"),
+    workspaceStatusFocus: doc.getElementById("workspace-status-focus"),
+    workspaceStatusDismiss: doc.getElementById("workspace-status-dismiss"),
+    chatDrawerOverlay: doc.getElementById("chat-drawer-overlay"),
+    chatDrawerClose: doc.getElementById("chat-drawer-close"),
+    chatDrawerSearch: doc.getElementById("chat-drawer-search"),
+    chatDrawerNew: doc.getElementById("chat-drawer-new"),
+    chatDrawerList: doc.getElementById("chat-drawer-list"),
+    chatDrawerExportActive: doc.getElementById("chat-drawer-export-active"),
     onboardingOverlay: doc.getElementById("onboarding-overlay"),
     onboardingOpenSettings: doc.getElementById("onboarding-open-settings"),
     confirmOverlay: doc.getElementById("confirm-overlay"),
+    confirmTitle: doc.getElementById("confirm-title"),
     confirmMessage: doc.getElementById("confirm-message"),
     confirmCancel: doc.getElementById("confirm-cancel"),
     confirmConfirm: doc.getElementById("confirm-confirm"),
@@ -329,7 +342,7 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
   }
 
   function appendAssistantMessage(text) {
-    const collapseThinking = state.getSetting("assistantMode") === "planning";
+    const collapseThinking = false;
     const messageElement = doc.createElement("div");
     messageElement.className = "message assistant";
 
@@ -577,6 +590,43 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     };
   }
 
+  function hideWorkspaceStatus() {
+    if (!dom.workspaceStatusBanner) {
+      return;
+    }
+    dom.workspaceStatusBanner.classList.add("hidden");
+    dom.workspaceStatusBanner.classList.remove("is-success", "is-warning");
+  }
+
+  function showWorkspaceStatus({
+    title = "Çalışma Kısmı",
+    message = "",
+    tone = "default",
+    onFocus = null,
+  } = {}) {
+    if (!dom.workspaceStatusBanner) {
+      showToast(message);
+      return;
+    }
+    dom.workspaceStatusTitle.textContent = title;
+    dom.workspaceStatusMessage.textContent = message;
+    dom.workspaceStatusBanner.classList.remove("hidden", "is-success", "is-warning");
+    if (tone === "success") {
+      dom.workspaceStatusBanner.classList.add("is-success");
+    } else if (tone === "warning") {
+      dom.workspaceStatusBanner.classList.add("is-warning");
+    }
+
+    dom.workspaceStatusFocus.onclick = () => {
+      if (typeof onFocus === "function") {
+        onFocus();
+      }
+    };
+    dom.workspaceStatusDismiss.onclick = () => {
+      hideWorkspaceStatus();
+    };
+  }
+
   function showOnboarding() {
     if (dom.onboardingOverlay) {
       dom.onboardingOverlay.classList.remove("hidden");
@@ -589,13 +639,26 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     }
   }
 
-  function confirmDialog(message) {
+  function confirmDialog(message, options = {}) {
     if (!dom.confirmOverlay || !dom.confirmCancel || !dom.confirmConfirm) {
       return Promise.resolve(true);
     }
 
+    const config = typeof message === "object" && message !== null
+      ? { ...options, ...message }
+      : { message, ...options };
+
     return new Promise((resolve) => {
-      dom.confirmMessage.textContent = message;
+      if (dom.confirmTitle) {
+        dom.confirmTitle.textContent = config.title || "Clear Conversation?";
+      }
+      dom.confirmMessage.textContent = config.message || "";
+      dom.confirmCancel.textContent = config.cancelLabel || "Cancel";
+      dom.confirmConfirm.textContent = config.confirmLabel || "Clear";
+      dom.confirmConfirm.classList.toggle(
+        "danger",
+        config.confirmDanger ?? (config.confirmLabel || "Clear") === "Clear",
+      );
       dom.confirmOverlay.classList.remove("hidden");
       dom.confirmConfirm.focus();
 
@@ -646,7 +709,13 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
   }
 
   function confirmClearConversation() {
-    return confirmDialog("This will remove all chat history and active plan progress.");
+    return confirmDialog({
+      title: "Clear Conversation?",
+      message: "This will remove all chat history and active plan progress.",
+      confirmLabel: "Clear",
+      cancelLabel: "Cancel",
+      confirmDanger: true,
+    });
   }
 
   function startWaveformAnimation() {
@@ -704,6 +773,8 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     showToast,
     showErrorBanner,
     hideErrorBanner,
+    showWorkspaceStatus,
+    hideWorkspaceStatus,
     showOnboarding,
     hideOnboarding,
     confirmClearConversation,

@@ -26,6 +26,10 @@ function formatStructuredUserError(error) {
     return "The AI provider had a temporary server error while generating the plan. Please try again.";
   }
 
+  if (/404|no longer available|not found.*model/i.test(message)) {
+    return "The configured AI model is no longer available from the provider. Save Settings again or update the model name in AI Agents (advanced).";
+  }
+
   if (/Model did not return a JSON object|JSON|Unexpected token|parse/i.test(message)) {
     return "The AI returned an invalid planning response. Please try again.";
   }

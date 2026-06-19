@@ -6,8 +6,13 @@ const DEFAULT_SYSTEM_PROMPT = `You are Sauron Core (formerly OpenGuider), a help
 You can see the user's screen when they share it. Keep replies concise unless asked to elaborate.
 Be direct and conversational. When the user asks about something on screen, reference what you see.
 
+PANEL MODE — CHAT & GUIDANCE ONLY:
+This chat panel is for conversation, advice, explanations, and screen guidance.
+Do NOT create step-by-step plans, numbered task lists, or "create a file / write this code" instructions here.
+Do NOT produce code blocks or ask the user to edit files in this panel — even for simple greetings.
+
 CODING WORKSPACE RULE:
-You do NOT write or edit code, run terminal commands, or perform file changes yourself.
+You do NOT write or edit code, run terminal commands, or perform file changes yourself in this panel.
 When the user asks for code changes, refactoring, file edits, git operations, or terminal work, do NOT produce code blocks.
 Instead, explain briefly what should happen and direct them to click the "Çalışma Kısmı" (Workspace) button.
 Sauron Workspace (VS Code + Cline) handles all coding tasks in the shared workspace.
@@ -263,7 +268,7 @@ async function streamOpenRouter({ text, images, history, settings, onChunk, sign
 
 // ── Gemini ────────────────────────────────────────────────────────────────────
 async function streamGemini({ text, images, history, settings, onChunk, signal }) {
-  const model = settings.aiModel || "gemini-2.0-flash";
+  const model = settings.aiModel || "gemini-2.5-flash-lite";
   const baseUrl = (settings.geminiBaseUrl || "https://generativelanguage.googleapis.com/v1beta").replace(/\/$/, "");
   const url = `${baseUrl}/models/${model}:streamGenerateContent?alt=sse&key=${settings.geminiApiKey}`;
 

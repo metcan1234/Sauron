@@ -31,7 +31,7 @@ export function createMessagingController({
     const stopBtn = doc.getElementById("stop-btn");
     if (stopBtn) stopBtn.classList.add("hidden");
     dom.sendBtn.disabled = false;
-    
+
     ui.renderAgentState("idle");
     ui.removeAllTypingIndicators();
 
@@ -69,12 +69,11 @@ export function createMessagingController({
       return;
     }
 
-    const shouldCollapseThinking = state.getSetting("assistantMode") === "planning";
     for (const message of newMessages) {
       if (message.role === "user") {
         ui.appendUserMessage(message.content);
       } else {
-        await ui.streamAssistantMessage(message.content, { collapseThinking: shouldCollapseThinking });
+        await ui.streamAssistantMessage(message.content);
       }
     }
     ui.scrollToBottom();
@@ -113,34 +112,21 @@ export function createMessagingController({
       }
     }
 
-    const assistantMode = state.getSetting("assistantMode");
-    if (assistantMode !== "planning" && assistantMode !== "fast") {
-      ui.showToast("Please choose a Mode first.", true);
-      return;
-    }
-
     state.setPendingScreenshots(null);
     ui.hideErrorBanner();
     dom.textInput.value = "";
     dom.textInput.style.height = "auto";
-    const planningEnabled = assistantMode === "planning";
-    state.setStreaming(!planningEnabled);
-    
+    state.setStreaming(true);
+
     const stopBtn = doc.getElementById("stop-btn");
-    if (planningEnabled) {
-      dom.sendBtn.classList.remove("hidden");
-      if (stopBtn) stopBtn.classList.add("hidden");
-      dom.sendBtn.disabled = true;
-    } else {
-      dom.sendBtn.classList.add("hidden");
-      if (stopBtn) stopBtn.classList.remove("hidden");
-      dom.sendBtn.disabled = true;
-    }
-    
+    dom.sendBtn.classList.add("hidden");
+    if (stopBtn) stopBtn.classList.remove("hidden");
+    dom.sendBtn.disabled = true;
+
     ui.renderAgentState("thinking");
 
-    currentAbortController = planningEnabled ? null : new AbortController();
-    requestTimeoutId = planningEnabled ? null : window.setTimeout(() => {
+    currentAbortController = new AbortController();
+    requestTimeoutId = window.setTimeout(() => {
       if (state.isStreaming()) {
         log("ai:send-message timeout 60s triggered");
         cancelMessage();
@@ -153,7 +139,6 @@ export function createMessagingController({
       hasImages: Boolean(images && images.length),
       historyCount: state.getConversationHistory().length,
       textLength: rawText.length,
-      planningEnabled,
     });
 
     try {
@@ -161,34 +146,18 @@ export function createMessagingController({
       state.addConversationMessage({ role: "user", content: rawText });
       typingId = ui.showTypingIndicator();
 
-      if (planningEnabled) {
-        const result = await api.invoke("submit-user-message", {
-          text: rawText,
-          images: images || [],
-        });
-        if (result?.session) {
-          syncSession(result.session);
-        }
-      } else {
-        await api.invoke("send-message", {
-          text: rawText,
-          images: images || [],
-          history: state.getConversationHistory().slice(-8),
-          fastMode: true,
-        });
-      }
-} catch (error) {
+      await api.invoke("send-message", {
+        text: rawText,
+        images: images || [],
+        history: state.getConversationHistory().slice(-8),
+        fastMode: true,
+      });
+    } catch (error) {
       onAIError(error.message);
     } finally {
       if (requestTimeoutId) {
         clearTimeout(requestTimeoutId);
         requestTimeoutId = null;
-      }
-      if (planningEnabled) {
-        state.setStreaming(false);
-        dom.sendBtn.classList.remove("hidden");
-        if (stopBtn) stopBtn.classList.add("hidden");
-        dom.sendBtn.disabled = false;
       }
       if (typingId !== null) {
         ui.removeTypingIndicator(typingId);
@@ -229,7 +198,6 @@ export function createMessagingController({
         messageElement: streamingBubble.closest(".message"),
         bubble: streamingBubble,
         text: finalText,
-        collapseThinking: state.getSetting("assistantMode") === "planning",
       });
       state.clearStreamingSession();
     }

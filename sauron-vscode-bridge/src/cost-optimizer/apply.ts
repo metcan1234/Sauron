@@ -13,6 +13,12 @@ export interface ApplyClineModelResult {
 		agentId: string
 		reason: string
 	}
+	planSelection?: {
+		providerId: string
+		modelId: string
+		agentId: string
+		reason: string
+	}
 }
 
 export async function applyClineModelBeforeHandoff(
@@ -32,27 +38,38 @@ export async function applyClineModelBeforeHandoff(
 		handoff.id,
 	)
 
-	const selection = resolveClineAgent(handoff.complexityHint, optimizer.agentMatrix, {
+	const planSelection = resolveClineAgent("low", optimizer.agentMatrix, {
 		downgradeOneTier,
 		fallbackText: handoff.taskSummary || handoff.goal || "",
 	})
 
-	if (!selection) {
+	const actSelection = resolveClineAgent(handoff.complexityHint, optimizer.agentMatrix, {
+		downgradeOneTier,
+		fallbackText: handoff.taskSummary || handoff.goal || "",
+	})
+
+	if (!actSelection) {
 		return { applied: false }
 	}
 
 	try {
+		if (planSelection && cline.setPlanModeModel) {
+			await cline.setPlanModeModel({
+				providerId: planSelection.providerId,
+				modelId: planSelection.modelId,
+			})
+		}
 		await cline.setActiveModel({
-			providerId: selection.providerId,
-			modelId: selection.modelId,
+			providerId: actSelection.providerId,
+			modelId: actSelection.modelId,
 		})
 	} catch {
-		return { applied: false, selection }
+		return { applied: false, selection: actSelection, planSelection: planSelection || undefined }
 	}
 
 	await appendUsageRecord(workspaceRoot, {
 		provider: "sauron",
-		model: `${selection.agentId}:${selection.modelId}`,
+		model: `plan:${planSelection?.agentId || "none"} act:${actSelection.agentId}:${actSelection.modelId}`,
 		promptTokens: 0,
 		completionTokens: 0,
 		costTl: 0,
@@ -63,5 +80,9 @@ export async function applyClineModelBeforeHandoff(
 		source: "bridge",
 	}).catch(() => {})
 
-	return { applied: true, selection }
+	return {
+		applied: true,
+		selection: actSelection,
+		planSelection: planSelection || undefined,
+	}
 }

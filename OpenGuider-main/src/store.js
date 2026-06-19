@@ -71,6 +71,7 @@ const schema = {
   panelWindowX: { type:"number", default:-1 },
   panelWindowY: { type:"number", default:-1 },
   sessionSnapshotV1: { type: ["object", "null"], default: null },
+  chatSessionsV1: { type: ["object", "null"], default: null },
   workspacePath: { type: "string", default: "" },
   finopsTotalBudgetTl: { type: "number", default: 0 },
   finopsUsdToTl: { type: "number", default: 34.5 },

@@ -9,6 +9,36 @@ import { getApiMetrics } from "@/shared/getApiMetrics"
 import type { ApiConfiguration } from "@shared/api"
 import { ActiveModelSelection, ClineAPI } from "./cline"
 
+function resolvePlanModeModel(config: ApiConfiguration): ActiveModelSelection {
+	const providerId = String(config.planModeApiProvider || config.actModeApiProvider || "")
+	if (providerId === "openai") {
+		return { providerId, modelId: config.planModeOpenAiModelId || config.actModeOpenAiModelId || "" }
+	}
+	if (providerId === "ollama") {
+		return { providerId, modelId: config.planModeOllamaModelId || config.actModeOllamaModelId || "" }
+	}
+	return { providerId, modelId: config.planModeApiModelId || config.actModeApiModelId || "" }
+}
+
+function applyPlanModeModel(
+	config: ApiConfiguration,
+	providerId: string,
+	modelId: string,
+): ApiConfiguration {
+	const updated: ApiConfiguration = {
+		...config,
+		planModeApiProvider: providerId as ApiConfiguration["planModeApiProvider"],
+	}
+	if (providerId === "openai") {
+		updated.planModeOpenAiModelId = modelId
+	} else if (providerId === "ollama") {
+		updated.planModeOllamaModelId = modelId
+	} else {
+		updated.planModeApiModelId = modelId
+	}
+	return updated
+}
+
 function resolveActModeModel(config: ApiConfiguration): ActiveModelSelection {
 	const providerId = String(config.actModeApiProvider || "")
 	if (providerId === "openai") {
@@ -102,9 +132,30 @@ export function createClineAPI(sidebarController: Controller): ClineAPI {
 			}
 		},
 
+		getPlanModeModel: () => {
+			const config = sidebarController.stateManager.getApiConfiguration()
+			return resolvePlanModeModel(config)
+		},
+
 		getActiveModel: () => {
 			const config = sidebarController.stateManager.getApiConfiguration()
 			return resolveActModeModel(config)
+		},
+
+		setPlanModeModel: async ({ providerId, modelId }: ActiveModelSelection) => {
+			const current = sidebarController.stateManager.getApiConfiguration()
+			const updated = applyPlanModeModel(current, providerId, modelId)
+			sidebarController.stateManager.setApiConfiguration(updated)
+			if (sidebarController.task) {
+				const currentMode = sidebarController.stateManager.getGlobalSettingsKey("mode")
+				if (currentMode === "plan") {
+					sidebarController.task.api = buildApiHandler(
+						{ ...updated, ulid: sidebarController.task.ulid },
+						currentMode,
+					)
+				}
+			}
+			await sidebarController.postStateToWebview()
 		},
 
 		setActiveModel: async ({ providerId, modelId }: ActiveModelSelection) => {

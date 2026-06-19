@@ -6,7 +6,7 @@ const AGENT_DEFINITIONS = {
   gemini: {
     id: "gemini",
     coreProvider: "gemini",
-    coreModel: "gemini-2.0-flash",
+    coreModel: "gemini-2.5-flash-lite",
     clineProviderId: "gemini",
     clineModelId: "gemini-2.5-flash",
     credentialKey: "geminiApiKey",

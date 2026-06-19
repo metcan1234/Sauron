@@ -130,7 +130,7 @@ test("panel controller hides guide actions during browser execution and restores
       status: "waiting_user",
     });
 
-    assert.equal(panelActions.classList.contains("hidden"), false);
+    assert.equal(panelActions.classList.contains("hidden"), true);
     assert.equal(browserTaskView.classList.contains("hidden"), true);
     assert.equal(panelRoot.classList.contains("browser-task-active"), false);
     assert.equal(modeBar.getAttribute("aria-hidden"), "true");
@@ -280,7 +280,7 @@ test("panel controller keeps the completed browser task summary visible in the t
   }
 });
 
-test("panel controller keeps guide actions hidden in planning mode until an active guide step exists", async () => {
+test("panel controller keeps guide plan actions hidden in chat-only assistant mode", async () => {
   const html = fs.readFileSync(path.join(__dirname, "../../renderer/index.html"), "utf8");
   const dom = new JSDOM(html, { url: "http://localhost" });
   installDomGlobals(dom);
@@ -321,7 +321,7 @@ test("panel controller keeps guide actions hidden in planning mode until an acti
       status: "waiting_user",
     });
 
-    assert.equal(panelActions.classList.contains("hidden"), false);
+    assert.equal(panelActions.classList.contains("hidden"), true);
   } finally {
     cleanupDomGlobals(dom);
   }

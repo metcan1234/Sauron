@@ -24,4 +24,6 @@ export interface ClineAPI {
 	getActiveTaskMetrics?(): ActiveTaskMetrics | null
 	getActiveModel?(): ActiveModelSelection
 	setActiveModel?(selection: ActiveModelSelection): Promise<void>
+	getPlanModeModel?(): ActiveModelSelection
+	setPlanModeModel?(selection: ActiveModelSelection): Promise<void>
 }

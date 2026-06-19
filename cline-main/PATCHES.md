@@ -6,8 +6,8 @@ This fork keeps Sauron-specific changes isolated to the public extension API. Ha
 
 | File | Change |
 |------|--------|
-| [`apps/vscode/src/exports/cline.d.ts`](apps/vscode/src/exports/cline.d.ts) | Added `hasActiveTask()`, `addToInput()`, `ActiveTaskMetrics`, `getActiveTaskMetrics()`, `getActiveModel()`, `setActiveModel()` |
-| [`apps/vscode/src/exports/index.ts`](apps/vscode/src/exports/index.ts) | Implemented the methods above; metrics reuse `getApiMetrics()`; model switching updates act-mode API configuration |
+| [`apps/vscode/src/exports/cline.d.ts`](apps/vscode/src/exports/cline.d.ts) | Added `hasActiveTask()`, `addToInput()`, `ActiveTaskMetrics`, `getActiveTaskMetrics()`, `getActiveModel()`, `setActiveModel()`, `getPlanModeModel()`, `setPlanModeModel()` |
+| [`apps/vscode/src/exports/index.ts`](apps/vscode/src/exports/index.ts) | Implemented the methods above; metrics reuse `getApiMetrics()`; act/plan model switching updates API configuration |
 
 ## Removed Phase 1 hooks (no longer needed)
 

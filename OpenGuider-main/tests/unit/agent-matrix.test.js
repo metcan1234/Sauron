@@ -21,7 +21,7 @@ test("resolveAgentForCore picks gemini for low complexity", () => {
   const overlay = resolveAgentForCore("chat", "low", baseSettings);
   assert.ok(overlay);
   assert.equal(overlay.aiProvider, "gemini");
-  assert.equal(overlay.aiModel, "gemini-2.0-flash");
+  assert.equal(overlay.aiModel, "gemini-2.5-flash-lite");
   assert.equal(overlay.agentId, "gemini");
 });
 

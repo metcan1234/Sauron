@@ -7,6 +7,8 @@ const path = require("path");
 const {
   generateHandoffId,
   listPendingHandoffs,
+  rejectPendingHandoffs,
+  getHandoffStatus,
   writeHandoff,
   buildHandoffPayload,
   buildTaskSummary,
@@ -57,6 +59,30 @@ test("buildTaskSummary excludes transcript by default", () => {
   assert.match(summary, /Goal: Ship fix/);
   assert.match(summary, /Plan steps:/);
   assert.doesNotMatch(summary, /Recent conversation/);
+});
+
+test("buildTaskSummary includes compact latest chat context by default", () => {
+  const summary = buildTaskSummary({
+    goalIntent: "fix bug",
+    messages: [
+      { role: "user", content: "login sayfasini duzelt" },
+      { role: "assistant", content: "Tamam, once auth modulune bakalim." },
+    ],
+  });
+
+  assert.match(summary, /Latest chat context/);
+  assert.match(summary, /login sayfasini duzelt/);
+  assert.match(summary, /auth modulune bakalim/);
+  assert.doesNotMatch(summary, /Recent conversation/);
+});
+
+test("buildTaskSummary includes chat session title when provided", () => {
+  const summary = buildTaskSummary({
+    chatSessionTitle: "Auth refactor",
+    messages: [{ role: "user", content: "login sayfasini duzelt" }],
+  });
+
+  assert.match(summary, /Chat session: Auth refactor/);
 });
 
 test("buildTaskSummary includes transcript when enabled", () => {
@@ -134,6 +160,66 @@ test("listPendingHandoffs ignores consumed and rejected files", () => {
     assert.equal(pending.length, 2);
     assert.ok(pending.some((item) => item.fileName === "handoff-old.json"));
     assert.ok(pending.some((item) => item.fileName === "handoff.json"));
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test("rejectPendingHandoffs marks pending files as rejected", () => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "sauron-handoff-"));
+  try {
+    const sauronDir = path.join(workspace, ".sauron");
+    fs.mkdirSync(sauronDir, { recursive: true });
+    const pendingPath = path.join(sauronDir, "handoff-pending.json");
+    fs.writeFileSync(pendingPath, JSON.stringify({ createdAt: "2020-01-01T00:00:00.000Z" }));
+
+    const rejectedCount = rejectPendingHandoffs(workspace);
+    assert.equal(rejectedCount, 1);
+    assert.equal(fs.existsSync(pendingPath), false);
+    assert.equal(fs.existsSync(`${pendingPath}.rejected`), true);
+    assert.equal(listPendingHandoffs(workspace).length, 0);
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test("getHandoffStatus tracks pending consumed and rejected states", () => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "sauron-handoff-status-"));
+  try {
+    const fileName = "handoff-test.json";
+    const sauronDir = path.join(workspace, ".sauron");
+    fs.mkdirSync(sauronDir, { recursive: true });
+    const pendingPath = path.join(sauronDir, fileName);
+    fs.writeFileSync(pendingPath, "{}");
+
+    assert.equal(getHandoffStatus(workspace, fileName).status, "pending");
+
+    fs.renameSync(pendingPath, `${pendingPath}.consumed`);
+    assert.equal(getHandoffStatus(workspace, fileName).status, "consumed");
+
+    fs.renameSync(`${pendingPath}.consumed`, `${pendingPath}.rejected`);
+    assert.equal(getHandoffStatus(workspace, fileName).status, "rejected");
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test("getHandoffStatus tracks pending consumed and rejected states", () => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "sauron-handoff-status-"));
+  try {
+    const fileName = "handoff-test.json";
+    const sauronDir = path.join(workspace, ".sauron");
+    fs.mkdirSync(sauronDir, { recursive: true });
+    const pendingPath = path.join(sauronDir, fileName);
+    fs.writeFileSync(pendingPath, "{}");
+
+    assert.equal(getHandoffStatus(workspace, fileName).status, "pending");
+
+    fs.renameSync(pendingPath, `${pendingPath}.consumed`);
+    assert.equal(getHandoffStatus(workspace, fileName).status, "consumed");
+
+    fs.renameSync(`${pendingPath}.consumed`, `${pendingPath}.rejected`);
+    assert.equal(getHandoffStatus(workspace, fileName).status, "rejected");
   } finally {
     fs.rmSync(workspace, { recursive: true, force: true });
   }

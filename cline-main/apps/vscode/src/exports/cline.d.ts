@@ -55,6 +55,16 @@ export interface ClineAPI {
 	getActiveTaskMetrics(): ActiveTaskMetrics | null
 
 	/**
+	 * Returns the current plan-mode provider and model id from Cline API configuration.
+	 */
+	getPlanModeModel(): ActiveModelSelection
+
+	/**
+	 * Switches plan-mode provider/model (exploration / read phase).
+	 */
+	setPlanModeModel(selection: ActiveModelSelection): Promise<void>
+
+	/**
 	 * Returns the current act-mode provider and model id from Cline API configuration.
 	 */
 	getActiveModel(): ActiveModelSelection

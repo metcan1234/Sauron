@@ -1,3 +1,4 @@
+import { createChatHistoryController } from "./chat-history.js";
 import { createMessagingController } from "./messaging.js";
 import { createPlanView } from "./plan-view.js";
 import { createPttController } from "./ptt.js";
@@ -136,10 +137,193 @@ export function createPanelController({
   const planView = createPlanView({ doc, dom });
   const stepApproval = createStepApprovalController({ dom, log, win });
   const messaging = createMessagingController({ api, doc, dom, log, state, ui });
+  const chatHistory = createChatHistoryController({ api, doc, dom, log, ui, state, win });
   const tts = createTtsPlaybackController({ api, log, state, win });
   const ptt = createPttController({ api, dom, log, messaging, state, ui, win });
   let lastBrowserExecutionSnapshot = null;
   let modeBarHideTimer = null;
+  let workspacePollTimer = null;
+
+  const HANDOFF_POLL_INTERVAL_MS = 2000;
+  const HANDOFF_POLL_TIMEOUT_MS = 60000;
+
+  function stopWorkspaceHandoffPoll() {
+    if (workspacePollTimer) {
+      win.clearInterval(workspacePollTimer);
+      workspacePollTimer = null;
+    }
+  }
+
+  function formatSetupWarnings(prerequisites) {
+    const steps = Array.isArray(prerequisites?.steps) ? prerequisites.steps : [];
+    const missing = steps.filter((step) => !step.ok);
+    if (missing.length === 0) {
+      return "";
+    }
+    return missing.map((step) => `• ${step.title}: ${step.docHint}`).join("\n");
+  }
+
+  async function pollHandoffUntilSettled(workspacePath, handoffFileName) {
+    stopWorkspaceHandoffPoll();
+    const startedAt = Date.now();
+
+    return new Promise((resolve) => {
+      const checkStatus = async () => {
+        try {
+          const statusResult = await api.invoke("get-handoff-status", {
+            workspacePath,
+            handoffFileName,
+          });
+          const status = statusResult?.status;
+
+          if (status === "consumed") {
+            stopWorkspaceHandoffPoll();
+            ui.showWorkspaceStatus({
+              title: "Cline görevi yüklendi",
+              message: "Bridge handoff'u işledi. VS Code + Cline sidebar'da görevi görebilirsiniz.",
+              tone: "success",
+              onFocus: () => api.invoke("focus-workspace-vscode"),
+            });
+            resolve("consumed");
+            return;
+          }
+
+          if (status === "rejected") {
+            stopWorkspaceHandoffPoll();
+            ui.showWorkspaceStatus({
+              title: "Görev reddedildi",
+              message: "VS Code'da aktif Cline görevi vardı ve yeni görev reddedildi.",
+              tone: "warning",
+              onFocus: () => api.invoke("focus-workspace-vscode"),
+            });
+            resolve("rejected");
+            return;
+          }
+
+          if (Date.now() - startedAt >= HANDOFF_POLL_TIMEOUT_MS) {
+            stopWorkspaceHandoffPoll();
+            ui.showWorkspaceStatus({
+              title: "Bridge yanıt vermedi",
+              message: "VS Code açıldı ama handoff henüz işlenmedi. Bridge + Cline kurulumunu kontrol edin.",
+              tone: "warning",
+              onFocus: () => api.invoke("focus-workspace-vscode"),
+            });
+            resolve("timeout");
+          }
+        } catch (error) {
+          log("workspace handoff poll error", error);
+        }
+      };
+
+      workspacePollTimer = win.setInterval(checkStatus, HANDOFF_POLL_INTERVAL_MS);
+      void checkStatus();
+    });
+  }
+
+  async function updateWorkspaceButtonState() {
+    if (!dom.btnWorkspace) {
+      return;
+    }
+    try {
+      const prerequisites = await api.invoke("check-workspace-prerequisites");
+      dom.btnWorkspace.classList.remove("workspace-ready", "workspace-warning");
+      if (prerequisites?.ok) {
+        dom.btnWorkspace.classList.add("workspace-ready");
+        dom.btnWorkspace.title = "Çalışma Kısmı — hazır";
+      } else if (prerequisites?.canOpenWorkspace) {
+        dom.btnWorkspace.classList.add("workspace-warning");
+        dom.btnWorkspace.title = "Çalışma Kısmı — eklenti kurulumu eksik";
+      } else {
+        dom.btnWorkspace.title = "Çalışma Kısmı — VS Code kurulumu gerekli";
+      }
+    } catch (error) {
+      log("check-workspace-prerequisites error", error);
+    }
+  }
+
+  async function openWorkspaceHandoff() {
+    log("ipc:open-workspace-handoff invoke");
+    if (dom.btnWorkspace.disabled) {
+      return;
+    }
+
+    dom.btnWorkspace.disabled = true;
+    ui.hideWorkspaceStatus();
+
+    try {
+      const prerequisites = await api.invoke("check-workspace-prerequisites");
+      if (!prerequisites?.canOpenWorkspace) {
+        ui.showErrorBanner({
+          title: "VS Code kurulumu eksik",
+          message: formatSetupWarnings(prerequisites) || prerequisites?.error || "code CLI bulunamadı.",
+          actionLabel: "Kurulum rehberi",
+          onAction: () => api.invoke("open-external-link", "https://github.com/metcan1234/Sauron#kurulum"),
+        });
+        return;
+      }
+
+      if (!prerequisites?.ok) {
+        const proceedWithoutBridge = await ui.confirmDialog({
+          title: "Eklenti kurulumu eksik",
+          message: `${formatSetupWarnings(prerequisites)}\n\nVS Code açılır ama Cline görevi otomatik başlamayabilir. Yine de devam edilsin mi?`,
+          confirmLabel: "Devam",
+          cancelLabel: "İptal",
+          confirmDanger: false,
+        });
+        if (!proceedWithoutBridge) {
+          return;
+        }
+      }
+
+      let result = await api.invoke("open-workspace-handoff");
+      if (result?.needsConfirm) {
+        const proceed = await ui.confirmDialog({
+          title: "Çalışma Kısmına geçilsin mi?",
+          message: result.message || "Önceki görev henüz VS Code tarafında işlenmedi. Yine de devam edilsin mi?",
+          confirmLabel: "Devam",
+          cancelLabel: "İptal",
+          confirmDanger: false,
+        });
+        if (!proceed) {
+          return;
+        }
+        result = await api.invoke("open-workspace-handoff", { force: true });
+      }
+
+      if (!result?.ok) {
+        if (result?.prerequisites) {
+          ui.showErrorBanner({
+            title: "Çalışma Kısmı açılamadı",
+            message: formatSetupWarnings(result.prerequisites) || result.error,
+            actionLabel: "Kurulum rehberi",
+            onAction: () => api.invoke("open-external-link", "https://github.com/metcan1234/Sauron#kurulum"),
+          });
+        } else {
+          ui.showToast(result?.error || "Çalışma Kısmı açılamadı", true);
+        }
+        return;
+      }
+
+      ui.showWorkspaceStatus({
+        title: "VS Code açıldı",
+        message: "Bridge'in Cline'a görev yüklemesi bekleniyor…",
+        tone: "default",
+        onFocus: () => api.invoke("focus-workspace-vscode"),
+      });
+
+      if (Array.isArray(result.setupWarnings) && result.setupWarnings.length > 0) {
+        ui.showToast("Eklenti eksik — otomatik görev başlamayabilir", true);
+      }
+
+      if (result.handoffFileName && result.workspacePath) {
+        await pollHandoffUntilSettled(result.workspacePath, result.handoffFileName);
+      }
+    } catch (error) {
+      ui.showToast(error?.message || "Çalışma Kısmı açılamadı", true);
+    } finally {
+      dom.btnWorkspace.disabled = false;
+    }
+  }
 
   function getActionShortcutMap() {
     return [
@@ -179,20 +363,11 @@ export function createPanelController({
     dom.btnPlanCancel.disabled = !enabled;
   }
 
-  function updatePlanActionVisibility(assistantMode, sessionSnapshot = null) {
+  function updatePlanActionVisibility(_assistantMode, _sessionSnapshot = null) {
     if (!dom.panelActions) {
       return;
     }
-
-    const snapshot = sessionSnapshot || state.getSessionSnapshot() || {
-      activePlan: state.getActivePlan(),
-      browserExecution: state.getBrowserExecution(),
-    };
-    const currentStep = snapshot?.activePlan?.steps?.[snapshot?.activePlan?.currentStepIndex];
-    const showActions = assistantMode === "planning"
-      && !snapshot?.browserExecution
-      && Boolean(currentStep);
-    dom.panelActions.classList.toggle("hidden", !showActions);
+    dom.panelActions.classList.add("hidden");
   }
 
   function updateModeBarStepCounter(stepNumber) {
@@ -351,62 +526,22 @@ export function createPanelController({
       });
     });
 
-    dom.assistantModeSelect.addEventListener("change", async () => {
-      const assistantMode = dom.assistantModeSelect.value === "fast" ? "fast" : "planning";
-      if (!dom.assistantModeSelect.value) {
-        return;
-      }
-      const planningEnabled = assistantMode === "planning";
-      state.setSetting("assistantMode", assistantMode);
-      state.setSetting("planningModeEnabled", planningEnabled);
-      updatePlanActionVisibility(assistantMode);
-      ui.hideErrorBanner();
-      dom.sendBtn.disabled = false;
-      dom.pttBtn.disabled = false;
-      log("ipc:save-settings invoke assistantMode", assistantMode);
-      await api.invoke("save-settings", {
-        assistantMode,
-        planningModeEnabled: planningEnabled,
-      });
-
-      if (!planningEnabled) {
-        await api.invoke("cancel-active-plan", { silent: true });
-      }
-    });
-
     dom.btnSettings.addEventListener("click", () => {
       log("ipc:open-settings invoke");
       api.invoke("open-settings");
     });
 
-    dom.btnWorkspace.addEventListener("click", async () => {
-      log("ipc:open-workspace-handoff invoke");
-      if (dom.btnWorkspace.disabled) {
-        return;
-      }
-      dom.btnWorkspace.disabled = true;
-      try {
-        let result = await api.invoke("open-workspace-handoff");
-        if (result?.needsConfirm) {
-          const proceed = await ui.confirmDialog(
-            result.message || "Önceki görev henüz VS Code tarafında işlenmedi. Yine de devam edilsin mi?",
-          );
-          if (!proceed) {
-            return;
-          }
-          result = await api.invoke("open-workspace-handoff", { force: true });
-        }
-        if (!result?.ok) {
-          ui.showToast(result?.error || "Çalışma Kısmı açılamadı", true);
-          return;
-        }
-        ui.showToast("VS Code açılıyor — Cline görevi yükleyecek");
-      } catch (error) {
-        ui.showToast(error?.message || "Çalışma Kısmı açılamadı", true);
-      } finally {
-        dom.btnWorkspace.disabled = false;
-      }
+    dom.btnWorkspace.addEventListener("click", () => {
+      void openWorkspaceHandoff();
     });
+
+    if (dom.workspaceStatusFocus) {
+      dom.workspaceStatusFocus.addEventListener("click", () => {
+        api.invoke("focus-workspace-vscode").catch((error) => {
+          log("ipc:focus-workspace-vscode error", error);
+        });
+      });
+    }
 
     dom.btnClose.addEventListener("click", () => {
       log("ipc:minimize-panel invoke");
@@ -484,8 +619,8 @@ export function createPanelController({
       ui.buildModelSelector();
       ui.updateProviderDot();
       applyShortcutTitles();
-      const assistantMode = nextSettings?.assistantMode || "fast";
-      dom.assistantModeSelect.value = assistantMode;
+      const assistantMode = nextSettings?.assistantMode === "planning" ? "fast" : (nextSettings?.assistantMode || "fast");
+      state.setSetting("assistantMode", assistantMode);
       updatePlanActionVisibility(assistantMode);
       state.setIncludeScreen(nextSettings?.includeScreenshotByDefault !== false);
     });
@@ -500,11 +635,14 @@ export function createPanelController({
       injectBrowserExecutionNotice(lastBrowserExecutionSnapshot, snapshot?.browserExecution || null);
       lastBrowserExecutionSnapshot = snapshot?.browserExecution || null;
       messaging.syncSession(snapshot);
-      planView.renderPlan(snapshot?.activePlan || null);
+      planView.renderPlan(null);
       syncBrowserExecution(snapshot?.browserExecution || null);
-      ui.renderAgentState(snapshot?.status || "idle");
-      updatePlanActionVisibility(state.getSetting("assistantMode") || "fast", snapshot);
+      ui.renderAgentState(snapshot?.status === "executing" ? "idle" : (snapshot?.status || "idle"));
+      updatePlanActionVisibility("fast", snapshot);
       updatePlanActionButtons(snapshot);
+      if (chatHistory.isDrawerOpen()) {
+        void chatHistory.refreshSessionList();
+      }
     });
 
     api.on("execution:substep-progress", (substep) => {
@@ -517,8 +655,8 @@ export function createPanelController({
     api.on("plan-updated", (plan) => {
       log("ipc:plan-updated received");
       state.setActivePlan(plan || null);
-      planView.renderPlan(plan || null);
-      updatePlanActionVisibility(state.getSetting("assistantMode") || "fast", {
+      planView.renderPlan(null);
+      updatePlanActionVisibility("fast", {
         activePlan: plan || null,
         browserExecution: state.getBrowserExecution(),
       });
@@ -563,21 +701,29 @@ export function createPanelController({
     ui.buildModelSelector();
     ui.updateProviderDot();
     ui.renderConversation(session?.messages || []);
-    planView.renderPlan(session?.activePlan || null);
+    planView.renderPlan(null);
     lastBrowserExecutionSnapshot = session?.browserExecution || null;
     syncBrowserExecution(session?.browserExecution || null);
-    ui.renderAgentState(session?.status || "idle");
+    ui.renderAgentState(session?.status === "executing" ? "idle" : (session?.status || "idle"));
     applyShortcutTitles();
     updatePlanActionButtons(session);
-    const assistantMode = settings?.assistantMode || "fast";
-    dom.assistantModeSelect.value = assistantMode;
-    state.setSetting("assistantMode", assistantMode);
-    state.setSetting("planningModeEnabled", assistantMode === "planning");
-    updatePlanActionVisibility(assistantMode, session);
+    state.setSetting("assistantMode", "fast");
+    state.setSetting("planningModeEnabled", false);
+    updatePlanActionVisibility("fast", session);
+    if (session?.activePlan) {
+      await api.invoke("cancel-active-plan", { silent: true });
+    }
+    if (settings?.assistantMode === "planning") {
+      await api.invoke("save-settings", {
+        assistantMode: "fast",
+        planningModeEnabled: false,
+      });
+    }
     dom.sendBtn.disabled = false;
     dom.pttBtn.disabled = false;
     state.setIncludeScreen(settings?.includeScreenshotByDefault !== false);
     bindEvents();
+    chatHistory.bindEvents();
     setupIPCListeners();
     if (!settings?.onboardingCompleted) {
       state.setSetting("onboardingCompleted", true);
@@ -585,6 +731,7 @@ export function createPanelController({
       ui.showOnboarding();
     }
     await ensureRuntimePermissions();
+    await updateWorkspaceButtonState();
     dom.textInput.focus();
     log("init:complete");
   }

@@ -10,7 +10,7 @@ const DEFAULT_COMPLEXITY_KEYWORDS = [
 ]
 
 const DEFAULT_TIER_MODELS: Record<string, TierModel> = {
-	economy: { providerId: "gemini", modelId: "gemini-2.0-flash" },
+	economy: { providerId: "gemini", modelId: "gemini-2.5-flash-lite" },
 	standard: { providerId: "deepseek", modelId: "deepseek-chat" },
 	premium: { providerId: "openai", modelId: "gpt-4o-mini" },
 	local: { providerId: "ollama", modelId: "qwen2.5-coder:7b" },
