@@ -3,6 +3,9 @@
 // screenshot capture, TTS, cursor overlay management.
 
 const { app } = require("electron");
+if (process.platform === "win32") {
+  app.disableHardwareAcceleration();
+}
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
@@ -99,12 +102,14 @@ const { registerWebStudioIpc } = require("./src/ipc/web-studio-ipc");
 const { registerBuildPipelineIpc } = require("./src/ipc/build-pipeline-ipc");
 const { createWindowManager } = require("./src/main/window-manager");
 const { createTrayMenu } = require("./src/main/tray-menu");
+const { raisePanelAboveOverlay, resetPanelAlwaysOnTop } = require("./src/main/panel-window-focus");
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const PANEL_WIDTH  = 440;
 const PANEL_HEIGHT = 660;
 const WIDGET_WIDTH = 220;
-const WIDGET_COLLAPSED_HEIGHT = 58;
+const WIDGET_COLLAPSED_HEIGHT = 68;
+const PANEL_WINDOW_MARGIN = 16;
 const WIDGET_EXPANDED_HEIGHT = 248;
 const ASSISTANT_CHAT_PROMPT = [
   "ASSISTANT CHAT MODE:",
@@ -146,6 +151,8 @@ let lastPushToTalkToggleAt = 0;
 let browserExecutionTts = null;
 let windowManager = null;
 let trayController = null;
+let panelReady = false;
+let panelOpenIpcRegistered = false;
 
 function ensureWindowManager() {
   if (windowManager) {
@@ -181,7 +188,14 @@ function ensureWindowManager() {
       if (Object.prototype.hasOwnProperty.call(patch, "widgetWindow")) widgetWindow = patch.widgetWindow;
     },
     callbacks: {
-      showPanel: () => showPanel(),
+      showPanel: () => openOpenGuiderPanel({ source: "panel-crash-recovery" }),
+      recreatePanelWindow: () => createPanelWindow(),
+      onPanelReady: () => {
+        panelReady = true;
+      },
+      onPanelHide: () => {
+        isPanelVisible = false;
+      },
       broadcastSessionSnapshot: () => {
         if (sessionManager) {
           broadcastSessionSnapshot(sessionManager.getSnapshot());
@@ -201,7 +215,10 @@ function resizeCursorOverlayToVirtualBounds() {
 }
 
 function createPanelWindow() {
+  panelReady = false;
+  isPanelVisible = false;
   ensureWindowManager().createPanelWindow();
+  applyPanelBounds();
 }
 
 function createSettingsWindow() {
@@ -235,7 +252,7 @@ function createTray() {
       Menu,
       buildTrayIcon: () => ensureWindowManager().buildTrayIcon(),
       callbacks: {
-        showPanel: () => showPanel(),
+        showPanel: () => openOpenGuiderPanel({ source: "tray" }),
         hidePanel: () => hidePanel(),
         isPanelVisible: () => isPanelVisible,
         createSettingsWindow: () => createSettingsWindow(),
@@ -618,6 +635,10 @@ function showPointer(pointer) {
     return null;
   }
 
+  if (isPanelVisible) {
+    hideCursorOverlay();
+  }
+
   if (panelWindow && !panelWindow.isDestroyed()) {
     panelWindow.webContents.send("pointer-updated", payload);
   }
@@ -630,25 +651,25 @@ function showPointer(pointer) {
 }
 
 // ── Panel position (top-right by default, persistent if moved) ───────────────
+function isValidSavedPanelCoord(value) {
+  return Number.isFinite(value) && value > -1;
+}
+
 function getPanelPosition() {
   const displays = screen.getAllDisplays();
   const primaryWorkArea = screen.getPrimaryDisplay().workArea;
-  const defaultX = primaryWorkArea.x + primaryWorkArea.width - PANEL_WIDTH - 20;
-  const defaultY = primaryWorkArea.y + 20;
+  const defaultX = primaryWorkArea.x + primaryWorkArea.width - PANEL_WIDTH - PANEL_WINDOW_MARGIN;
+  const defaultY = primaryWorkArea.y + PANEL_WINDOW_MARGIN;
 
   const rawX = store?.get("panelWindowX");
   const rawY = store?.get("panelWindowY");
 
-  if (rawX === undefined || rawX === null || rawY === undefined || rawY === null) {
+  if (!isValidSavedPanelCoord(Number(rawX)) || !isValidSavedPanelCoord(Number(rawY))) {
     return { x: defaultX, y: defaultY };
   }
 
   const savedX = Number(rawX);
   const savedY = Number(rawY);
-
-  if (!Number.isFinite(savedX) || !Number.isFinite(savedY)) {
-    return { x: defaultX, y: defaultY };
-  }
 
   // Find which display the saved position belongs to (handles multi-monitor setups)
   const targetDisplay =
@@ -661,9 +682,58 @@ function getPanelPosition() {
     ) || screen.getPrimaryDisplay();
 
   const wa = targetDisplay.workArea;
-  const clampedX = Math.max(wa.x, Math.min(savedX, wa.x + wa.width - PANEL_WIDTH));
-  const clampedY = Math.max(wa.y, Math.min(savedY, wa.y + wa.height - PANEL_HEIGHT));
+  const maxX = wa.x + wa.width - PANEL_WIDTH - PANEL_WINDOW_MARGIN;
+  const maxY = wa.y + wa.height - PANEL_HEIGHT - PANEL_WINDOW_MARGIN;
+  const clampedX = Math.max(wa.x + PANEL_WINDOW_MARGIN, Math.min(savedX, maxX));
+  const clampedY = Math.max(wa.y + PANEL_WINDOW_MARGIN, Math.min(savedY, maxY));
   return { x: clampedX, y: clampedY };
+}
+
+function applyPanelBounds(panel = panelWindow) {
+  if (!panel || panel.isDestroyed()) {
+    return null;
+  }
+  const { x, y } = getPanelPosition();
+  panel.setBounds({
+    x,
+    y,
+    width: PANEL_WIDTH,
+    height: PANEL_HEIGHT,
+  });
+  return { x, y };
+}
+
+function notifyPanelOpened(panel = panelWindow) {
+  if (!panel || panel.isDestroyed()) {
+    return;
+  }
+  panel.webContents.send("panel-opened");
+}
+
+function revealPanelImmediate(panel, x, y) {
+  if (!panel || panel.isDestroyed()) {
+    return false;
+  }
+
+  hideCursorOverlay();
+
+  if (panelOpenAnimationTimer) {
+    clearInterval(panelOpenAnimationTimer);
+    panelOpenAnimationTimer = null;
+  }
+
+  panel.setBounds({
+    x,
+    y,
+    width: PANEL_WIDTH,
+    height: PANEL_HEIGHT,
+  });
+  panel.setOpacity(1);
+  panel.show();
+  raisePanelAboveOverlay(panel);
+  panel.focus();
+  notifyPanelOpened(panel);
+  return true;
 }
 
 function animatePanelIn(targetX, targetY) {
@@ -701,30 +771,112 @@ function animatePanelIn(targetX, targetY) {
       panelOpenAnimationTimer = null;
       panelWindow.setPosition(targetX, targetY);
       panelWindow.setOpacity(1);
+      notifyPanelOpened(panelWindow);
     }
   }, 16);
 }
 
-function showPanel() {
-  debugLog("window:panel show");
-  const now = Date.now();
-  if (now - lastPanelShowRequestAt < 180) {
+function ensurePanelWindow() {
+  if (!panelWindow || panelWindow.isDestroyed()) {
+    createPanelWindow();
+  }
+  return panelWindow && !panelWindow.isDestroyed() ? panelWindow : null;
+}
+
+function waitForPanelReady(timeoutMs = 5000) {
+  if (panelReady && panelWindow && !panelWindow.isDestroyed()) {
+    return Promise.resolve(true);
+  }
+  return new Promise((resolve) => {
+    const startedAt = Date.now();
+    const poll = () => {
+      if (panelReady && panelWindow && !panelWindow.isDestroyed()) {
+        resolve(true);
+        return;
+      }
+      if (Date.now() - startedAt >= timeoutMs) {
+        resolve(false);
+        return;
+      }
+      setTimeout(poll, 25);
+    };
+    poll();
+  });
+}
+
+function registerPanelOpenIpc() {
+  if (panelOpenIpcRegistered) {
     return;
+  }
+  panelOpenIpcRegistered = true;
+
+  ipcMain.on("widget-open-openguider", () => {
+    appLogger.info("widget-open-openguider:request", { source: "widget-send" });
+    openOpenGuiderPanel({ source: "widget-send" });
+  });
+
+  ipcMain.handle("open-openguider", async (_event, meta) => {
+    const source = meta?.source || "widget-invoke";
+    appLogger.info("widget-open-openguider:request", { source, via: "invoke" });
+    return openOpenGuiderPanel({ source });
+  });
+  ipcMain.handle("show-main", async (_event, meta) => {
+    return openOpenGuiderPanel({ source: meta?.source || "show-main-fallback" });
+  });
+}
+
+async function openOpenGuiderPanel({ source = "unknown" } = {}) {
+  appLogger.info("open-openguider:request", { source });
+  ensurePanelWindow();
+  const ready = await waitForPanelReady();
+  if (!ready) {
+    appLogger.warn("open-openguider:panel-not-ready");
+  }
+  const shown = showPanel({ force: true, immediate: true });
+  if (shown) {
+    appLogger.info("open-openguider:shown", { source });
+  } else {
+    appLogger.warn("open-openguider:failed", { source });
+  }
+  return shown;
+}
+
+function showPanel({ force = false, immediate = false } = {}) {
+  debugLog("window:panel show", { force, immediate });
+  const now = Date.now();
+  if (!force && now - lastPanelShowRequestAt < 180) {
+    return false;
   }
   lastPanelShowRequestAt = now;
 
-  if (!panelWindow || panelWindow.isDestroyed()) {
-    return;
-  }
-  if (isPanelVisible && panelWindow.isVisible()) {
-    panelWindow.focus();
-    return;
+  const panel = ensurePanelWindow();
+  if (!panel) {
+    appLogger.warn("show-panel-failed", { reason: "panel-unavailable" });
+    return false;
   }
 
-  const { x, y } = getPanelPosition();
-  animatePanelIn(x, y);
-  panelWindow.focus();
+  const { x, y } = applyPanelBounds(panel) || getPanelPosition();
+
+  // Widget/tray/recovery paths use force — always re-reveal so the panel is on-screen and clickable.
+  if (force || immediate) {
+    isPanelVisible = true;
+    return revealPanelImmediate(panel, x, y);
+  }
+
+  if (panel.isVisible() && panel.getOpacity() > 0.05) {
+    hideCursorOverlay();
+    isPanelVisible = true;
+    raisePanelAboveOverlay(panel);
+    panel.focus();
+    notifyPanelOpened(panel);
+    return true;
+  }
+
   isPanelVisible = true;
+
+  animatePanelIn(x, y);
+  panel.focus();
+  return true;
 }
 function hidePanel() {
   debugLog("window:panel hide");
@@ -732,8 +884,30 @@ function hidePanel() {
     clearInterval(panelOpenAnimationTimer);
     panelOpenAnimationTimer = null;
   }
-  panelWindow.hide();
+  if (store && panelWindow && !panelWindow.isDestroyed()) {
+    const [x, y] = panelWindow.getPosition();
+    store.set("panelWindowX", x);
+    store.set("panelWindowY", y);
+  }
+  if (panelWindow && !panelWindow.isDestroyed()) {
+    panelWindow.hide();
+    resetPanelAlwaysOnTop(panelWindow);
+  }
   isPanelVisible = false;
+  showWidgetOnStartup();
+}
+
+function showPanelOnStartup() {
+  debugLog("window:panel startup-show");
+  void openOpenGuiderPanel({ source: "startup" });
+}
+
+function showWidgetOnStartup() {
+  debugLog("window:widget show");
+  const widget = ensureWidgetWindow();
+  if (widget && !widget.isDestroyed()) {
+    widget.show();
+  }
 }
 
 function getDefaultSender() {
@@ -1366,12 +1540,7 @@ function setupIPC() {
   });
   ipcMain.handle("minimize-panel", () => {
     debugLog("ipc:minimize-panel");
-    if (store && panelWindow && !panelWindow.isDestroyed()) {
-      const [x, y] = panelWindow.getPosition();
-      store.set("panelWindowX", x);
-      store.set("panelWindowY", y);
-    }
-    panelWindow.hide();
+    hidePanel();
   });
   ipcMain.handle("quit-app",       () => {
     debugLog("ipc:quit-app");
@@ -1379,10 +1548,6 @@ function setupIPC() {
   });
 
   // ── Widget ───────────────────────────────────────────────────────────────
-  ipcMain.handle("show-main",      () => {
-    debugLog("ipc:show-main");
-    return showPanel();
-  });
   ipcMain.handle("hide-widget",    () => {
     debugLog("ipc:hide-widget");
     if (widgetWindow) widgetWindow.hide();
@@ -1444,15 +1609,15 @@ function setupIPC() {
     debugLog("ipc:show-cursor-at", data?.label || "element");
     const overlay = ensureCursorOverlay();
     if (overlay && !overlay.isDestroyed()) {
+      overlay.setIgnoreMouseEvents(true, { forward: true });
+      overlay.setAlwaysOnTop(true, "screen-saver", 1);
       overlay.show();
       overlay.webContents.send("show-cursor-at", data);
     }
   });
   ipcMain.on("hide-cursor", () => {
     debugLog("ipc:hide-cursor");
-    if (cursorOverlayWindow && !cursorOverlayWindow.isDestroyed()) {
-      cursorOverlayWindow.hide();
-    }
+    hideCursorOverlay();
   });
 }
 
@@ -1536,7 +1701,10 @@ app.whenReady().then(async () => {
   });
   createTray();
   createPanelWindow();
-  showPanel();
+  registerPanelOpenIpc();
+  setupIPC();
+  createWidgetWindow();
+  showWidgetOnStartup();
 
   // ── Register & initialize plugins [NEW] ───────────────────────────
   try {
@@ -1573,27 +1741,24 @@ app.whenReady().then(async () => {
     void browserExecutionTts?.handleSubstepProgress(progress);
   });
   broadcastSessionSnapshot(sessionManager.getSnapshot());
-  setupIPC();
   registerHotkeys();
   void maybeAutoBackupChatSessions("startup");
+  appLogger.info("app:boot-complete", {
+    root: getRendererDir(),
+    version: require("./package.json").version,
+    pid: process.pid,
+  });
+  showPanelOnStartup();
   app.on("activate", () => {
     debugLog("app:activate");
-    showPanel();
-    if (widgetWindow) widgetWindow.show();
+    showWidgetOnStartup();
+    showPanelOnStartup();
   });
   debugLog("app:ready complete");
 });
 
 app.on("second-instance", () => {
-  if (panelWindow && !panelWindow.isDestroyed()) {
-    showPanel();
-    return;
-  }
-  app.whenReady().then(() => {
-    if (panelWindow && !panelWindow.isDestroyed()) {
-      showPanel();
-    }
-  });
+  openOpenGuiderPanel({ source: "second-instance" });
 });
 
 // ── Graceful shutdown with plugin cleanup [NEW] ──────────────────────

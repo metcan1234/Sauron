@@ -10,16 +10,18 @@
 <div class="widget-shell">
 <div class="widget" id="widget">
   <div class="widget-topbar">
-    <div class="status-container" id="status-container">
-      <img class="status-logo" id="status-logo" src="assets/logo.png" alt="Sauron"/>
-    </div>
-    <div class="status-copy">
-      <div class="status-text">
-        <span id="status-text">idle</span>
-        <span class="mini-loader hidden" id="widget-loader"></span>
+    <div class="widget-drag-handle">
+      <div class="status-container" id="status-container">
+        <img class="status-logo" id="status-logo" src="assets/logo.png" alt="Sauron"/>
       </div>
-      <div class="goal-text" id="goal-text">No active plan</div>
-      <div class="browser-progress hidden" id="browser-progress">step 0</div>
+      <div class="status-copy">
+        <div class="status-text">
+          <span id="status-text">idle</span>
+          <span class="mini-loader hidden" id="widget-loader"></span>
+        </div>
+        <div class="goal-text" id="goal-text">No active plan</div>
+        <div class="browser-progress hidden" id="browser-progress">step 0</div>
+      </div>
     </div>
     <div class="controls" id="controls">
       <button class="control-btn" id="btn-show-plan" title="Show plan">
@@ -27,7 +29,7 @@
           <path d="M6 9L1.5 3.5h9z"/>
         </svg>
       </button>
-      <button class="control-btn expand-btn" id="btn-expand" title="Open main window">
+      <button class="control-btn expand-btn" id="btn-expand" title="Asistanı aç (OpenGuider)">
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
           <rect x="2" y="2" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
         </svg>
@@ -74,5 +76,50 @@
 </div>
 
 <script type="module" src="js/widget.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  var lastExpandOpenAt = 0;
+  var OPEN_DEBOUNCE_MS = 300;
+
+  function openAssistantFromWidget() {
+    var now = Date.now();
+    if (now - lastExpandOpenAt < OPEN_DEBOUNCE_MS) {
+      return;
+    }
+    lastExpandOpenAt = now;
+
+    if (typeof window.__openOpenGuider === "function") {
+      void window.__openOpenGuider();
+      return;
+    }
+    var api = window.sauron || window.openguider;
+    if (!api) {
+      return;
+    }
+    if (api.invoke) {
+      api.invoke("open-openguider", { source: "widget-square-inline" }).catch(function () {
+        return api.invoke("show-main", { source: "widget-square-inline" }).catch(function () {
+          if (api.send) {
+            api.send("widget-open-openguider");
+          }
+        });
+      });
+      return;
+    }
+    if (api.send) {
+      api.send("widget-open-openguider");
+    }
+  }
+
+  var expandBtn = document.getElementById("btn-expand");
+  if (expandBtn) {
+    expandBtn.addEventListener("pointerup", function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      openAssistantFromWidget();
+    });
+  }
+});
+</script>
 </body>
 </html>

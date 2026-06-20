@@ -83,6 +83,7 @@ export function queryPanelDom(doc = document) {
     chatDrawerList: doc.getElementById("chat-drawer-list"),
     chatDrawerExportActive: doc.getElementById("chat-drawer-export-active"),
     onboardingOverlay: doc.getElementById("onboarding-overlay"),
+    onboardingSkip: doc.getElementById("onboarding-skip"),
     onboardingOpenSettings: doc.getElementById("onboarding-open-settings"),
     confirmOverlay: doc.getElementById("confirm-overlay"),
     confirmTitle: doc.getElementById("confirm-title"),
@@ -1184,7 +1185,7 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     });
   }
 
-  dom.chatMessages.addEventListener("click", (event) => {
+  dom.chatMessages?.addEventListener("click", (event) => {
     const artifactButton = event.target.closest(".code-artifact-btn");
     if (artifactButton) {
       event.preventDefault();

@@ -26,6 +26,7 @@ const PRELOAD_ON_CHANNELS = [
   "browser-agent-download-progress",
   "finops-budget-alert",
   "pipeline-updated",
+  "panel-opened",
 ];
 
 const PRELOAD_SEND_CHANNELS = [
@@ -38,6 +39,7 @@ const PRELOAD_SEND_CHANNELS = [
   "execution:step-decision",
   "execution:trust-override",
   "execution:retry-step",
+  "widget-open-openguider",
 ];
 
 module.exports = {

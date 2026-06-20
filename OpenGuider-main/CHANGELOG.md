@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.3 — 2026-06-20
+
+### Fixed
+- Preload API: `channel-registry` yolu `path.join(__dirname, ...)` ile paketlenmiş uygulamada güvenilir yükleme
+- Kırmızı "Sauron API yüklenemedi" banner kaldırıldı; panel sessiz retry ile başlar
+- **Başlangıç akışı:** önce widget (IDLE çubuğu), panel yalnızca widget'tan veya tray'den açılır (OpenGuider davranışı)
+
 ## 1.4.2 — 2026-06-19
 
 ### Changed

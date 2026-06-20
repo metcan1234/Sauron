@@ -256,26 +256,108 @@ export function createTaskWidgetController({ api, doc = document }) {
     dom.widget.classList.toggle("expanded", isExpanded);
     dom.details.classList.toggle("hidden", !isExpanded);
     dom.btnShowPlan.classList.toggle("expanded", isExpanded);
-    await api.invoke("set-widget-expanded", isExpanded);
+    if (isExpanded) {
+      void openOpenGuiderAssistant({ source: "widget-expand" });
+    }
+    try {
+      await api.invoke("set-widget-expanded", isExpanded);
+    } catch (error) {
+      console.warn("[Sauron][widget] set-widget-expanded failed", { isExpanded, error });
+    }
     if (isExpanded) {
       scheduleExpandedHeightSync();
     }
   }
 
+  const OPEN_DEBOUNCE_MS = 300;
+  let lastOpenRequestAt = 0;
+
+  async function openOpenGuiderAssistant({ source = "widget" } = {}) {
+    const now = Date.now();
+    if (now - lastOpenRequestAt < OPEN_DEBOUNCE_MS) {
+      return false;
+    }
+    lastOpenRequestAt = now;
+
+    const bridge = api || window.sauron || window.openguider;
+    if (!bridge) {
+      console.error("[Sauron][widget] IPC bridge unavailable for open-openguider", { source });
+      return false;
+    }
+
+    try {
+      if (bridge.invoke) {
+        try {
+          const result = await bridge.invoke("open-openguider", { source });
+          if (result) {
+            return true;
+          }
+        } catch (error) {
+          console.warn("[Sauron][widget] open-openguider invoke failed, trying show-main", { source, error });
+        }
+
+        try {
+          const fallback = await bridge.invoke("show-main", { source });
+          if (fallback) {
+            return true;
+          }
+        } catch (error) {
+          console.warn("[Sauron][widget] show-main invoke failed, trying send", { source, error });
+        }
+      }
+    } catch (error) {
+      console.warn("[Sauron][widget] open assistant invoke chain failed", { source, error });
+    }
+
+    try {
+      if (bridge.send) {
+        bridge.send("widget-open-openguider");
+        return true;
+      }
+    } catch (error) {
+      console.error("[Sauron][widget] widget-open-openguider send failed", { source, error });
+    }
+
+    return false;
+  }
+
+  function bindOpenGuiderButton(button) {
+    if (!button) {
+      return;
+    }
+
+    const handler = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void openOpenGuiderAssistant({ source: "widget-square" });
+    };
+
+    button.addEventListener("pointerup", handler);
+    button.addEventListener("click", handler);
+  }
+
   function bindEvents() {
-    dom.btnExpand.addEventListener("click", (event) => {
+    if (!dom.btnExpand) {
+      console.error("[Sauron][widget] btn-expand not found");
+      return;
+    }
+
+    bindOpenGuiderButton(dom.btnExpand);
+
+    dom.btnShowPlan.addEventListener("pointerup", (event) => {
+      event.preventDefault();
       event.stopPropagation();
-      api.invoke("show-main");
+      void setExpanded(!isExpanded);
     });
 
-    dom.btnShowPlan.addEventListener("click", (event) => {
+    dom.btnOpenChat.addEventListener("click", (event) => {
       event.stopPropagation();
-      setExpanded(!isExpanded);
+      void openOpenGuiderAssistant({ source: "widget-open-chat" });
     });
 
-    dom.btnOpenChat.addEventListener("click", () => {
-      api.invoke("show-main");
-    });
+    if (typeof window !== "undefined") {
+      window.__openOpenGuider = openOpenGuiderAssistant;
+    }
 
     dom.btnDone.addEventListener("click", () => {
       runAction(() => api.invoke("mark-step-done"));

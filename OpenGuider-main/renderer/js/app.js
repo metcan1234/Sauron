@@ -1,33 +1,34 @@
 import { initPanelApp } from "./panel/bootstrap.js";
 
-async function waitForBridgeApi(timeoutMs = 5000) {
+function getBridgeApi() {
+  return window.sauron || window.openguider;
+}
+
+async function waitForBridgeApi(timeoutMs = 15000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const api = window.sauron || window.openguider;
+    const api = getBridgeApi();
     if (api?.invoke) {
       return api;
     }
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 25));
   }
-
-  const banner = document.createElement("div");
-  banner.textContent = "Sauron API yüklenemedi. Uygulamayı yeniden başlatın.";
-  banner.style.cssText = [
-    "position:fixed",
-    "top:0",
-    "left:0",
-    "right:0",
-    "padding:12px",
-    "background:#7f1d1d",
-    "color:#fff",
-    "text-align:center",
-    "z-index:99999",
-    "font-family:sans-serif",
-  ].join(";");
-  document.body.prepend(banner);
-  throw new Error("preload API unavailable");
+  return null;
 }
 
-waitForBridgeApi()
-  .then(() => initPanelApp())
-  .catch(() => {});
+async function bootPanel() {
+  const api = await waitForBridgeApi();
+  if (!api) {
+    console.error("[Sauron] preload API unavailable — panel IPC disabled");
+    return;
+  }
+  initPanelApp();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => {
+    void bootPanel();
+  }, { once: true });
+} else {
+  void bootPanel();
+}

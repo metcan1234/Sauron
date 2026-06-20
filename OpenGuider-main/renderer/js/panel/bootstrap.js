@@ -673,6 +673,23 @@ export function createPanelController({
   }
 
   function bindEvents() {
+    const requiredControls = [
+      ["textInput", dom.textInput],
+      ["sendBtn", dom.sendBtn],
+      ["pttBtn", dom.pttBtn],
+      ["modelSelect", dom.modelSelect],
+      ["btnSettings", dom.btnSettings],
+      ["btnWorkspace", dom.btnWorkspace],
+      ["btnClose", dom.btnClose],
+      ["btnClear", dom.btnClear],
+    ];
+    const missingControls = requiredControls
+      .filter(([, element]) => !element)
+      .map(([name]) => name);
+    if (missingControls.length > 0) {
+      throw new Error(`Missing panel controls: ${missingControls.join(", ")}`);
+    }
+
     dom.textInput.addEventListener("focus", () => {
       if (state.isStreaming()) {
         messaging.cancelMessage();
@@ -800,6 +817,12 @@ export function createPanelController({
       }
     });
 
+    dom.onboardingSkip?.addEventListener("click", async () => {
+      state.setSetting("onboardingCompleted", true);
+      await api.invoke("save-settings", { onboardingCompleted: true });
+      ui.hideOnboarding();
+    });
+
     dom.onboardingOpenSettings?.addEventListener("click", async () => {
       state.setSetting("onboardingCompleted", true);
       await api.invoke("save-settings", { onboardingCompleted: true });
@@ -864,6 +887,10 @@ export function createPanelController({
   }
 
   function setupIPCListeners() {
+    api.on("panel-opened", () => {
+      dom.textInput?.focus();
+    });
+
     api.on("push-to-talk-start", () => {
       log("ipc:push-to-talk-start received");
       ptt.startPTT();
@@ -981,41 +1008,47 @@ export function createPanelController({
 
   async function init() {
     log("init:start");
-    applyI18nToDocument(doc);
-    const settings = await api.invoke("get-settings");
-    const session = await api.invoke("get-active-session");
-    state.setSettings(settings);
-    state.setSessionSnapshot(session);
-    ui.buildModelSelector();
-    ui.updateProviderDot();
-    ui.renderConversation(session?.messages || []);
-    planView.renderPlan(session?.activePlan || null);
-    lastBrowserExecutionSnapshot = session?.browserExecution || null;
-    syncBrowserExecution(session?.browserExecution || null);
-    ui.renderAgentState(session?.status === "executing" ? "idle" : (session?.status || "idle"));
-    applyShortcutTitles();
-    updatePlanActionButtons(session);
-    const assistantMode = normalizeAssistantMode(settings?.assistantMode);
-    state.setSetting("assistantMode", assistantMode);
-    ui.renderAssistantModeBadge(assistantMode);
-    updatePlanActionVisibility(assistantMode, session);
-    dom.sendBtn.disabled = false;
-    dom.pttBtn.disabled = false;
-    state.setIncludeScreen(settings?.includeScreenshotByDefault === true);
-    bindEvents();
-    chatHistory.bindEvents();
-    setupIPCListeners();
-    if (!settings?.onboardingCompleted) {
-      state.setSetting("onboardingCompleted", true);
-      await api.invoke("save-settings", { onboardingCompleted: true });
-      ui.showOnboarding();
+    try {
+      applyI18nToDocument(doc);
+      const settings = await api.invoke("get-settings");
+      const session = await api.invoke("get-active-session");
+      state.setSettings(settings);
+      state.setSessionSnapshot(session);
+      ui.buildModelSelector();
+      ui.updateProviderDot();
+      ui.renderConversation(session?.messages || []);
+      planView.renderPlan(session?.activePlan || null);
+      lastBrowserExecutionSnapshot = session?.browserExecution || null;
+      syncBrowserExecution(session?.browserExecution || null);
+      ui.renderAgentState(session?.status === "executing" ? "idle" : (session?.status || "idle"));
+      applyShortcutTitles();
+      updatePlanActionButtons(session);
+      const assistantMode = normalizeAssistantMode(settings?.assistantMode);
+      state.setSetting("assistantMode", assistantMode);
+      ui.renderAssistantModeBadge(assistantMode);
+      updatePlanActionVisibility(assistantMode, session);
+      dom.sendBtn.disabled = false;
+      dom.pttBtn.disabled = false;
+      state.setIncludeScreen(settings?.includeScreenshotByDefault === true);
+      bindEvents();
+      chatHistory.bindEvents();
+      setupIPCListeners();
+      if (!settings?.onboardingCompleted) {
+        ui.showOnboarding();
+      }
+      await ensureRuntimePermissions();
+      await updateWorkspaceButtonState();
+      startHandoffHistoryRefresh();
+      await ui.refreshFinOpsBadge();
+      dom.textInput.focus();
+      log("init:complete");
+    } catch (error) {
+      log("init:failed", error);
+      ui.showErrorBanner({
+        title: "Panel başlatılamadı",
+        message: error?.message || "Bilinmeyen hata",
+      });
     }
-    await ensureRuntimePermissions();
-    await updateWorkspaceButtonState();
-    startHandoffHistoryRefresh();
-    await ui.refreshFinOpsBadge();
-    dom.textInput.focus();
-    log("init:complete");
   }
 
   return {
@@ -1024,6 +1057,10 @@ export function createPanelController({
 }
 
 export async function initPanelApp() {
-  const controller = createPanelController();
-  await controller.init();
+  try {
+    const controller = createPanelController();
+    await controller.init();
+  } catch (error) {
+    console.error("[Sauron][panel] init:failed", error);
+  }
 }

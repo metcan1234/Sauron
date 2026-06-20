@@ -65,8 +65,9 @@ function createWindowManager({
           }
           setRefs({ widgetWindow: null });
           ensureWidgetWindow();
-          if (refs.isPanelVisible && getRefs().widgetWindow && !getRefs().widgetWindow.isDestroyed()) {
-            getRefs().widgetWindow.show();
+          const recoveredWidget = getRefs().widgetWindow;
+          if (recoveredWidget && !recoveredWidget.isDestroyed()) {
+            recoveredWidget.show();
           }
         }, 400);
         return;
@@ -99,7 +100,11 @@ function createWindowManager({
             appLogger.warn("panel-crash-destroy-failed", { error: destroyError });
           }
           setRefs({ panelWindow: null });
-          createPanelWindow();
+          if (typeof callbacks.recreatePanelWindow === "function") {
+            callbacks.recreatePanelWindow();
+          } else {
+            createPanelWindow();
+          }
           if (wasVisible && typeof callbacks.showPanel === "function") {
             callbacks.showPanel();
           }
@@ -139,6 +144,7 @@ function createWindowManager({
       height: PANEL_HEIGHT,
       frame: false,
       transparent: true,
+      backgroundColor: "#0a0a0a",
       resizable: false,
       show: false,
       skipTaskbar: true,
@@ -150,6 +156,16 @@ function createWindowManager({
       },
     });
     panelWindow.loadFile(path.join(rendererDir, "index.html"));
+    panelWindow.webContents.on("did-finish-load", () => {
+      if (typeof callbacks.onPanelReady === "function") {
+        callbacks.onPanelReady();
+      }
+    });
+    panelWindow.on("hide", () => {
+      if (typeof callbacks.onPanelHide === "function") {
+        callbacks.onPanelHide();
+      }
+    });
     attachWindowCrashHandlers(panelWindow, "panel");
     setRefs({ panelWindow });
   }
@@ -249,7 +265,10 @@ function createWindowManager({
     const cursorPt = screen.getCursorScreenPoint();
     const activeDisplay = screen.getDisplayNearestPoint(cursorPt);
     const wa = activeDisplay.workArea;
-    widgetWindow.setPosition(wa.x + wa.width - WIDGET_WIDTH - 20, wa.y + 20);
+    const margin = 16;
+    const x = Math.max(wa.x + margin, wa.x + wa.width - WIDGET_WIDTH - margin);
+    const y = wa.y + margin;
+    widgetWindow.setPosition(x, y);
     widgetWindow.on("closed", () => {
       setRefs({ widgetWindow: null });
     });

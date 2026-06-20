@@ -25,6 +25,8 @@
 html, body {
   font-family: "Share Tech Mono", monospace;
   font-size: 14px;
+  width: 440px;
+  height: 660px;
   background: transparent;
   color: var(--text);
   -webkit-app-region: no-drag;
@@ -57,7 +59,6 @@ html, body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  backdrop-filter: blur(16px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -73,16 +74,18 @@ html, body {
 .header {
   display: flex;
   align-items: center;
-  padding: 8px 16px;
+  padding: 8px 12px;
   border-bottom: 2px solid var(--border);
-  gap: 12px;
+  gap: 8px;
   -webkit-app-region: drag;
   flex-shrink: 0;
+  min-width: 0;
+  overflow: hidden;
   background: var(--surface);
 }
 
 .header-logo {
-  width: 56px; height: 56px;
+  width: 44px; height: 44px;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
@@ -97,6 +100,10 @@ html, body {
   font-size: 16px;
   letter-spacing: 1px;
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--accent);
 }
 
@@ -135,6 +142,7 @@ html, body {
   padding: 4px 8px;
   border-radius: 2px;
   -webkit-app-region: no-drag;
+  flex-shrink: 0;
 }
 
 .agent-status[data-state="planning"],
@@ -151,7 +159,8 @@ html, body {
 
 .header-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
+  flex-shrink: 0;
   -webkit-app-region: no-drag;
 }
 

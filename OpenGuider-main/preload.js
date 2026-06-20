@@ -1,6 +1,10 @@
+const path = require("path");
 const { contextBridge, ipcRenderer } = require("electron");
 
-const { PRELOAD_ON_CHANNELS, PRELOAD_SEND_CHANNELS } = require("./src/ipc/channel-registry");
+const {
+  PRELOAD_ON_CHANNELS,
+  PRELOAD_SEND_CHANNELS,
+} = require(path.join(__dirname, "src", "ipc", "channel-registry"));
 
 const api = {
   invoke: (ch, ...a) => ipcRenderer.invoke(ch, ...a),
@@ -15,5 +19,5 @@ const api = {
   },
 };
 
-contextBridge.exposeInMainWorld("openguider", api);
 contextBridge.exposeInMainWorld("sauron", api);
+contextBridge.exposeInMainWorld("openguider", api);
