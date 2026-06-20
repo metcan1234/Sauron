@@ -108,6 +108,7 @@ module.exports = {
   evaluateBudgetState,
   buildPreCallAlert,
   buildLowBudgetAlert,
+  emitBudgetAlert,
   checkPreCallBudgetAlert,
   maybePostCallBudgetAlert,
   getRemainingBudgetTl,

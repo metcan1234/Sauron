@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { mergeCostOptimizerConfig } = require("./cost-optimizer-config");
 const { buildAgentMatrixForWorkspace } = require("./agent-matrix");
+const { resolveAgentWalletState } = require("./agent-usage");
 
 const HANDOFF_DIR = ".sauron";
 const FINOPS_CONFIG_FILENAME = "finops-config.json";
@@ -17,8 +18,9 @@ function getFinOpsConfigPath(workspacePath) {
   return path.join(String(workspacePath || "").trim(), HANDOFF_DIR, FINOPS_CONFIG_FILENAME);
 }
 
-function buildFinOpsConfigFromSettings(settings = {}) {
+async function buildFinOpsConfigFromSettings(settings = {}) {
   const costOptimizer = mergeCostOptimizerConfig(settings);
+  const { agentWallets } = await resolveAgentWalletState(settings);
   return {
     enabled: true,
     finopsUsdToTl: Number.isFinite(Number(settings.finopsUsdToTl))
@@ -28,7 +30,7 @@ function buildFinOpsConfigFromSettings(settings = {}) {
     emitMode: DEFAULT_FINOPS_CONFIG.emitMode,
     costOptimizer: {
       ...costOptimizer,
-      agentMatrix: buildAgentMatrixForWorkspace(settings),
+      agentMatrix: buildAgentMatrixForWorkspace(settings, agentWallets),
     },
   };
 }
@@ -53,7 +55,7 @@ async function syncFinOpsConfigToWorkspace(settings = {}) {
   }
 
   const configPath = getFinOpsConfigPath(workspacePath);
-  const payload = buildFinOpsConfigFromSettings(settings);
+  const payload = await buildFinOpsConfigFromSettings(settings);
   await fs.promises.mkdir(path.dirname(configPath), { recursive: true });
   await fs.promises.writeFile(configPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   return { ok: true, configPath, payload };

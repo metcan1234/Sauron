@@ -52,7 +52,9 @@ test("mapProviderIdToCore normalizes provider aliases", () => {
   assert.equal(mapProviderIdToCore("deepseek"), "deepseek");
 });
 
-test("computeComplexityHint escalates for architecture keywords", () => {
-  assert.equal(computeComplexityHint("please refactor the architecture"), "high");
+test("computeComplexityHint uses conservative thresholds", () => {
   assert.equal(computeComplexityHint("fix typo"), "low");
+  assert.equal(computeComplexityHint("refactor login button"), "medium");
+  assert.equal(computeComplexityHint("migrate database schema auth"), "high");
+  assert.equal(computeComplexityHint("please refactor the architecture"), "medium");
 });

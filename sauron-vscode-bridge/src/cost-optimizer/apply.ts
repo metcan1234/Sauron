@@ -1,9 +1,10 @@
+import * as vscode from "vscode"
 import type { ClineAPI } from "../cline"
 import type { FinOpsConfig } from "../usage/types"
 import type { SauronHandoff } from "../handoff/types"
 import { probeClineCapabilities } from "../cline-capabilities"
 import { appendUsageRecord } from "../usage/export"
-import { resolveBudgetDowngrade } from "./governor"
+import { resolveBudgetDowngrade, GOVERNOR_ALERT_MESSAGE } from "./governor"
 import { resolveClineAgent } from "./router"
 
 export interface ApplyClineModelResult {
@@ -34,20 +35,24 @@ export async function applyClineModelBeforeHandoff(
 		return { applied: false }
 	}
 
-	const downgradeOneTier = await resolveBudgetDowngrade(
+	const budgetGovernorActive = await resolveBudgetDowngrade(
 		workspaceRoot,
 		optimizer,
 		handoff.id,
 		handoff.projectType,
 	)
 
+	if (budgetGovernorActive) {
+		void vscode.window.showInformationMessage(GOVERNOR_ALERT_MESSAGE)
+	}
+
 	const planSelection = resolveClineAgent("low", optimizer.agentMatrix, {
-		downgradeOneTier,
+		budgetGovernorActive,
 		fallbackText: handoff.taskSummary || handoff.goal || "",
 	})
 
 	const actSelection = resolveClineAgent(handoff.complexityHint, optimizer.agentMatrix, {
-		downgradeOneTier,
+		budgetGovernorActive,
 		fallbackText: handoff.taskSummary || handoff.goal || "",
 	})
 

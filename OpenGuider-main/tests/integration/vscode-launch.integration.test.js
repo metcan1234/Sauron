@@ -84,15 +84,15 @@ test("openWorkspaceInVSCode verifies VS Code window on Windows", async (t) => {
   });
 
   assert.equal(result.skipped, false);
-  assert.equal(result.executableKind, "exe");
+  assert.equal(result.executableKind, "cmd");
   assert.ok(result.launchProfile, "expected launch profile metadata");
   if (result.verified) {
     assert.ok(
-      result.verificationReason === "window_found"
+      result.verificationReason === "spawn_ok"
+      || result.verificationReason === "window_found"
       || result.verificationReason === "window_stable"
       || result.verificationReason === "focus_restored",
     );
-    assert.ok(result.pid);
     return;
   }
 

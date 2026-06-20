@@ -9,6 +9,8 @@ const { BRIDGE_EXTENSION_ID, CLINE_EXTENSION_IDS } = require("./workspace-setup"
 
 const VSCODE_DIR = ".vscode";
 const EXTENSIONS_FILE = "extensions.json";
+const SETTINGS_FILE = "settings.json";
+const WORKSPACE_TERMINAL_CWD = "${workspaceFolder}";
 
 const WORKSPACE_EXTENSION_RECOMMENDATIONS = [
   CLINE_EXTENSION_IDS[0],
@@ -49,6 +51,27 @@ function ensureSauronDir(workspacePath) {
   return sauronDir;
 }
 
+function writeWorkspaceSettings(workspacePath) {
+  const vscodeDir = path.join(workspacePath, VSCODE_DIR);
+  const settingsPath = path.join(vscodeDir, SETTINGS_FILE);
+  fs.mkdirSync(vscodeDir, { recursive: true });
+
+  let existing = null;
+  try {
+    existing = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+  } catch {
+    existing = null;
+  }
+
+  const merged = {
+    ...(existing && typeof existing === "object" ? existing : {}),
+    "terminal.integrated.cwd": WORKSPACE_TERMINAL_CWD,
+  };
+
+  fs.writeFileSync(settingsPath, `${JSON.stringify(merged, null, 2)}\n`, "utf8");
+  return settingsPath;
+}
+
 async function bootstrapWorkspace(workspacePath, settings = {}) {
   const resolvedPath = String(workspacePath || "").trim();
   if (!resolvedPath || !fs.existsSync(resolvedPath)) {
@@ -69,6 +92,7 @@ async function bootstrapWorkspace(workspacePath, settings = {}) {
   const webDevRulesResult = seedWebDevRules(resolvedPath);
   const packsResult = seedClinerulesPacks(resolvedPath, projectType);
   const extensionsPath = writeExtensionsRecommendations(resolvedPath);
+  const settingsPath = writeWorkspaceSettings(resolvedPath);
 
   return {
     ok: true,
@@ -81,6 +105,7 @@ async function bootstrapWorkspace(workspacePath, settings = {}) {
     webDevRulesPath: webDevRulesResult.path || null,
     clinerulesPacksSeeded: packsResult.seeded || [],
     extensionsPath,
+    settingsPath,
   };
 }
 
@@ -88,5 +113,7 @@ module.exports = {
   bootstrapWorkspace,
   ensureSauronDir,
   writeExtensionsRecommendations,
+  writeWorkspaceSettings,
   WORKSPACE_EXTENSION_RECOMMENDATIONS,
+  WORKSPACE_TERMINAL_CWD,
 };

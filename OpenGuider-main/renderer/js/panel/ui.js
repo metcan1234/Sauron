@@ -1015,6 +1015,9 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
         session: sessionSpent.toFixed(2),
         total: totalSpent.toFixed(2),
       });
+      if (summary?.clineReadonlyNote) {
+        dom.finopsBadge.title = `${dom.finopsBadge.title} · ${summary.clineReadonlyNote}`;
+      }
       return;
     }
 
@@ -1029,6 +1032,9 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
       total: totalSpent.toFixed(2),
       pct: pctLabel,
     });
+    if (summary?.clineReadonlyNote) {
+      dom.finopsBadge.title = `${dom.finopsBadge.title} · ${summary.clineReadonlyNote}`;
+    }
     dom.finopsBadge.classList.toggle("is-warning", remainingPct <= 20);
     dom.finopsBadge.classList.toggle("is-danger", remainingPct <= 5);
   }

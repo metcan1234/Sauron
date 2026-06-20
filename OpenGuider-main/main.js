@@ -31,6 +31,7 @@ const { captureAllScreens } = require("./src/screenshot");
 const { streamAIResponse, parsePointTag, fetchOllamaModels } = require("./src/ai/index");
 const {
   buildHandoffPayload,
+  enrichHandoffPayloadFinOps,
   writeHandoff,
   seedSauronRules,
   launchVSCode,
@@ -45,6 +46,7 @@ const { checkWorkspacePrerequisites } = require("./src/sauron/workspace-setup");
 const { bootstrapWorkspace } = require("./src/sauron/workspace-bootstrap");
 const { installWorkspaceStack } = require("./src/sauron/workspace-stack-installer");
 const { runSauronDoctor } = require("./src/sauron/doctor");
+const { setConfiguredVscodePath } = require("./src/sauron/vscode-launcher");
 const { SessionManager } = require("./src/session/session-manager");
 const {
   clearSessionSnapshot,
@@ -82,7 +84,10 @@ const { emitPointerTool } = require("./src/agent/tools/pointer-tool");
 const { TaskOrchestrator } = require("./src/agent/task-orchestrator");
 const { formatStructuredUserError } = require("./src/ai/structured");
 const { configureFinOpsContext } = require("./src/sauron/finops/llm-tracker");
+const { emitBudgetAlert } = require("./src/sauron/finops/budget-alert");
 const { getUsageSummary, getUsageTimeSeries } = require("./src/sauron/finops/usage-tracker");
+const { syncClineUsageFromDisk } = require("./src/sauron/finops/cline-usage-reader");
+const { startClineUsagePoller, stopClineUsagePoller } = require("./src/sauron/finops/cline-usage-poller");
 const { syncFinOpsConfigToWorkspace } = require("./src/sauron/finops/workspace-config");
 const {
   writeCredentialRequest,
@@ -1282,6 +1287,10 @@ function registerModularIpcHandlers() {
     getUsageSummary,
     getUsageTimeSeries,
     sessionManager,
+    syncClineUsageFromDisk,
+    emitBudgetAlert,
+    getFinOpsAlertWindows,
+    persistFinOpsSettings: persistFinOpsSettings,
   });
 
   registerChatSessionsIpc({
@@ -1365,12 +1374,15 @@ function registerModularIpcHandlers() {
     rejectHandoffFile,
     rejectPendingHandoffs,
     buildHandoffPayload,
+    enrichHandoffPayloadFinOps,
     bootstrapWorkspace,
     writeHandoff,
     launchVSCode,
     runSauronDoctor,
     writeCredentialRequest,
     getCredentialSyncStatus,
+    emitBudgetAlert,
+    getFinOpsAlertWindows,
   });
 
   registerWebStudioIpc({
@@ -1440,6 +1452,7 @@ function setupIPC() {
     const hydratedSettings = await secureStore.fillSecrets(store.store);
     const guardedHydrated = applyPlatformSettingsGuards(hydratedSettings);
     const settingsToBroadcast = guardedHydrated.normalizedSettings;
+    setConfiguredVscodePath(settingsToBroadcast.vscodePath);
     if (taskOrchestrator && typeof taskOrchestrator.setAwareAssistanceEnabled === "function") {
       taskOrchestrator.setAwareAssistanceEnabled(settingsToBroadcast.awareAssistanceEnabled === true);
     }
@@ -1688,12 +1701,14 @@ app.whenReady().then(async () => {
   registerCrashTracking();
   debugLog("app:ready start");
   store = createStore();
+  setConfiguredVscodePath(store.get("vscodePath"));
   secureStore = new SecureStore({ safeStorage, serviceName: "Sauron" });
   configureFinOpsContext({
     getSettings: () => store.store,
     getWindows: getFinOpsAlertWindows,
     persistSettings: persistFinOpsSettings,
   });
+  startClineUsagePoller(() => store?.store || {});
   sessionManager = new SessionManager();
   const persistedSession = loadSessionSnapshot(store);
   const chatState = loadChatSessionsState(store);
@@ -1817,6 +1832,7 @@ app.on("before-quit", (e) => {
 
 app.on("will-quit", () => {
   debugLog("app:will-quit");
+  stopClineUsagePoller();
   globalShortcut.unregisterAll();
 });
 app.on("window-all-closed", (e) => e.preventDefault()); // keep running in tray

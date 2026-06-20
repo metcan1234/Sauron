@@ -72,6 +72,9 @@ export async function shouldDowngradeOneTier(
 
 const downgradeAppliedForHandoff = new Set<string>()
 
+export const GOVERNOR_ALERT_MESSAGE =
+	"Günlük bütçe aşıldı — zor işler için DeepSeek kullanılıyor."
+
 export function markDowngradeApplied(handoffId: string): void {
 	if (handoffId) {
 		downgradeAppliedForHandoff.add(handoffId)

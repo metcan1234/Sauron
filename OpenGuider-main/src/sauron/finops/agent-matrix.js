@@ -1,4 +1,9 @@
 const { mergeCostOptimizerConfig } = require("./cost-optimizer-config");
+const {
+  CLOUD_AGENT_IDS,
+  isAgentWalletAvailable,
+  areAllCloudAgentsWalletExhausted,
+} = require("./agent-usage");
 
 const AGENT_IDS = ["gemini", "deepseek", "openai", "ollama"];
 
@@ -45,9 +50,12 @@ const CORE_COMPLEXITY_MAP = {
 
 const CLINE_COMPLEXITY_MAP = {
   low: "deepseek",
-  medium: "gemini",
+  medium: "deepseek",
   high: "openai",
 };
+
+const CORE_CLOUD_FALLBACK_ORDER = ["gemini", "deepseek", "openai"];
+const CLINE_CLOUD_FALLBACK_ORDER = ["deepseek", "gemini", "openai"];
 
 function normalizeHint(hint) {
   if (hint === "medium" || hint === "high" || hint === "low") {
@@ -75,13 +83,81 @@ function hasAgentCredential(settings = {}, agentId) {
   return Boolean(String(settings[agent.credentialKey] || "").trim());
 }
 
-function pickAvailableAgent(settings, preferredOrder) {
+function isAgentRoutable(settings = {}, agentId, agentWallets = null) {
+  if (!hasAgentCredential(settings, agentId)) {
+    return false;
+  }
+  if (!agentWallets) {
+    return true;
+  }
+  return isAgentWalletAvailable(agentId, agentWallets);
+}
+
+function buildCloudFallbackOrder(preferredId, cloudOrder) {
+  const order = [];
+  const seen = new Set();
+  for (const agentId of [preferredId, ...cloudOrder]) {
+    if (!agentId || seen.has(agentId) || !CLOUD_AGENT_IDS.includes(agentId)) {
+      continue;
+    }
+    seen.add(agentId);
+    order.push(agentId);
+  }
+  return order;
+}
+
+function pickRoutableAgent(settings, preferredOrder, agentWallets = null) {
   for (const agentId of preferredOrder) {
-    if (hasAgentCredential(settings, agentId)) {
+    if (isAgentRoutable(settings, agentId, agentWallets)) {
       return AGENT_DEFINITIONS[agentId];
     }
   }
   return null;
+}
+
+function pickAvailableAgent(settings, preferredOrder) {
+  return pickRoutableAgent(settings, preferredOrder, null);
+}
+
+function resolveRoutedAgent(settings, preferredId, cloudOrder, agentWallets = null) {
+  const preferredOrder = buildCloudFallbackOrder(preferredId, cloudOrder);
+  const skippedExhausted = preferredOrder.filter(
+    (agentId) => hasAgentCredential(settings, agentId)
+      && agentWallets
+      && !isAgentWalletAvailable(agentId, agentWallets),
+  );
+  const agent = pickRoutableAgent(settings, preferredOrder, agentWallets);
+
+  if (agent) {
+    let reason = `complexity-route-${agent.id}`;
+    if (skippedExhausted.includes(preferredId) && agent.id !== preferredId) {
+      reason = `wallet-exhausted-fallback-${preferredId}`;
+    }
+    return { agent, reason, skippedExhausted, allCloudExhausted: false };
+  }
+
+  const credentialFallback = pickRoutableAgent(
+    settings,
+    preferredOrder.filter((id) => CLOUD_AGENT_IDS.includes(id)),
+    null,
+  );
+  if (credentialFallback) {
+    return {
+      agent: credentialFallback,
+      reason: areAllCloudAgentsWalletExhausted(agentWallets)
+        ? "wallet-exhausted-all-cloud"
+        : `wallet-exhausted-fallback-${preferredId}`,
+      skippedExhausted,
+      allCloudExhausted: areAllCloudAgentsWalletExhausted(agentWallets),
+    };
+  }
+
+  return {
+    agent: AGENT_DEFINITIONS.gemini,
+    reason: "wallet-exhausted-all-cloud",
+    skippedExhausted,
+    allCloudExhausted: true,
+  };
 }
 
 function shouldUseOllamaFallback(settings = {}) {
@@ -99,11 +175,13 @@ function shouldUseOllamaFallback(settings = {}) {
     && hasAgentCredential(settings, "ollama");
 }
 
-function resolveAgentForCore(operation = "chat", complexityHint = "low", settings = {}) {
+function resolveAgentForCore(operation = "chat", complexityHint = "low", settings = {}, options = {}) {
   const optimizer = mergeCostOptimizerConfig(settings);
   if (!optimizer.enabled) {
     return null;
   }
+
+  const agentWallets = options.agentWallets || null;
 
   if (shouldUseOllamaFallback(settings)) {
     const agent = AGENT_DEFINITIONS.ollama;
@@ -117,11 +195,13 @@ function resolveAgentForCore(operation = "chat", complexityHint = "low", setting
     agentId = "gemini";
   }
 
-  const agent =
-    pickAvailableAgent(settings, [agentId, "gemini", "deepseek", "openai", "ollama"]) ||
-    AGENT_DEFINITIONS.gemini;
-
-  return buildCoreOverlay(agent);
+  const routed = resolveRoutedAgent(settings, agentId, CORE_CLOUD_FALLBACK_ORDER, agentWallets);
+  return {
+    ...buildCoreOverlay(routed.agent),
+    reason: routed.reason,
+    walletFallbackFrom: routed.skippedExhausted[0] || null,
+    allCloudExhausted: routed.allCloudExhausted,
+  };
 }
 
 function resolveAgentForCline(complexityHint = "low", settings = {}, options = {}) {
@@ -130,23 +210,45 @@ function resolveAgentForCline(complexityHint = "low", settings = {}, options = {
     return null;
   }
 
+  const agentWallets = options.agentWallets || null;
+
   if (shouldUseOllamaFallback(settings)) {
     return buildClineSelection(AGENT_DEFINITIONS.ollama, "budget-fallback");
   }
 
-  let hint = normalizeHint(complexityHint);
-  if (options.downgradeOneTier && hint === "high") {
-    hint = "medium";
-  } else if (options.downgradeOneTier && hint === "medium") {
-    hint = "low";
+  const hint = normalizeHint(complexityHint);
+  const budgetGovernorActive = options.budgetGovernorActive === true || options.downgradeOneTier === true;
+
+  let preferredId = CLINE_COMPLEXITY_MAP[hint] || "deepseek";
+  let reason = `complexity-${hint}`;
+
+  if (budgetGovernorActive && hint === "high") {
+    preferredId = "deepseek";
+    reason = "budget-governor-high-to-deepseek";
   }
 
-  const preferredId = CLINE_COMPLEXITY_MAP[hint] || "deepseek";
-  const agent =
-    pickAvailableAgent(settings, [preferredId, "deepseek", "gemini", "openai", "ollama"]) ||
-    AGENT_DEFINITIONS.deepseek;
+  if (hint === "high" && preferredId === "openai" && !hasAgentCredential(settings, "openai")) {
+    preferredId = "deepseek";
+    reason = "complexity-high-fallback-deepseek";
+  }
 
-  return buildClineSelection(agent, `complexity-${hint}`);
+  const routed = resolveRoutedAgent(settings, preferredId, CLINE_CLOUD_FALLBACK_ORDER, agentWallets);
+
+  if (routed.reason.startsWith("wallet-exhausted")) {
+    reason = routed.reason;
+  } else if (reason === "complexity-high-fallback-deepseek" || reason === "budget-governor-high-to-deepseek") {
+    // keep explicit fallback reason
+  } else if (routed.reason !== `complexity-route-${routed.agent.id}`) {
+    reason = routed.reason;
+  } else {
+    reason = `complexity-${hint}`;
+  }
+
+  return {
+    ...buildClineSelection(routed.agent, reason),
+    walletFallbackFrom: routed.skippedExhausted[0] || null,
+    allCloudExhausted: routed.allCloudExhausted,
+  };
 }
 
 function buildCoreOverlay(agent) {
@@ -202,7 +304,7 @@ function syncAgentMatrixFromSettings(settings = {}) {
   };
 }
 
-function buildAgentMatrixForWorkspace(settings = {}) {
+function buildAgentMatrixForWorkspace(settings = {}, agentWallets = null) {
   return {
     version: 1,
     agents: AGENT_IDS.map((id) => ({
@@ -216,6 +318,7 @@ function buildAgentMatrixForWorkspace(settings = {}) {
         modelId: AGENT_DEFINITIONS[id].clineModelId,
       },
       configured: hasAgentCredential(settings, id),
+      walletAvailable: agentWallets ? isAgentWalletAvailable(id, agentWallets) : true,
     })),
     routing: {
       core: CORE_COMPLEXITY_MAP,
@@ -226,8 +329,14 @@ function buildAgentMatrixForWorkspace(settings = {}) {
 
 module.exports = {
   AGENT_IDS,
+  CLOUD_AGENT_IDS,
   AGENT_DEFINITIONS,
+  CORE_CLOUD_FALLBACK_ORDER,
+  CLINE_CLOUD_FALLBACK_ORDER,
   hasAgentCredential,
+  isAgentRoutable,
+  pickAvailableAgent,
+  pickRoutableAgent,
   resolveAgentForCore,
   resolveAgentForCline,
   syncAgentMatrixFromSettings,

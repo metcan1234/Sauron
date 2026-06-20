@@ -199,6 +199,11 @@
         <h3>Çalışma Kısmı (Workspace)</h3>
         <p class="settings-lead">Sauron Core ile VS Code + Cline arasında paylaşılan proje klasörü. "Çalışma Kısmı" butonu bu klasörü VS Code'da açar ve görev özetini Cline'a aktarır.</p>
         <div class="form-group">
+          <label>VS Code yolu</label>
+          <input class="form-input" id="vscodePath" type="text" placeholder="C:\Users\...\Microsoft VS Code\bin\code.cmd"/>
+          <span class="hint">İsteğe bağlı. Cursor PATH'te önde ise gerçek VS Code CLI yolunu buraya yazın; boş bırakırsanız otomatik bulunur.</span>
+        </div>
+        <div class="form-group">
           <label>Workspace Path</label>
           <div style="display:flex;gap:8px;align-items:center;">
             <input class="form-input" id="workspacePath" type="text" placeholder="C:\path\to\your\project" style="flex:1;"/>
@@ -301,11 +306,17 @@
         <div class="form-group">
           <button class="btn btn-secondary" id="btn-refresh-finops" type="button">Harcananı yenile</button>
         </div>
+
+        <div class="form-group">
+          <h4 style="margin:0 0 8px">Agent Bakiyeleri</h4>
+          <p class="hint" style="margin-bottom:12px">Tahmini maliyet — Cline kayıtları Cline totalCost, panel kayıtları fiyat kataloğundan. Site faturasıyla küçük fark olabilir.</p>
+          <div id="finopsAgentWallets"></div>
+        </div>
       </div>
 
       <div class="settings-section">
         <h3>Maliyet Optimizer</h3>
-        <p class="settings-lead">Otomatik agent routing aktif — Core ve Cline modelleri karmaşıklığa göre seçilir (Gemini / DeepSeek / GPT / Ollama).</p>
+        <p class="settings-lead">Otomatik agent routing: Panel sohbet Gemini; Cline günlük iş DeepSeek; gerçek zor işler OpenAI (nadir). Governor günlük bütçede OpenAI→DeepSeek düşürür.</p>
 
         <div class="form-group">
           <label class="checkbox-label">

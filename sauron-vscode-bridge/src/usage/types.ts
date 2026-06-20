@@ -8,6 +8,7 @@ export interface AgentMatrixEntry {
 	core: { provider: string; model: string }
 	cline: { providerId: string; modelId: string }
 	configured?: boolean
+	walletAvailable?: boolean
 }
 
 export interface AgentMatrix {

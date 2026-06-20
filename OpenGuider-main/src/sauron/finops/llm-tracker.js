@@ -1,9 +1,14 @@
 const { trackCall } = require("./usage-tracker");
 const { calculateCostTl } = require("./finops-pricing");
 const { resolveTokenCounts } = require("./token-counter");
-const { checkPreCallBudgetAlert, maybePostCallBudgetAlert } = require("./budget-alert");
+const { checkPreCallBudgetAlert, maybePostCallBudgetAlert, emitBudgetAlert } = require("./budget-alert");
 const { resolveCoreModelOverlay } = require("./cost-optimizer-config");
 const { resolveAgentForCore } = require("./agent-matrix");
+const {
+  resolveAgentWalletState,
+  buildWalletFallbackAlert,
+  buildExhaustedAgentAlerts,
+} = require("./agent-usage");
 
 class BudgetExceededError extends Error {
   constructor(message, alert = null) {
@@ -116,11 +121,25 @@ async function prepareLlmCall(settings = {}, options = {}) {
     return liveSettings;
   }
 
+  const { agentWallets } = await resolveAgentWalletState(liveSettings);
+
   const overlay =
-    resolveAgentForCore(operation, complexityHint, liveSettings) ||
+    resolveAgentForCore(operation, complexityHint, liveSettings, { agentWallets }) ||
     resolveCoreModelOverlay(liveSettings);
   if (!overlay) {
     return liveSettings;
+  }
+
+  if (overlay.walletFallbackFrom && overlay.agentId) {
+    emitBudgetAlert(
+      budgetContext.getWindows,
+      buildWalletFallbackAlert(overlay.walletFallbackFrom, overlay.agentId),
+    );
+  } else if (overlay.allCloudExhausted) {
+    const exhaustedAlerts = buildExhaustedAgentAlerts(agentWallets);
+    if (exhaustedAlerts.length) {
+      emitBudgetAlert(budgetContext.getWindows, exhaustedAlerts[0]);
+    }
   }
 
   return {

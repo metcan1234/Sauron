@@ -5,6 +5,16 @@ const {
   mergeCostOptimizerConfig,
   computeComplexityHint,
 } = require("./finops/cost-optimizer-config");
+const { resolveAgentForCline } = require("./finops/agent-matrix");
+const {
+  shouldActivateBudgetGovernor,
+  buildGovernorAlertPayload,
+} = require("./finops/daily-budget-governor");
+const {
+  resolveAgentWalletState,
+  buildWalletFallbackAlert,
+  buildExhaustedAgentAlerts,
+} = require("./finops/agent-usage");
 const {
   launchVSCode,
   focusVSCodeWorkspace,
@@ -245,7 +255,10 @@ function buildHandoffPayload(sessionSnapshot, workspacePath, handoffId = generat
     webBrief,
   });
   const complexityHint = overrides.complexityHint
-    || (webBrief ? "high" : computeComplexityHint(taskSummary, optimizer.routing.complexityKeywords));
+    || (webBrief ? "high" : computeComplexityHint(taskSummary));
+
+  const budgetGovernorActive = overrides.budgetGovernorActive === true;
+  const suggestedClineAgent = resolveAgentForCline(complexityHint, settings, { budgetGovernorActive });
 
   const payload = {
     version: 2,
@@ -267,6 +280,8 @@ function buildHandoffPayload(sessionSnapshot, workspacePath, handoffId = generat
       coreModelTier: optimizer.coreModelTier,
       optimizerEnabled: optimizer.enabled,
       mode: optimizer.mode,
+      budgetGovernorActive,
+      ...(suggestedClineAgent ? { suggestedClineAgent } : {}),
     },
   };
 
@@ -291,6 +306,44 @@ function buildHandoffPayload(sessionSnapshot, workspacePath, handoffId = generat
   }
 
   return payload;
+}
+
+async function enrichHandoffPayloadFinOps(payload, settings = {}, options = {}) {
+  const budgetGovernorActive = await shouldActivateBudgetGovernor(settings, {
+    projectType: payload.projectType || options.projectType,
+  });
+
+  const { agentWallets } = await resolveAgentWalletState(settings);
+
+  const suggestedClineAgent = resolveAgentForCline(payload.complexityHint, settings, {
+    budgetGovernorActive,
+    agentWallets,
+  });
+
+  payload.costContext = payload.costContext || {};
+  payload.costContext.budgetGovernorActive = budgetGovernorActive;
+  if (suggestedClineAgent) {
+    payload.costContext.suggestedClineAgent = suggestedClineAgent;
+  }
+
+  const alerts = [];
+  if (budgetGovernorActive) {
+    alerts.push(buildGovernorAlertPayload());
+  }
+  if (suggestedClineAgent?.walletFallbackFrom && suggestedClineAgent?.agentId) {
+    alerts.push(buildWalletFallbackAlert(suggestedClineAgent.walletFallbackFrom, suggestedClineAgent.agentId));
+  } else if (suggestedClineAgent?.allCloudExhausted) {
+    const exhaustedAlerts = buildExhaustedAgentAlerts(agentWallets);
+    if (exhaustedAlerts.length) {
+      alerts.push(exhaustedAlerts[0]);
+    }
+  }
+
+  return {
+    payload,
+    governorAlert: alerts[0] || null,
+    walletAlerts: alerts,
+  };
 }
 
 function listPendingHandoffs(workspacePath) {
@@ -486,6 +539,7 @@ module.exports = {
   generateHandoffId,
   isPendingHandoffFileName,
   buildHandoffPayload,
+  enrichHandoffPayloadFinOps,
   buildTaskSummary,
   truncateTaskSummary,
   collectTouchedFiles,

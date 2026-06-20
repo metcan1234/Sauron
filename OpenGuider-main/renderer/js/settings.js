@@ -108,6 +108,8 @@ async function init() {
   document.getElementById("skipCurrentStepShortcut").value = settings.skipCurrentStepShortcut || "Ctrl+Alt+6";
   document.getElementById("regenerateCurrentStepShortcut").value = settings.regenerateCurrentStepShortcut || "Ctrl+Alt+7";
   document.getElementById("workspacePath").value = settings.workspacePath || "";
+  const vscodePathEl = document.getElementById("vscodePath");
+  if (vscodePathEl) vscodePathEl.value = settings.vscodePath || "";
   const chatBackupEnabledEl = document.getElementById("chatBackupEnabled");
   const chatBackupPathEl = document.getElementById("chatBackupPath");
   if (chatBackupEnabledEl) chatBackupEnabledEl.checked = settings.chatBackupEnabled === true;
@@ -345,6 +347,7 @@ async function init() {
   bindFinOpsControls();
   window.sauron.on("finops-budget-alert", (payload) => {
     showToast(payload?.message || "AI bütçe uyarısı", true);
+    void refreshFinOpsSummary();
   });
   await refreshMetrics();
   await refreshFinOpsSummary();
@@ -488,6 +491,117 @@ function bindSettingsTabs() {
   });
 }
 
+const AGENT_WALLET_IDS = ["gemini", "deepseek", "openai", "ollama"];
+const AGENT_WALLET_LABELS = {
+  gemini: "Gemini",
+  deepseek: "DeepSeek",
+  openai: "OpenAI",
+  ollama: "Ollama",
+};
+
+function defaultAgentWallets() {
+  return Object.fromEntries(AGENT_WALLET_IDS.map((id) => [id, { limitUsd: 0, topUpUsd: 0 }]));
+}
+
+function renderAgentWalletRows(wallets = {}, summaryWallets = {}) {
+  const container = document.getElementById("finopsAgentWallets");
+  if (!container) return;
+  container.innerHTML = "";
+
+  for (const agentId of AGENT_WALLET_IDS) {
+    const wallet = wallets[agentId] || { limitUsd: 0, topUpUsd: 0 };
+    const live = summaryWallets[agentId] || {};
+    const row = document.createElement("div");
+    row.className = "finops-agent-wallet-row";
+    row.dataset.agentId = agentId;
+    row.style.border = "1px solid rgba(255,255,255,0.08)";
+    row.style.borderRadius = "8px";
+    row.style.padding = "12px";
+    row.style.marginBottom = "10px";
+
+    const spentUsd = Number(live.spentUsd) || 0;
+    const remainingUsd = live.unlimited ? null : Number(live.remainingUsd);
+    const promptTokens = Number(live.promptTokens) || 0;
+    const completionTokens = Number(live.completionTokens) || 0;
+    const remainingText = live.unlimited
+      ? "Sınırsız"
+      : `$${Math.max(0, remainingUsd ?? 0).toFixed(4)}`;
+    const isExhausted = !live.unlimited && Number(remainingUsd) <= 0 && Number(live.totalCreditUsd) > 0;
+    const isLow = !live.unlimited && !isExhausted && Number(live.remainingPct) <= 20;
+    const statusBadge = isExhausted
+      ? '<span style="color:#f87171;font-weight:600">Tükendi</span>'
+      : isLow
+        ? '<span style="color:#fbbf24;font-weight:600">Azalıyor</span>'
+        : "";
+
+    row.innerHTML = `
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:8px">
+        <strong>${AGENT_WALLET_LABELS[agentId] || agentId}</strong>
+        <span style="display:flex;gap:10px;align-items:center">
+          ${statusBadge}
+          <span class="hint">Token: ${promptTokens.toLocaleString()} in / ${completionTokens.toLocaleString()} out</span>
+        </span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:8px">
+        <label>Limit (USD)
+          <input class="form-input" type="number" min="0" step="0.01" data-wallet-limit value="${Number(wallet.limitUsd) || 0}"/>
+        </label>
+        <label>Harcanan (USD)
+          <input class="form-input" type="text" readonly value="$${spentUsd.toFixed(4)}"/>
+        </label>
+        <label>Kalan (USD)
+          <input class="form-input" type="text" readonly value="${remainingText}"/>
+        </label>
+        <label>Top-up toplam (USD)
+          <input class="form-input" type="text" readonly value="$${(Number(wallet.topUpUsd) || 0).toFixed(4)}"/>
+        </label>
+      </div>
+      <div style="display:flex;gap:8px;align-items:end">
+        <label style="flex:1">+ Bakiye ekle (USD)
+          <input class="form-input" type="number" min="0" step="0.01" data-wallet-topup-input placeholder="0.00"/>
+        </label>
+        <button class="btn btn-secondary" type="button" data-wallet-topup-btn>Ekle</button>
+      </div>
+    `;
+
+    row.querySelector("[data-wallet-topup-btn]")?.addEventListener("click", () => {
+      const input = row.querySelector("[data-wallet-topup-input]");
+      const amount = Number(input?.value);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        showToast("Geçerli bir bakiye miktarı girin", true);
+        return;
+      }
+      if (!settings.finopsAgentWallets) {
+        settings.finopsAgentWallets = defaultAgentWallets();
+      }
+      const current = settings.finopsAgentWallets[agentId] || { limitUsd: 0, topUpUsd: 0 };
+      current.topUpUsd = (Number(current.topUpUsd) || 0) + amount;
+      settings.finopsAgentWallets[agentId] = current;
+      if (input) input.value = "";
+      renderAgentWalletRows(settings.finopsAgentWallets, summaryWallets);
+      showToast(`${AGENT_WALLET_LABELS[agentId]} bakiyesine $${amount.toFixed(2)} eklendi — kaydetmeyi unutmayın`);
+    });
+
+    container.appendChild(row);
+  }
+}
+
+function collectAgentWallets() {
+  const container = document.getElementById("finopsAgentWallets");
+  const result = defaultAgentWallets();
+  if (!container) return result;
+
+  for (const row of container.querySelectorAll(".finops-agent-wallet-row")) {
+    const agentId = row.dataset.agentId;
+    if (!agentId || !result[agentId]) continue;
+    const limitRaw = row.querySelector("[data-wallet-limit]")?.value;
+    result[agentId].limitUsd = Number(limitRaw) || 0;
+    result[agentId].topUpUsd = Number(settings.finopsAgentWallets?.[agentId]?.topUpUsd) || 0;
+  }
+
+  return result;
+}
+
 function initFinOpsSettings() {
   document.getElementById("finopsTotalBudgetTl").value = String(settings.finopsTotalBudgetTl ?? 0);
   const hardBudgetEl = document.getElementById("finopsHardBudgetEnabled");
@@ -505,6 +619,11 @@ function initFinOpsSettings() {
   document.getElementById("finopsHandoffMaxChars").value = String(settings.finopsHandoffMaxChars ?? 4000);
   document.getElementById("finopsHandoffIncludeTranscript").checked = settings.finopsHandoffIncludeTranscript === true;
   document.getElementById("finopsDailyBudgetTl").value = String(settings.finopsDailyBudgetTl ?? 0);
+  if (!settings.finopsAgentWallets) {
+    settings.finopsAgentWallets = defaultAgentWallets();
+  }
+  renderAgentWalletRows(settings.finopsAgentWallets, {});
+  void refreshFinOpsSummary();
   void refreshFinOpsAnalytics();
 }
 
@@ -655,16 +774,29 @@ async function refreshFinOpsSummary() {
       if (summary?.remainingTl != null) {
         parts.push(`Kalan: ${summary.remainingTl.toFixed(4)} TL`);
       }
+      if (summary?.clineReadonlyNote) {
+        parts.push(summary.clineReadonlyNote);
+      }
       hintEl.textContent = parts.join(" · ");
     }
     if (breakdownEl) {
       const lines = [];
       const byOperation = summary?.byOperation || {};
       const byProvider = summary?.byProvider || {};
+      const byAgent = summary?.byAgent || {};
       if (Object.keys(byOperation).length) {
         lines.push("İşlem:");
         for (const [key, value] of Object.entries(byOperation)) {
-          lines.push(`  ${key}: ${Number(value).toFixed(4)} TL`);
+          const suffix = key === "cline-task-readonly" ? " (tahmini, Cline geçmişinden)" : "";
+          lines.push(`  ${key}${suffix}: ${Number(value).toFixed(4)} TL`);
+        }
+      }
+      if (Object.keys(byAgent).length) {
+        lines.push("Agent:");
+        for (const agentId of AGENT_WALLET_IDS) {
+          const stats = byAgent[agentId];
+          if (!stats) continue;
+          lines.push(`  ${agentId}: $${Number(stats.spentUsd || 0).toFixed(4)} · ${Number(stats.promptTokens || 0)} in / ${Number(stats.completionTokens || 0)} out`);
         }
       }
       if (Object.keys(byProvider).length) {
@@ -675,6 +807,7 @@ async function refreshFinOpsSummary() {
       }
       breakdownEl.textContent = lines.length ? lines.join("\n") : "Henüz kayıt yok.";
     }
+    renderAgentWalletRows(collectAgentWallets(), summary?.agentWallets || {});
   } catch (error) {
     const hintEl = document.getElementById("finopsSummaryHint");
     if (hintEl) hintEl.textContent = `Özet alınamadı: ${error.message}`;
@@ -951,6 +1084,7 @@ async function saveSettings() {
     awareAssistanceEnabled:  document.getElementById("awareAssistanceEnabled").checked,
     includeScreenshotByDefault: false,
     workspacePath:           document.getElementById("workspacePath").value.trim(),
+    vscodePath:              document.getElementById("vscodePath")?.value.trim() || "",
     finopsTotalBudgetTl:     Number(document.getElementById("finopsTotalBudgetTl")?.value) || 0,
     finopsHardBudgetEnabled: document.getElementById("finopsHardBudgetEnabled")?.checked === true,
     finopsUsdToTl:           Number(document.getElementById("finopsUsdToTl")?.value) || 34.5,
@@ -963,6 +1097,7 @@ async function saveSettings() {
     finopsHandoffMaxChars: Number(document.getElementById("finopsHandoffMaxChars")?.value) || 4000,
     finopsHandoffIncludeTranscript: document.getElementById("finopsHandoffIncludeTranscript")?.checked === true,
     finopsDailyBudgetTl: Number(document.getElementById("finopsDailyBudgetTl")?.value) || 0,
+    finopsAgentWallets: collectAgentWallets(),
     systemPromptOverride: document.getElementById("systemPromptOverride")?.value.trim() || "",
     userMemoryFacts: String(document.getElementById("userMemoryFacts")?.value || "")
       .split("\n")

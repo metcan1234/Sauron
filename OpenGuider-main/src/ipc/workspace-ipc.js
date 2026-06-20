@@ -2,7 +2,8 @@ const fs = require("fs");
 const {
   markHandoffLaunchVerified,
   recordVerifiedLaunch,
-  recoverFromZombieVSCodeIfNeeded,
+  getLastResolvedVscodePathInfo,
+  setVsCodeLaunchLogger,
 } = require("../sauron/vscode-launcher");
 
 function buildVSCodeFocusErrorMessage(launchResult) {
@@ -41,13 +42,20 @@ function registerWorkspaceIpc({
   listHandoffHistory,
   rejectHandoffFile,
   buildHandoffPayload,
+  enrichHandoffPayloadFinOps,
   bootstrapWorkspace,
   writeHandoff,
   launchVSCode,
   runSauronDoctor,
   writeCredentialRequest,
   getCredentialSyncStatus,
+  emitBudgetAlert,
+  getFinOpsAlertWindows,
 }) {
+  setVsCodeLaunchLogger((detail) => {
+    appLogger.info("vscode-launch-command", detail);
+  });
+
   ipcMain.handle("pick-workspace-folder", async () => {
     debugLog("ipc:pick-workspace-folder");
     const parentWindow = panelWindow && !panelWindow.isDestroyed()
@@ -271,6 +279,15 @@ function registerWorkspaceIpc({
         chatSessionTitle: getActiveChatSessionTitle(store),
       };
       const payload = buildHandoffPayload(enrichedSnapshot, workspacePath, undefined, runtimeSettings);
+      const finopsEnriched = await enrichHandoffPayloadFinOps(payload, runtimeSettings);
+      const walletAlerts = finopsEnriched.walletAlerts || [];
+      if (walletAlerts.length && typeof emitBudgetAlert === "function") {
+        for (const alert of walletAlerts) {
+          emitBudgetAlert(getFinOpsAlertWindows, alert);
+        }
+      } else if (finopsEnriched.governorAlert && typeof emitBudgetAlert === "function") {
+        emitBudgetAlert(getFinOpsAlertWindows, finopsEnriched.governorAlert);
+      }
       await bootstrapWorkspace(workspacePath, runtimeSettings);
       if (writeCredentialRequest) {
         try {
@@ -279,9 +296,18 @@ function registerWorkspaceIpc({
           appLogger.warn("handoff-credential-request-failed", { error: credError?.message || credError });
         }
       }
-      const written = writeHandoff(workspacePath, payload);
-      await recoverFromZombieVSCodeIfNeeded({ forceRecovery: true });
-      const launchResult = await launchVSCode(workspacePath, { newWindow: true, force: true });
+      const written = writeHandoff(workspacePath, finopsEnriched.payload);
+      const launchResult = await launchVSCode(workspacePath, {
+        newWindow: true,
+        force: true,
+        skipRecovery: true,
+        skipVerification: true,
+      });
+      appLogger.info("vscode-launch-resolve", {
+        ...getLastResolvedVscodePathInfo(),
+        executable: launchResult?.executable,
+        executableKind: launchResult?.executableKind,
+      });
       if (launchResult?.verified) {
         markHandoffLaunchVerified();
         recordVerifiedLaunch(launchResult);

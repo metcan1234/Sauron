@@ -2,6 +2,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { createLogger } = require("../../logger");
+const { summarizeByAgent, buildAgentWalletSummary } = require("./agent-usage");
 
 const logger = createLogger("usage-tracker");
 const LOG_FILENAME = "logs.jsonl";
@@ -49,6 +50,24 @@ function normalizeRecord(record = {}) {
   const sessionId = String(record.sessionId || "").trim();
   if (sessionId) {
     normalized.sessionId = sessionId;
+  }
+  const recordId = String(record.recordId || "").trim();
+  if (recordId) {
+    normalized.recordId = recordId;
+  }
+  const sourceNote = String(record.sourceNote || "").trim();
+  if (sourceNote) {
+    normalized.sourceNote = sourceNote;
+  }
+  if (record.estimated === true) {
+    normalized.estimated = true;
+  }
+  if (Number.isFinite(Number(record.costUsd))) {
+    normalized.costUsd = Math.max(0, Number(record.costUsd));
+  }
+  const source = String(record.source || "").trim();
+  if (source) {
+    normalized.source = source;
   }
   return normalized;
 }
@@ -145,6 +164,14 @@ async function getUsageSummary(settings = {}, options = {}) {
   const remainingTl = budget > 0 ? budget - totalSpentTl : null;
   const remainingPct = budget > 0 ? Math.max(0, (remainingTl / budget) * 100) : null;
   const { byOperation, byProvider } = summarizeBreakdown(entries);
+  const byAgent = summarizeByAgent(entries, settings);
+  const agentWallets = buildAgentWalletSummary(settings, byAgent);
+  const clineReadonlyEntries = entries.filter((entry) => entry.operation === "cline-task-readonly");
+  const clineReadonlyEntryCount = clineReadonlyEntries.length;
+  const clineReadonlySpentTl = clineReadonlyEntries.reduce(
+    (sum, entry) => sum + (Number(entry.costTl) || 0),
+    0,
+  );
 
   return {
     totalSpentTl,
@@ -157,6 +184,13 @@ async function getUsageSummary(settings = {}, options = {}) {
     entryCount: entries.length,
     byOperation,
     byProvider,
+    byAgent,
+    agentWallets,
+    clineReadonlyEntryCount,
+    clineReadonlySpentTl,
+    clineReadonlyNote: clineReadonlyEntryCount > 0
+      ? "Cline kayıtları tahmini — Cline görev geçmişinden periyodik okundu."
+      : null,
   };
 }
 

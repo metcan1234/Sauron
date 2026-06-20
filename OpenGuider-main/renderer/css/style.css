@@ -166,6 +166,18 @@ html, body {
   -webkit-app-region: no-drag;
 }
 
+.panel-hint-btn {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  opacity: 0.75;
+}
+
+.panel-hint-btn:hover {
+  opacity: 1;
+  color: var(--accent);
+}
+
 .icon-btn {
   width: 28px; height: 28px;
   border: 1px solid var(--border);

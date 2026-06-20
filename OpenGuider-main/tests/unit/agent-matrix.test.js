@@ -17,6 +17,13 @@ const baseSettings = {
   ollamaUrl: "http://localhost:11434",
 };
 
+const deepseekExhaustedWallets = {
+  deepseek: { unlimited: false, remainingUsd: 0, totalCreditUsd: 5 },
+  gemini: { unlimited: false, remainingUsd: 3, totalCreditUsd: 5 },
+  openai: { unlimited: true, remainingUsd: null, totalCreditUsd: 0 },
+  ollama: { unlimited: true, remainingUsd: null, totalCreditUsd: 0 },
+};
+
 test("resolveAgentForCore picks gemini for low complexity", () => {
   const overlay = resolveAgentForCore("chat", "low", baseSettings);
   assert.ok(overlay);
@@ -38,17 +45,52 @@ test("resolveAgentForCline maps complexity to agents", () => {
   assert.equal(low.modelId, "deepseek-chat");
 
   const medium = resolveAgentForCline("medium", baseSettings);
-  assert.equal(medium.providerId, "gemini");
-  assert.equal(medium.modelId, "gemini-2.5-flash");
+  assert.equal(medium.providerId, "deepseek");
+  assert.equal(medium.modelId, "deepseek-chat");
 
   const high = resolveAgentForCline("high", baseSettings);
   assert.equal(high.providerId, "openai");
   assert.equal(high.modelId, "gpt-4o-mini");
 });
 
-test("resolveAgentForCline downgrades one tier when requested", () => {
-  const selection = resolveAgentForCline("high", baseSettings, { downgradeOneTier: true });
+test("resolveAgentForCline governor routes high to deepseek", () => {
+  const selection = resolveAgentForCline("high", baseSettings, { budgetGovernorActive: true });
+  assert.equal(selection.providerId, "deepseek");
+  assert.equal(selection.reason, "budget-governor-high-to-deepseek");
+});
+
+test("resolveAgentForCline falls back to deepseek without openai key", () => {
+  const settings = { ...baseSettings, openaiApiKey: "" };
+  const selection = resolveAgentForCline("high", settings);
+  assert.equal(selection.providerId, "deepseek");
+  assert.equal(selection.reason, "complexity-high-fallback-deepseek");
+});
+
+test("resolveAgentForCline skips exhausted deepseek wallet", () => {
+  const selection = resolveAgentForCline("low", baseSettings, {
+    agentWallets: deepseekExhaustedWallets,
+  });
   assert.equal(selection.providerId, "gemini");
+  assert.equal(selection.reason, "wallet-exhausted-fallback-deepseek");
+  assert.equal(selection.walletFallbackFrom, "deepseek");
+});
+
+test("resolveAgentForCore skips exhausted gemini wallet", () => {
+  const agentWallets = {
+    gemini: { unlimited: false, remainingUsd: 0, totalCreditUsd: 5 },
+    deepseek: { unlimited: false, remainingUsd: 4, totalCreditUsd: 5 },
+    openai: { unlimited: true, remainingUsd: null, totalCreditUsd: 0 },
+    ollama: { unlimited: true, remainingUsd: null, totalCreditUsd: 0 },
+  };
+  const overlay = resolveAgentForCore("chat", "low", baseSettings, { agentWallets });
+  assert.equal(overlay.agentId, "deepseek");
+  assert.equal(overlay.reason, "wallet-exhausted-fallback-gemini");
+});
+
+test("buildAgentMatrixForWorkspace marks walletAvailable from summary", () => {
+  const matrix = buildAgentMatrixForWorkspace(baseSettings, deepseekExhaustedWallets);
+  assert.equal(matrix.agents.find((entry) => entry.id === "deepseek")?.walletAvailable, false);
+  assert.equal(matrix.agents.find((entry) => entry.id === "gemini")?.walletAvailable, true);
 });
 
 test("syncAgentMatrixFromSettings writes matrix defaults", () => {
@@ -64,4 +106,5 @@ test("buildAgentMatrixForWorkspace marks configured agents", () => {
   assert.equal(matrix.agents.find((a) => a.id === "gemini")?.configured, true);
   assert.equal(hasAgentCredential({ ollamaUrl: "http://localhost:11434", ollamaModelCustom: "qwen2.5-coder:7b" }, "ollama"), true);
   assert.equal(hasAgentCredential({ ollamaUrl: "http://localhost:11434" }, "ollama"), false);
+  assert.equal(matrix.routing.cline.medium, "deepseek");
 });

@@ -24,6 +24,12 @@ test("bootstrapWorkspace writes finops config, rules, and extension recommendati
     assert.equal(fs.existsSync(path.join(workspace, ".clinerules", "sauron-web-dev.md")), true);
     assert.equal(result.webDevRulesSeeded, true);
     assert.equal(fs.existsSync(path.join(workspace, ".vscode", "extensions.json")), true);
+    assert.equal(fs.existsSync(path.join(workspace, ".vscode", "settings.json")), true);
+
+    const settings = JSON.parse(
+      fs.readFileSync(path.join(workspace, ".vscode", "settings.json"), "utf8"),
+    );
+    assert.equal(settings["terminal.integrated.cwd"], "${workspaceFolder}");
 
     const extensions = JSON.parse(
       fs.readFileSync(path.join(workspace, ".vscode", "extensions.json"), "utf8"),

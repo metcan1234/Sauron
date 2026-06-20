@@ -123,9 +123,18 @@ test("buildHandoffPayload assigns complexityHint for complex tasks", () => {
       },
     },
     "/tmp/workspace",
+    undefined,
+    {
+      finopsCostOptimizerEnabled: true,
+      geminiApiKey: "gemini-key",
+      deepseekApiKey: "deepseek-key",
+      openaiApiKey: "openai-key",
+    },
   );
 
   assert.equal(payload.complexityHint, "high");
+  assert.ok(payload.costContext?.suggestedClineAgent);
+  assert.equal(payload.costContext.suggestedClineAgent.providerId, "openai");
 });
 
 test("seedSauronRules does not overwrite existing rules file", () => {

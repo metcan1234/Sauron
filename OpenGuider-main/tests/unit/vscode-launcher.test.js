@@ -16,7 +16,120 @@ function countLaunchExecCalls(execCalls) {
   }).length;
 }
 
-test("spawnVSCodeProcess on Windows uses PowerShell Start-Process", async (t) => {
+function createDetachedSpawnMock(spawnCalls) {
+  return (command, args, options) => {
+    spawnCalls.push({ command, args, options });
+    return {
+      on() {
+        return this;
+      },
+      unref() {},
+    };
+  };
+}
+
+function countLaunchCalls(execCalls, spawnCalls = []) {
+  const cmdLaunches = spawnCalls.filter((entry) => /code\.(cmd|exe)$/i.test(String(entry.command))).length;
+  return countLaunchExecCalls(execCalls) + cmdLaunches;
+}
+
+function installLaunchTransportMocks(t, { passthroughExecFile = false } = {}) {
+  const execCalls = [];
+  const spawnCalls = [];
+  const originalExecFile = childProcess.execFile;
+  const originalSpawn = childProcess.spawn;
+
+  childProcess.execFile = (command, args, options, callback) => {
+    if (typeof options === "function") {
+      callback = options;
+      options = {};
+    }
+    execCalls.push([command, args, options]);
+    if (callback) {
+      callback(null, "", "");
+    }
+    return {};
+  };
+
+  if (passthroughExecFile) {
+    childProcess.execFile = (command, args, options, callback) => {
+      if (typeof options === "function") {
+        callback = options;
+        options = {};
+      }
+      if (command === "powershell.exe") {
+        execCalls.push([command, args, options]);
+        if (callback) {
+          callback(null, "", "");
+        }
+        return {};
+      }
+      return originalExecFile(command, args, options, callback);
+    };
+  }
+
+  childProcess.spawn = createDetachedSpawnMock(spawnCalls);
+
+  t.after(() => {
+    childProcess.execFile = originalExecFile;
+    childProcess.spawn = originalSpawn;
+  });
+
+  return {
+    execCalls,
+    spawnCalls,
+    countLaunches: () => countLaunchCalls(execCalls, spawnCalls),
+  };
+}
+
+test("spawnVSCodeProcess on Windows uses PowerShell Start-Process for code.cmd", async (t) => {
+  if (process.platform !== "win32") {
+    t.skip("Windows-only spawn path");
+    return;
+  }
+
+  const execCalls = [];
+  const originalExecFile = childProcess.execFile;
+  childProcess.execFile = (command, args, options, callback) => {
+    if (typeof options === "function") {
+      callback = options;
+      options = {};
+    }
+    if (command === "powershell.exe") {
+      execCalls.push([command, args, options]);
+      if (callback) {
+        callback(null, "", "");
+      }
+      return {};
+    }
+    return originalExecFile(command, args, options, callback);
+  };
+
+  t.after(() => {
+    childProcess.execFile = originalExecFile;
+    delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
+    delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
+  });
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "og-vscode-launch-"));
+  delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
+  delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
+  const { spawnVSCodeProcess } = require("../../src/sauron/vscode-launcher");
+
+  await spawnVSCodeProcess(
+    { kind: "cmd", path: "C:\\Microsoft VS Code\\bin\\code.cmd" },
+    ["-n", tmpDir],
+  );
+
+  assert.equal(execCalls.length, 1);
+  const psCommand = execCalls[0][1][execCalls[0][1].indexOf("-Command") + 1];
+  assert.match(psCommand, /Start-Process/);
+  assert.match(psCommand, /code\.cmd/);
+  assert.match(psCommand, /-n/);
+  assert.match(psCommand, /-WindowStyle Hidden/);
+});
+
+test("spawnVSCodeProcess on Windows uses PowerShell Start-Process for Code.exe", async (t) => {
   if (process.platform !== "win32") {
     t.skip("Windows-only spawn guard");
     return;
@@ -62,25 +175,7 @@ test("spawnVSCodeProcess on Windows uses PowerShell Start-Process", async (t) =>
 });
 
 test("openWorkspaceInVSCode debounces duplicate launches", async (t) => {
-  const execCalls = [];
-  const originalExecFile = childProcess.execFile;
-  childProcess.execFile = (command, args, options, callback) => {
-    if (typeof options === "function") {
-      callback = options;
-      options = {};
-    }
-    execCalls.push([command, args, options]);
-    if (callback) {
-      callback(null, "", "");
-    }
-    return {};
-  };
-
-  t.after(() => {
-    childProcess.execFile = originalExecFile;
-    delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
-    delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
-  });
+  const { countLaunches } = installLaunchTransportMocks(t);
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "og-vscode-debounce-"));
   delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
@@ -103,7 +198,7 @@ test("openWorkspaceInVSCode debounces duplicate launches", async (t) => {
   assert.equal(first.skipped, false);
   assert.equal(second.skipped, true);
   assert.equal(second.reason, "debounced");
-  assert.equal(countLaunchExecCalls(execCalls), 1);
+  assert.equal(countLaunches(), 1);
 });
 
 test("buildLaunchArgs prepends extraArgs before workspace flags", () => {
@@ -148,6 +243,17 @@ test("buildPowerShellStartProcessCommand escapes single quotes", () => {
   assert.match(command, /-WindowStyle Normal/);
 });
 
+test("buildPowerShellStartProcessCommand hides cmd wrapper window for code.cmd", () => {
+  const { buildPowerShellStartProcessCommand } = require("../../src/sauron/vscode-launcher");
+  const command = buildPowerShellStartProcessCommand(
+    "C:\\Microsoft VS Code\\bin\\code.cmd",
+    ["-n", "C:\\work\\demo"],
+  );
+  assert.match(command, /code\.cmd/);
+  assert.match(command, /-WindowStyle Hidden/);
+  assert.doesNotMatch(command, /-PassThru/);
+});
+
 test("isVSCodeCliWrapper rejects Code.exe and accepts code.cmd", () => {
   const { isVSCodeCliWrapper } = require("../../src/sauron/vscode-launcher");
   assert.equal(
@@ -158,9 +264,108 @@ test("isVSCodeCliWrapper rejects Code.exe and accepts code.cmd", () => {
     isVSCodeCliWrapper("C:\\Users\\Can\\AppData\\Local\\Programs\\Microsoft VS Code\\bin\\code.cmd"),
     true,
   );
+  assert.equal(
+    isVSCodeCliWrapper("C:\\Users\\Can\\AppData\\Local\\Programs\\cursor\\resources\\app\\codeBin\\code.cmd"),
+    false,
+  );
 });
 
-test("resolveVSCodeExecutable prefers Code.exe GUI launch on Windows", () => {
+test("isCursorCliPath detects Cursor shims", () => {
+  const { isCursorCliPath } = require("../../src/sauron/vscode-launcher");
+  assert.equal(
+    isCursorCliPath("C:\\Users\\Can\\AppData\\Local\\Programs\\cursor\\resources\\app\\codeBin\\code.cmd"),
+    true,
+  );
+  assert.equal(
+    isCursorCliPath("C:\\Users\\Can\\AppData\\Local\\Programs\\Microsoft VS Code\\bin\\code.cmd"),
+    false,
+  );
+});
+
+test("resolveVscodeExecutablePath prefers configured path", (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "og-vscode-configured-"));
+  const fakeCli = path.join(tmpDir, "code.cmd");
+  fs.writeFileSync(fakeCli, "@echo off\r\n", "utf8");
+
+  const {
+    resolveVscodeExecutablePath,
+    setConfiguredVscodePath,
+    getLastResolvedVscodePathInfo,
+  } = require("../../src/sauron/vscode-launcher");
+
+  t.after(() => {
+    setConfiguredVscodePath("");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
+  });
+
+  setConfiguredVscodePath(fakeCli);
+  assert.equal(resolveVscodeExecutablePath(), fakeCli);
+  assert.deepEqual(getLastResolvedVscodePathInfo(), {
+    path: fakeCli,
+    source: "settings",
+  });
+});
+
+test("resolveVscodeExecutablePath filters Cursor from where code", (t) => {
+  if (process.platform !== "win32") {
+    t.skip("Windows-only where code filter");
+    return;
+  }
+
+  const localAppData = process.env.LOCALAPPDATA || "";
+  const expectedCmd = path.join(localAppData, "Programs", "Microsoft VS Code", "bin", "code.cmd");
+  const cursorCmd = path.join(localAppData, "Programs", "cursor", "resources", "app", "codeBin", "code.cmd");
+  if (!expectedCmd) {
+    t.skip("LOCALAPPDATA unavailable");
+    return;
+  }
+
+  const originalExecFileSync = childProcess.execFileSync;
+  const originalExistsSync = fs.existsSync;
+  childProcess.execFileSync = (command, args, options) => {
+    if (command === "where" && args?.[0] === "code") {
+      return [
+        cursorCmd,
+        path.join(localAppData, "Programs", "cursor", "resources", "app", "codeBin", "code"),
+        expectedCmd,
+      ].join("\r\n");
+    }
+    return originalExecFileSync(command, args, options);
+  };
+  fs.existsSync = (candidate) => {
+    const value = String(candidate);
+    if (value === expectedCmd) {
+      return true;
+    }
+    if (value.includes("Microsoft VS Code") || value.includes("cursor")) {
+      return false;
+    }
+    return originalExistsSync(candidate);
+  };
+
+  t.after(() => {
+    childProcess.execFileSync = originalExecFileSync;
+    fs.existsSync = originalExistsSync;
+    delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
+  });
+
+  delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
+  const {
+    resolveVscodeExecutablePath,
+    setConfiguredVscodePath,
+    getLastResolvedVscodePathInfo,
+    isCursorCliPath,
+  } = require("../../src/sauron/vscode-launcher");
+  setConfiguredVscodePath("");
+
+  const resolved = resolveVscodeExecutablePath();
+  assert.equal(resolved, expectedCmd);
+  assert.ok(!isCursorCliPath(resolved));
+  assert.ok(["common-path", "path-command"].includes(getLastResolvedVscodePathInfo().source));
+});
+
+test("resolveVSCodeExecutable prefers code.cmd CLI launch on Windows", () => {
   if (process.platform !== "win32") {
     return;
   }
@@ -169,19 +374,17 @@ test("resolveVSCodeExecutable prefers Code.exe GUI launch on Windows", () => {
   const {
     resolveVSCodeExecutable,
     resolveVSCodeCommand,
-    resolveVSCodeAppExe,
   } = require("../../src/sauron/vscode-launcher");
   const codeCmd = resolveVSCodeCommand();
-  const appExe = resolveVSCodeAppExe();
   const executable = resolveVSCodeExecutable();
 
-  if (!codeCmd || !appExe) {
+  if (!codeCmd) {
     return;
   }
 
-  assert.equal(executable?.kind, "exe");
-  assert.equal(executable?.path, appExe);
-  assert.match(executable?.path || "", /Code\.exe$/i);
+  assert.equal(executable?.kind, "cmd");
+  assert.equal(executable?.path, codeCmd);
+  assert.match(executable?.path || "", /code\.cmd$/i);
 });
 
 test("resolveVSCodeCommand ignores Code.exe from where code", (t) => {
@@ -302,23 +505,7 @@ test("resolveEffectiveNewWindow keeps reuse when VS Code window is visible", asy
 });
 
 test("openWorkspaceInVSCode reports launchMethod and verified when skipped", async (t) => {
-  const originalExecFile = childProcess.execFile;
-  childProcess.execFile = (command, args, options, callback) => {
-    if (typeof options === "function") {
-      callback = options;
-      options = {};
-    }
-    if (callback) {
-      callback(null, "", "");
-    }
-    return {};
-  };
-
-  t.after(() => {
-    childProcess.execFile = originalExecFile;
-    delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
-    delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
-  });
+  const { countLaunches } = installLaunchTransportMocks(t);
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "og-vscode-method-"));
   delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
@@ -336,32 +523,15 @@ test("openWorkspaceInVSCode reports launchMethod and verified when skipped", asy
   }
 
   const result = await openWorkspaceInVSCode(tmpDir, { newWindow: true, ...TEST_LAUNCH_OPTS });
-  assert.equal(result.launchMethod, "code.exe-gui");
-  assert.equal(result.executableKind, "exe");
+  assert.equal(result.launchMethod, "code.cmd");
+  assert.equal(result.executableKind, "cmd");
   assert.equal(result.verified, true);
   assert.equal(result.verificationReason, "skipped");
+  assert.equal(countLaunches(), 1);
 });
 
 test("openWorkspaceInVSCode force bypasses debounce", async (t) => {
-  const execCalls = [];
-  const originalExecFile = childProcess.execFile;
-  childProcess.execFile = (command, args, options, callback) => {
-    if (typeof options === "function") {
-      callback = options;
-      options = {};
-    }
-    execCalls.push([command, args, options]);
-    if (callback) {
-      callback(null, "", "");
-    }
-    return {};
-  };
-
-  t.after(() => {
-    childProcess.execFile = originalExecFile;
-    delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
-    delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
-  });
+  const { countLaunches } = installLaunchTransportMocks(t);
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "og-vscode-force-"));
   delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
@@ -383,7 +553,7 @@ test("openWorkspaceInVSCode force bypasses debounce", async (t) => {
 
   assert.equal(first.skipped, false);
   assert.equal(forced.skipped, false);
-  assert.equal(countLaunchExecCalls(execCalls), 2);
+  assert.equal(countLaunches(), 2);
 });
 
 test("focusWorkspaceInVSCode focuses existing window without terminate", async (t) => {
@@ -417,28 +587,12 @@ test("focusWorkspaceInVSCode focuses existing window without terminate", async (
     return { terminated: true, reason: "should_not_run" };
   };
 
-  const execCalls = [];
-  const originalExecFile = childProcess.execFile;
-  childProcess.execFile = (command, args, options, callback) => {
-    if (typeof options === "function") {
-      callback = options;
-      options = {};
-    }
-    if (command === "powershell.exe") {
-      execCalls.push([command, args, options]);
-      if (callback) {
-        callback(null, "", "");
-      }
-      return {};
-    }
-    return originalExecFile(command, args, options, callback);
-  };
+  const { countLaunches } = installLaunchTransportMocks(t, { passthroughExecFile: true });
 
   t.after(() => {
     focusModule.getVSCodeProcessState = originalGetState;
     focusModule.bringVSCodeToForeground = originalBring;
     focusModule.terminateVSCodeIfNoVisibleWindow = originalTerminate;
-    childProcess.execFile = originalExecFile;
     delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
     delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
   });
@@ -461,7 +615,7 @@ test("focusWorkspaceInVSCode focuses existing window without terminate", async (
   assert.equal(result.action, "focus_existing");
   assert.equal(result.verified, true);
   assert.equal(terminateCalls, 0);
-  assert.equal(countLaunchExecCalls(execCalls), 0);
+  assert.equal(countLaunches(), 0);
 });
 
 test("concurrent openWorkspaceInVSCode awaits inflight launch", async (t) => {
@@ -504,28 +658,12 @@ test("concurrent openWorkspaceInVSCode awaits inflight launch", async (t) => {
     return { terminated: true, reason: "should_not_run" };
   };
 
-  const execCalls = [];
-  const originalExecFile = childProcess.execFile;
-  childProcess.execFile = (command, args, options, callback) => {
-    if (typeof options === "function") {
-      callback = options;
-      options = {};
-    }
-    if (command === "powershell.exe") {
-      execCalls.push([command, args, options]);
-      if (callback) {
-        callback(null, "", "");
-      }
-      return {};
-    }
-    return originalExecFile(command, args, options, callback);
-  };
+  const { countLaunches } = installLaunchTransportMocks(t, { passthroughExecFile: true });
 
   t.after(() => {
     focusModule.getVSCodeProcessState = originalGetState;
     focusModule.verifyAndFocusVSCode = originalVerify;
     focusModule.terminateVSCodeIfNoVisibleWindow = originalTerminate;
-    childProcess.execFile = originalExecFile;
     delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
     delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
   });
@@ -566,7 +704,7 @@ test("concurrent openWorkspaceInVSCode awaits inflight launch", async (t) => {
   assert.equal(second.skipped, true);
   assert.equal(second.reason, "awaited_inflight_launch");
   assert.equal(terminateCalls, 0);
-  assert.equal(countLaunchExecCalls(execCalls), 1);
+  assert.equal(countLaunches(), 1);
 });
 
 test("vscode-window-focus treats handle without title as visible window", () => {
@@ -621,28 +759,12 @@ test("focusWorkspaceInVSCode recovers from zombie process with cleanup and relau
     };
   };
 
-  const execCalls = [];
-  const originalExecFile = childProcess.execFile;
-  childProcess.execFile = (command, args, options, callback) => {
-    if (typeof options === "function") {
-      callback = options;
-      options = {};
-    }
-    if (command === "powershell.exe") {
-      execCalls.push([command, args, options]);
-      if (callback) {
-        callback(null, "", "");
-      }
-      return {};
-    }
-    return originalExecFile(command, args, options, callback);
-  };
+  const { countLaunches } = installLaunchTransportMocks(t, { passthroughExecFile: true });
 
   t.after(() => {
     focusModule.getVSCodeProcessState = originalGetState;
     focusModule.terminateVSCodeIfNoVisibleWindow = originalTerminate;
     focusModule.verifyAndFocusVSCode = originalVerify;
-    childProcess.execFile = originalExecFile;
     delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
     delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
   });
@@ -668,7 +790,7 @@ test("focusWorkspaceInVSCode recovers from zombie process with cleanup and relau
   assert.ok(terminateCalls <= 3);
   assert.equal(result.verified, true);
   assert.ok(["launch", "launch_after_recovery"].includes(result.action));
-  assert.ok(countLaunchExecCalls(execCalls) >= 1);
+  assert.ok(countLaunches() >= 1);
 });
 
 test("recoverFromZombieVSCodeIfNeeded does not terminate when window is visible", async (t) => {
@@ -800,29 +922,13 @@ test("focusWorkspaceInVSCode preferFocusOnly escalates to relaunch when window i
     return { terminated: true, reason: "no_visible_window", count: 1 };
   };
 
-  const execCalls = [];
-  const originalExecFile = childProcess.execFile;
-  childProcess.execFile = (command, args, options, callback) => {
-    if (typeof options === "function") {
-      callback = options;
-      options = {};
-    }
-    if (command === "powershell.exe") {
-      execCalls.push([command, args, options]);
-      if (callback) {
-        callback(null, "", "");
-      }
-      return {};
-    }
-    return originalExecFile(command, args, options, callback);
-  };
+  const { countLaunches } = installLaunchTransportMocks(t, { passthroughExecFile: true });
 
   t.after(() => {
     focusModule.getVSCodeProcessState = originalGetState;
     focusModule.bringVSCodeToForeground = originalBring;
     focusModule.verifyAndFocusVSCode = originalVerify;
     focusModule.terminateVSCodeIfNoVisibleWindow = originalTerminate;
-    childProcess.execFile = originalExecFile;
     delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
     delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
   });
@@ -846,7 +952,7 @@ test("focusWorkspaceInVSCode preferFocusOnly escalates to relaunch when window i
 
   assert.notEqual(result.action, "focus_only");
   assert.equal(result.verified, true);
-  assert.ok(countLaunchExecCalls(execCalls) >= 1);
+  assert.ok(countLaunches() >= 1);
   assert.ok(terminateCalls >= 0);
 });
 
@@ -875,27 +981,11 @@ test("focusWorkspaceInVSCode preferFocusOnly does not relaunch when window exist
     hwnd: hwnd || 777001,
   });
 
-  const execCalls = [];
-  const originalExecFile = childProcess.execFile;
-  childProcess.execFile = (command, args, options, callback) => {
-    if (typeof options === "function") {
-      callback = options;
-      options = {};
-    }
-    if (command === "powershell.exe") {
-      execCalls.push([command, args, options]);
-      if (callback) {
-        callback(null, "", "");
-      }
-      return {};
-    }
-    return originalExecFile(command, args, options, callback);
-  };
+  const { countLaunches } = installLaunchTransportMocks(t, { passthroughExecFile: true });
 
   t.after(() => {
     focusModule.getVSCodeProcessState = originalGetState;
     focusModule.bringVSCodeToForeground = originalBring;
-    childProcess.execFile = originalExecFile;
     delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
     delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
   });
@@ -913,7 +1003,124 @@ test("focusWorkspaceInVSCode preferFocusOnly does not relaunch when window exist
 
   assert.equal(result.action, "focus_existing");
   assert.equal(result.verified, true);
-  assert.equal(countLaunchExecCalls(execCalls), 0);
+  assert.equal(countLaunches(), 0);
+});
+
+test("openWorkspaceInVSCode treats spawn success as verified when window check fails", async (t) => {
+  if (process.platform !== "win32") {
+    t.skip("Windows-only spawn success path");
+    return;
+  }
+
+  const { countLaunches } = installLaunchTransportMocks(t, { passthroughExecFile: true });
+
+  delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
+  delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
+  const focusModule = require("../../src/sauron/vscode-window-focus");
+  const originalVerify = focusModule.verifyAndFocusVSCode;
+  focusModule.verifyAndFocusVSCode = async () => ({
+    verified: false,
+    verificationReason: "timeout",
+    pid: null,
+    hwnd: 0,
+    focused: false,
+    focusReason: "timeout",
+  });
+  focusModule.getVSCodeProcessState = async () => ({
+    running: true,
+    pid: 4242,
+    hwnd: 0,
+    hasWindow: false,
+    title: "",
+  });
+  focusModule.terminateVSCodeIfNoVisibleWindow = async () => {
+    throw new Error("terminateVSCodeIfNoVisibleWindow should not run after handoff spawn");
+  };
+
+  t.after(() => {
+    focusModule.verifyAndFocusVSCode = originalVerify;
+    delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
+    delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
+  });
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "og-vscode-spawn-ok-"));
+  const {
+    openWorkspaceInVSCode,
+    resetLaunchDebounceForTests,
+    resolveVSCodeExecutable,
+  } = require("../../src/sauron/vscode-launcher");
+  resetLaunchDebounceForTests();
+
+  if (!resolveVSCodeExecutable()) {
+    t.skip("VS Code not installed in this environment");
+    return;
+  }
+
+  const result = await openWorkspaceInVSCode(tmpDir, {
+    newWindow: true,
+    force: true,
+    skipRecovery: true,
+  });
+
+  assert.equal(result.verified, true);
+  assert.equal(result.verificationReason, "spawn_ok");
+  assert.equal(countLaunches(), 1);
+});
+
+test("recoverFromZombieVSCodeIfNeeded skips terminate during recent spawn grace", async (t) => {
+  if (process.platform !== "win32") {
+    t.skip("Windows-only spawn grace");
+    return;
+  }
+
+  delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
+  delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
+  const focusModule = require("../../src/sauron/vscode-window-focus");
+  const originalTerminate = focusModule.terminateVSCodeIfNoVisibleWindow;
+  focusModule.getVSCodeProcessState = async () => ({
+    running: true,
+    pid: 5151,
+    hwnd: 0,
+    hasWindow: false,
+    title: "",
+  });
+  focusModule.terminateVSCodeIfNoVisibleWindow = async () => {
+    throw new Error("terminateVSCodeIfNoVisibleWindow should not run during spawn grace");
+  };
+
+  const originalExecFile = childProcess.execFile;
+  childProcess.execFile = (command, args, options, callback) => {
+    if (typeof options === "function") {
+      callback = options;
+      options = {};
+    }
+    if (command === "powershell.exe") {
+      if (callback) {
+        callback(null, "", "");
+      }
+      return {};
+    }
+    return originalExecFile(command, args, options, callback);
+  };
+
+  t.after(() => {
+    focusModule.terminateVSCodeIfNoVisibleWindow = originalTerminate;
+    childProcess.execFile = originalExecFile;
+    delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
+    delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
+  });
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "og-vscode-spawn-grace-"));
+  const {
+    recoverFromZombieVSCodeIfNeeded,
+    spawnVSCodeProcess,
+    resetLaunchDebounceForTests,
+  } = require("../../src/sauron/vscode-launcher");
+  resetLaunchDebounceForTests();
+  await spawnVSCodeProcess({ kind: "exe", path: "C:\\VS Code\\Code.exe" }, ["--new-window", tmpDir]);
+
+  const result = await recoverFromZombieVSCodeIfNeeded({ forceRecovery: true });
+  assert.equal(result.reason, "recent_spawn_grace");
 });
 
 test("openWorkspaceInVSCode tries disable-gpu profile when default launch fails verification", async (t) => {
@@ -963,7 +1170,9 @@ test("openWorkspaceInVSCode tries disable-gpu profile when default launch fails 
   });
 
   const execCalls = [];
+  const spawnCalls = [];
   const originalExecFile = childProcess.execFile;
+  const originalSpawn = childProcess.spawn;
   childProcess.execFile = (command, args, options, callback) => {
     if (typeof options === "function") {
       callback = options;
@@ -978,10 +1187,12 @@ test("openWorkspaceInVSCode tries disable-gpu profile when default launch fails 
     }
     return originalExecFile(command, args, options, callback);
   };
+  childProcess.spawn = createDetachedSpawnMock(spawnCalls);
 
   t.after(() => {
     focusModule.verifyAndFocusVSCode = originalVerify;
     childProcess.execFile = originalExecFile;
+    childProcess.spawn = originalSpawn;
     delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
     delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
   });
@@ -999,12 +1210,17 @@ test("openWorkspaceInVSCode tries disable-gpu profile when default launch fails 
     return;
   }
 
-  const result = await openWorkspaceInVSCode(tmpDir, { newWindow: true, force: true, skipPostVerifySettle: true });
+  const result = await openWorkspaceInVSCode(tmpDir, {
+    newWindow: true,
+    force: true,
+    skipPostVerifySettle: true,
+    requireWindowVerification: true,
+  });
 
   assert.equal(result.verified, true);
   assert.equal(result.launchProfile, "disable-gpu");
   assert.equal(result.action, "launch_disable_gpu");
-  assert.ok(countLaunchExecCalls(execCalls) >= 2);
+  assert.ok(countLaunchCalls(execCalls, spawnCalls) >= 2);
   const psCommands = execCalls.map(([, args]) => args[args.indexOf("-Command") + 1]);
   assert.ok(psCommands.some((cmd) => String(cmd).includes("--disable-gpu")));
 });
@@ -1045,7 +1261,9 @@ test("focusWorkspaceInVSCode escalates during post-verify grace when window is l
   });
 
   const execCalls = [];
+  const spawnCalls = [];
   const originalExecFile = childProcess.execFile;
+  const originalSpawn = childProcess.spawn;
   childProcess.execFile = (command, args, options, callback) => {
     if (typeof options === "function") {
       callback = options;
@@ -1060,11 +1278,13 @@ test("focusWorkspaceInVSCode escalates during post-verify grace when window is l
     }
     return originalExecFile(command, args, options, callback);
   };
+  childProcess.spawn = createDetachedSpawnMock(spawnCalls);
 
   t.after(() => {
     focusModule.getVSCodeProcessState = originalGetState;
     focusModule.verifyAndFocusVSCode = originalVerify;
     childProcess.execFile = originalExecFile;
+    childProcess.spawn = originalSpawn;
     delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
     delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
   });
@@ -1095,5 +1315,5 @@ test("focusWorkspaceInVSCode escalates during post-verify grace when window is l
   assert.notEqual(result.action, "focus_only");
   assert.notEqual(result.verificationReason, "focus_only_no_window");
   assert.equal(result.verified, true);
-  assert.ok(countLaunchExecCalls(execCalls) >= 1);
+  assert.ok(countLaunchCalls(execCalls, spawnCalls) >= 1);
 });

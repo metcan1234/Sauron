@@ -418,7 +418,12 @@ export function createPanelController({
         return;
       }
 
-      if (!result?.launchResult?.verified && result?.launchResult && !result.launchResult.skipped) {
+      if (
+        !result?.launchResult?.verified
+        && result?.launchResult
+        && !result.launchResult.skipped
+        && result.launchResult.verificationReason !== "spawn_ok"
+      ) {
         ui.showToast(
           result.launchResult.verificationReason === "process_only"
             ? "VS Code arka planda — pencere görünmüyor"

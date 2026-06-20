@@ -16,6 +16,115 @@ let launchInProgress = null;
 let lastVerifiedLaunchAt = 0;
 let lastVerifiedHwnd = 0;
 let lastHandoffVerifiedAt = 0;
+let configuredVscodePath = "";
+let lastResolvedVscodePath = null;
+let lastResolvedVscodeSource = null;
+let lastVsCodeSpawnAt = 0;
+let vsCodeLaunchLogger = null;
+let spawnDiagnosticsEnabled = process.env.SAURON_VSCODE_SPAWN_DEBUG === "1";
+let lastSpawnDiagnostic = null;
+
+function setSpawnDiagnosticsEnabled(enabled) {
+  spawnDiagnosticsEnabled = Boolean(enabled);
+}
+
+function getLastSpawnDiagnostic() {
+  return lastSpawnDiagnostic;
+}
+
+function setVsCodeLaunchLogger(logger) {
+  vsCodeLaunchLogger = typeof logger === "function" ? logger : null;
+}
+
+function readCodeWorkspaceContext(workspacePath) {
+  const resolvedPath = path.resolve(workspacePath);
+  const context = {
+    workspacePath: resolvedPath,
+    workspaceExists: fs.existsSync(resolvedPath),
+    isCodeWorkspaceFile: resolvedPath.toLowerCase().endsWith(".code-workspace"),
+    codeWorkspaceFile: null,
+    codeWorkspaceContent: null,
+    codeWorkspaceValidJson: null,
+  };
+
+  if (context.isCodeWorkspaceFile && context.workspaceExists) {
+    context.codeWorkspaceFile = resolvedPath;
+    try {
+      const raw = fs.readFileSync(resolvedPath, "utf8");
+      context.codeWorkspaceContent = raw;
+      const parsed = JSON.parse(raw);
+      context.codeWorkspaceValidJson = true;
+      const folders = Array.isArray(parsed?.folders) ? parsed.folders : [];
+      context.codeWorkspaceFolders = folders.map((entry) => {
+        const folderPath = String(entry?.path || "").trim();
+        const absolutePath = path.isAbsolute(folderPath)
+          ? folderPath
+          : path.resolve(path.dirname(resolvedPath), folderPath);
+        return {
+          path: folderPath,
+          absolutePath,
+          exists: folderPath ? fs.existsSync(absolutePath) : false,
+        };
+      });
+    } catch (error) {
+      context.codeWorkspaceValidJson = false;
+      context.codeWorkspaceParseError = error?.message || String(error);
+    }
+  }
+
+  return context;
+}
+
+function collectVsCodeLaunchDiagnostics(workspacePath, executable, launchArgs, options = {}) {
+  const workspaceContext = readCodeWorkspaceContext(workspacePath);
+  const spawnMethod = process.platform === "win32"
+    ? "powershell-start-process"
+    : (executable?.kind === "exe" ? "code.exe-detached" : "code-cli-detached");
+
+  return {
+    event: "vscode-launch-command",
+    executable: executable?.path || null,
+    executableKind: executable?.kind || null,
+    launchMethod: getLaunchMethod(executable?.kind || "cmd"),
+    spawnMethod,
+    args: Array.isArray(launchArgs) ? [...launchArgs] : [],
+    cwd: options.cwd || null,
+    envOverrides: options.env || null,
+    launchProfile: options.launchProfile || "default",
+    extraArgs: Array.isArray(options.extraArgs) ? [...options.extraArgs] : [],
+    powershellCommand: (
+      process.platform === "win32"
+      && executable?.path
+      && Array.isArray(launchArgs)
+    )
+      ? buildPowerShellStartProcessCommand(executable.path, launchArgs)
+      : null,
+    ...workspaceContext,
+  };
+}
+
+function logVsCodeLaunchDetails(detail) {
+  const payload = collectVsCodeLaunchDiagnostics(
+    detail.workspacePath,
+    detail.executable,
+    detail.launchArgs,
+    detail.options || {},
+  );
+  Object.assign(payload, {
+    requestedNewWindow: detail.requestedNewWindow,
+    effectiveNewWindow: detail.effectiveNewWindow,
+  });
+  if (typeof vsCodeLaunchLogger === "function") {
+    vsCodeLaunchLogger(payload);
+  } else {
+    console.log("[vscode-launch]", JSON.stringify(payload, null, 2));
+  }
+  return payload;
+}
+
+function spawnVSCodeCmdOnWindows(codeCmdPath, args) {
+  return spawnViaPowerShellStartProcess(codeCmdPath, args);
+}
 
 function isWithinPostVerifyGrace() {
   return lastVerifiedLaunchAt > 0 && (Date.now() - lastVerifiedLaunchAt) < POST_VERIFY_GRACE_MS;
@@ -36,8 +145,15 @@ function isRecentHandoffVerified() {
   return lastHandoffVerifiedAt > 0 && (Date.now() - lastHandoffVerifiedAt) < POST_VERIFY_GRACE_MS;
 }
 
-function isVSCodeCliWrapper(candidatePath) {
+function isCursorCliPath(candidatePath) {
   if (!candidatePath) {
+    return false;
+  }
+  return String(candidatePath).toLowerCase().includes("cursor");
+}
+
+function isVSCodeCliWrapper(candidatePath) {
+  if (!candidatePath || isCursorCliPath(candidatePath)) {
     return false;
   }
   const lower = String(candidatePath).toLowerCase();
@@ -50,39 +166,107 @@ function isVSCodeCliWrapper(candidatePath) {
   return lower.includes(`${path.sep}bin${path.sep}`);
 }
 
-function resolveVSCodeCommand() {
+function setConfiguredVscodePath(value) {
+  configuredVscodePath = String(value || "").trim();
+}
+
+function getConfiguredVscodePath() {
+  return configuredVscodePath;
+}
+
+function getCommonVSCodeCliCandidates() {
   if (process.platform === "win32") {
-    const candidates = [
+    return [
       path.join(process.env.LOCALAPPDATA || "", "Programs", "Microsoft VS Code", "bin", "code.cmd"),
       path.join(process.env.ProgramFiles || "", "Microsoft VS Code", "bin", "code.cmd"),
       path.join(process.env["ProgramFiles(x86)"] || "", "Microsoft VS Code", "bin", "code.cmd"),
     ];
-    for (const candidate of candidates) {
-      if (candidate && fs.existsSync(candidate)) {
-        return candidate;
-      }
-    }
-    try {
-      const result = execFileSync("where", ["code"], {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-        windowsHide: true,
-      });
-      const matches = result.trim().split(/\r?\n/).filter(Boolean);
-      const cliMatch = matches.find(isVSCodeCliWrapper);
-      if (cliMatch && fs.existsSync(cliMatch)) {
-        return cliMatch;
-      }
-    } catch {
-      // where failed
-    }
-    return null;
   }
-  return "code";
+  if (process.platform === "darwin") {
+    return [
+      "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
+      "/usr/local/bin/code",
+    ];
+  }
+  return [
+    "/usr/share/code/bin/code",
+    "/usr/bin/code",
+  ];
 }
 
-function resolveVSCodeAppExe() {
-  const codeCmd = resolveVSCodeCommand();
+function listPathCommandMatches(command, args) {
+  try {
+    const result = execFileSync(command, args, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true,
+    });
+    return result.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function pickVSCodeCliFromPathMatches(matches) {
+  const filtered = matches.filter((candidate) => candidate && !isCursorCliPath(candidate) && fs.existsSync(candidate));
+  if (filtered.length === 0) {
+    return null;
+  }
+  const cliMatch = filtered.find(isVSCodeCliWrapper);
+  return cliMatch || filtered[0];
+}
+
+function resolveVscodeExecutablePath(options = {}) {
+  const configuredPath = String(options.configuredPath ?? configuredVscodePath ?? "").trim();
+  if (configuredPath && fs.existsSync(configuredPath)) {
+    lastResolvedVscodePath = configuredPath;
+    lastResolvedVscodeSource = "settings";
+    return configuredPath;
+  }
+
+  for (const candidate of getCommonVSCodeCliCandidates()) {
+    if (candidate && fs.existsSync(candidate)) {
+      lastResolvedVscodePath = candidate;
+      lastResolvedVscodeSource = "common-path";
+      return candidate;
+    }
+  }
+
+  const pathMatches = process.platform === "win32"
+    ? listPathCommandMatches("where", ["code"])
+    : listPathCommandMatches("which", ["-a", "code"]);
+  const pathMatch = pickVSCodeCliFromPathMatches(pathMatches);
+  if (pathMatch) {
+    lastResolvedVscodePath = pathMatch;
+    lastResolvedVscodeSource = "path-command";
+    return pathMatch;
+  }
+
+  lastResolvedVscodePath = null;
+  lastResolvedVscodeSource = null;
+  return null;
+}
+
+function getLastResolvedVscodePathInfo() {
+  return {
+    path: lastResolvedVscodePath,
+    source: lastResolvedVscodeSource,
+  };
+}
+
+function resolveVSCodeCommand(options = {}) {
+  const resolved = resolveVscodeExecutablePath(options);
+  if (resolved) {
+    return resolved;
+  }
+  if (process.platform !== "win32") {
+    return "code";
+  }
+  return null;
+}
+
+function resolveVSCodeAppExe(options = {}) {
+  const codeCmd = resolveVSCodeCommand(options);
   if (codeCmd) {
     const appExe = path.join(path.dirname(path.dirname(codeCmd)), "Code.exe");
     if (fs.existsSync(appExe)) {
@@ -103,20 +287,20 @@ function resolveVSCodeAppExe() {
   return null;
 }
 
-function resolveVSCodeLaunchExecutable() {
+function resolveVSCodeLaunchExecutable(options = {}) {
   if (process.platform === "win32") {
-    const appExe = resolveVSCodeAppExe();
-    if (appExe) {
-      return { kind: "exe", path: appExe };
-    }
-    const codeCmd = resolveVSCodeCommand();
+    const codeCmd = resolveVSCodeCommand(options);
     if (codeCmd) {
       return { kind: "cmd", path: codeCmd };
+    }
+    const appExe = resolveVSCodeAppExe(options);
+    if (appExe) {
+      return { kind: "exe", path: appExe };
     }
     return null;
   }
 
-  const codeCmd = resolveVSCodeCommand();
+  const codeCmd = resolveVSCodeCommand(options);
   return codeCmd ? { kind: "cmd", path: codeCmd } : null;
 }
 
@@ -155,20 +339,92 @@ function escapePowerShellSingleQuoted(value) {
   return String(value).replace(/'/g, "''");
 }
 
+function getStartProcessWindowStyle(filePath) {
+  const lower = String(filePath || "").toLowerCase();
+  if (lower.endsWith(".cmd") || lower.endsWith(".bat")) {
+    return "Hidden";
+  }
+  return "Normal";
+}
+
 function buildPowerShellStartProcessCommand(filePath, args) {
+  const windowStyle = getStartProcessWindowStyle(filePath);
   const argList = args.map((arg) => `'${escapePowerShellSingleQuoted(arg)}'`).join(", ");
-  return `Start-Process -FilePath '${escapePowerShellSingleQuoted(filePath)}' -ArgumentList ${argList} -WindowStyle Normal -PassThru`;
+  return `Start-Process -FilePath '${escapePowerShellSingleQuoted(filePath)}' -ArgumentList ${argList} -WindowStyle ${windowStyle}`;
+}
+
+function recordSpawnDiagnostic(entry) {
+  lastSpawnDiagnostic = {
+    at: new Date().toISOString(),
+    ...entry,
+  };
+  if (spawnDiagnosticsEnabled) {
+    const payload = { event: "vscode-spawn-diagnostic", ...lastSpawnDiagnostic };
+    if (typeof vsCodeLaunchLogger === "function") {
+      vsCodeLaunchLogger(payload);
+    } else {
+      console.log("[vscode-spawn-diagnostic]", JSON.stringify(payload, null, 2));
+    }
+  }
 }
 
 function spawnDetachedProcess(command, args, options = {}) {
+  const captureDiagnostics = spawnDiagnosticsEnabled || options.captureDiagnostics === true;
+  const stdio = captureDiagnostics ? ["ignore", "pipe", "pipe"] : "ignore";
+
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       detached: true,
-      stdio: "ignore",
       windowsHide: options.windowsHide !== false,
       ...options,
+      stdio,
     });
-    child.on("error", reject);
+
+    const stdoutChunks = [];
+    const stderrChunks = [];
+
+    if (child.stdout) {
+      child.stdout.on("data", (chunk) => {
+        if (captureDiagnostics) {
+          stdoutChunks.push(String(chunk));
+        }
+      });
+    }
+
+    if (child.stderr) {
+      child.stderr.on("data", (chunk) => {
+        if (captureDiagnostics) {
+          stderrChunks.push(String(chunk));
+        }
+      });
+    }
+
+    child.on("error", (error) => {
+      recordSpawnDiagnostic({
+        command,
+        args,
+        phase: "error",
+        message: error?.message || String(error),
+        code: error?.code || null,
+      });
+      reject(error);
+    });
+
+    child.on("exit", (code, signal) => {
+      if (captureDiagnostics) {
+        recordSpawnDiagnostic({
+          command,
+          args,
+          phase: "exit",
+          pid: child.pid,
+          code,
+          signal,
+          stdout: stdoutChunks.join(""),
+          stderr: stderrChunks.join(""),
+        });
+      }
+    });
+
     child.unref();
     resolve(child);
   });
@@ -188,8 +444,22 @@ function spawnViaPowerShellStartProcess(filePath, args) {
         "-Command",
         psCommand,
       ],
-      { windowsHide: true, timeout: 30000 },
-      (error) => {
+      {
+        windowsHide: true,
+        timeout: 30000,
+        ...(spawnDiagnosticsEnabled ? { encoding: "utf8" } : {}),
+      },
+      (error, stdout, stderr) => {
+        if (spawnDiagnosticsEnabled) {
+          recordSpawnDiagnostic({
+            command: "powershell.exe",
+            args: ["-Command", psCommand],
+            phase: error ? "execFile_error" : "execFile_ok",
+            message: error?.message || null,
+            stdout: String(stdout || ""),
+            stderr: String(stderr || ""),
+          });
+        }
         if (error) {
           reject(error);
           return;
@@ -218,20 +488,34 @@ async function resolveEffectiveNewWindow(requestedNewWindow) {
   return requestedNewWindow;
 }
 
-async function spawnVSCodeProcess(executable, args) {
+async function spawnVSCodeProcess(executable, args, launchContext = null) {
   if (!executable) {
     throw new Error("VS Code executable not found.");
   }
 
+  if (launchContext) {
+    logVsCodeLaunchDetails(launchContext);
+  }
+
+  let result;
   if (process.platform === "win32") {
-    return spawnViaPowerShellStartProcess(executable.path, args);
+    if (executable.kind === "cmd") {
+      result = await spawnVSCodeCmdOnWindows(executable.path, args);
+    } else {
+      result = await spawnViaPowerShellStartProcess(executable.path, args);
+    }
+  } else if (executable.kind === "exe") {
+    result = await spawnVSCodeGuiProcess(executable.path, args);
+  } else {
+    result = await spawnVSCodeGuiProcess(executable.path, args);
   }
 
-  if (executable.kind === "exe") {
-    return spawnVSCodeGuiProcess(executable.path, args);
-  }
+  lastVsCodeSpawnAt = Date.now();
+  return result;
+}
 
-  return spawnVSCodeGuiProcess(executable.path, args);
+function getLastVsCodeSpawnAt() {
+  return lastVsCodeSpawnAt;
 }
 
 function getDebounceKey(workspacePath) {
@@ -246,8 +530,8 @@ function shouldSkipDuplicateLaunch(key) {
   return Date.now() - last.at < LAUNCH_DEBOUNCE_MS;
 }
 
-function resolveVSCodeExecutable() {
-  return resolveVSCodeLaunchExecutable();
+function resolveVSCodeExecutable(options = {}) {
+  return resolveVSCodeLaunchExecutable(options);
 }
 
 function buildLaunchResult(base, verifyResult, launchMeta = {}) {
@@ -364,9 +648,29 @@ async function focusExistingVSCodeWindow(workspacePath, options = {}) {
   return null;
 }
 
+function buildSpawnOkVerifyResult(extra = {}) {
+  return {
+    verified: true,
+    verificationReason: "spawn_ok",
+    pid: null,
+    hwnd: 0,
+    focused: false,
+    focusReason: "spawn_ok",
+    ...extra,
+  };
+}
+
 async function recoverFromZombieVSCodeIfNeeded(options = {}) {
   if (process.platform !== "win32") {
     return { recovered: false, reason: "non_windows", count: 0 };
+  }
+
+  if (
+    !options.ignoreSpawnGrace
+    && lastVsCodeSpawnAt > 0
+    && (Date.now() - lastVsCodeSpawnAt) < vscodeWindowFocus.ZOMBIE_GRACE_MS
+  ) {
+    return { recovered: false, reason: "recent_spawn_grace", count: 0 };
   }
 
   if (!options.forceRecovery && isWithinPostVerifyGrace()) {
@@ -394,7 +698,12 @@ function sleepMs(ms) {
 }
 
 async function confirmVerifiedWindowStable(verifyResult, settleMs = 1500, options = {}) {
-  if (!verifyResult?.verified || process.platform !== "win32" || options.skipPostVerifySettle) {
+  if (
+    !verifyResult?.verified
+    || process.platform !== "win32"
+    || options.skipPostVerifySettle
+    || verifyResult.verificationReason === "spawn_ok"
+  ) {
     return verifyResult;
   }
   await sleepMs(settleMs);
@@ -408,8 +717,8 @@ async function confirmVerifiedWindowStable(verifyResult, settleMs = 1500, option
     };
   }
   return {
-    verified: false,
-    verificationReason: "window_lost_after_verify",
+    ...verifyResult,
+    windowCheckReason: "window_lost_after_verify",
     pid: state.pid || verifyResult.pid,
     hwnd: 0,
     focused: false,
@@ -427,35 +736,73 @@ async function launchAndVerifyVSCode(workspacePath, executable, options = {}) {
   });
   const launchMethod = getLaunchMethod(executable.kind);
   const launchProfile = options.launchProfile || "default";
+  const requireWindowVerification = options.requireWindowVerification === true;
 
-  await spawnVSCodeProcess(executable, launchArgs);
+  await spawnVSCodeProcess(executable, launchArgs, {
+    workspacePath,
+    executable,
+    launchArgs,
+    options,
+    requestedNewWindow,
+    effectiveNewWindow,
+  });
 
-  const verifyTimeoutMs = options.verifyTimeoutMs
-    || (process.platform === "win32" && !(await vscodeWindowFocus.getVSCodeProcessState()).hasWindow
-      ? 25000
-      : vscodeWindowFocus.DEFAULT_TIMEOUT_MS);
-
-  let verifyResult = options.skipVerification
-    ? {
+  if (options.skipVerification) {
+    const verifyResult = {
       verified: true,
       verificationReason: "skipped",
       pid: null,
       hwnd: 0,
       focused: true,
       focusReason: "skipped",
-    }
-    : process.platform === "win32"
-      ? await vscodeWindowFocus.verifyAndFocusVSCode({ timeoutMs: verifyTimeoutMs })
-      : {
-        verified: true,
-        verificationReason: "non_windows",
-        pid: null,
-        hwnd: 0,
-        focused: true,
-        focusReason: "non_windows",
-      };
+    };
+    return {
+      verifyResult,
+      launchMethod,
+      effectiveNewWindow,
+      requestedNewWindow,
+      verifyTimeoutMs: 0,
+      launchProfile,
+      launchArgs,
+      spawnOk: true,
+    };
+  }
 
-  verifyResult = await confirmVerifiedWindowStable(verifyResult, 1500, options);
+  const verifyTimeoutMs = options.verifyTimeoutMs
+    || (process.platform === "win32" && !(await vscodeWindowFocus.getVSCodeProcessState()).hasWindow
+      ? 25000
+      : vscodeWindowFocus.DEFAULT_TIMEOUT_MS);
+
+  let verifyResult = buildSpawnOkVerifyResult();
+
+  if (requireWindowVerification && process.platform === "win32") {
+    const windowCheck = await vscodeWindowFocus.verifyAndFocusVSCode({ timeoutMs: verifyTimeoutMs });
+    verifyResult = await confirmVerifiedWindowStable(windowCheck, 1500, options);
+    if (!verifyResult.verified) {
+      return {
+        verifyResult,
+        launchMethod,
+        effectiveNewWindow,
+        requestedNewWindow,
+        verifyTimeoutMs,
+        launchProfile,
+        launchArgs,
+        spawnOk: true,
+      };
+    }
+  } else if (process.platform === "win32") {
+    const windowCheck = await vscodeWindowFocus.verifyAndFocusVSCode({
+      timeoutMs: Math.min(verifyTimeoutMs, 3000),
+      retryFocus: false,
+    });
+    verifyResult = buildSpawnOkVerifyResult({
+      pid: windowCheck.pid,
+      hwnd: windowCheck.hwnd,
+      focused: windowCheck.focused,
+      focusReason: windowCheck.focusReason || "spawn_ok",
+      windowCheckReason: windowCheck.verificationReason,
+    });
+  }
 
   return {
     verifyResult,
@@ -465,6 +812,7 @@ async function launchAndVerifyVSCode(workspacePath, executable, options = {}) {
     verifyTimeoutMs,
     launchProfile,
     launchArgs,
+    spawnOk: true,
   };
 }
 
@@ -537,13 +885,21 @@ async function performOpenWorkspaceInVSCode(workspacePath, options = {}) {
     const { profile, extraArgs } = profiles[profileIndex];
     const useNewWindow = profileIndex === 0 ? effectiveNewWindow : true;
 
-    launchOutcome = await launchAndVerifyVSCode(workspacePath, executable, {
-      ...options,
-      effectiveNewWindow: useNewWindow,
-      newWindow: useNewWindow,
-      extraArgs,
-      launchProfile: profile,
-    });
+    try {
+      launchOutcome = await launchAndVerifyVSCode(workspacePath, executable, {
+        ...options,
+        effectiveNewWindow: useNewWindow,
+        newWindow: useNewWindow,
+        extraArgs,
+        launchProfile: profile,
+      });
+    } catch (launchError) {
+      if (profileIndex >= profiles.length - 1) {
+        throw launchError;
+      }
+      continue;
+    }
+
     verifyResult = launchOutcome.verifyResult;
     usedProfile = profile;
 
@@ -555,7 +911,8 @@ async function performOpenWorkspaceInVSCode(workspacePath, options = {}) {
     }
 
     if (
-      !options.skipRecovery
+      options.requireWindowVerification
+      && !options.skipRecovery
       && !recoveryAttempted
       && verifyResult.verificationReason === "process_only"
       && process.platform === "win32"
@@ -580,7 +937,11 @@ async function performOpenWorkspaceInVSCode(workspacePath, options = {}) {
       }
     }
 
-    if (profileIndex < profiles.length - 1 && process.platform === "win32") {
+    if (
+      options.requireWindowVerification
+      && profileIndex < profiles.length - 1
+      && process.platform === "win32"
+    ) {
       await recoverFromZombieVSCodeIfNeeded({ forceRecovery: true });
     }
   }
@@ -618,6 +979,7 @@ async function escalateToLaunchWithRecovery(workspacePath, options = {}, escalat
     newWindow: true,
     force: true,
     forceRecovery: true,
+    requireWindowVerification: true,
     recovery: recoveryTag,
     skipRecovery: false,
     recoveryAlreadyAttempted: recoveryTag === "zombie_cleanup",
@@ -713,12 +1075,26 @@ function resetLaunchDebounceForTests() {
   lastVerifiedLaunchAt = 0;
   lastVerifiedHwnd = 0;
   lastHandoffVerifiedAt = 0;
+  lastVsCodeSpawnAt = 0;
 }
 
 module.exports = {
   LAUNCH_DEBOUNCE_MS,
   LAUNCH_PROFILES,
+  isCursorCliPath,
   isVSCodeCliWrapper,
+  setConfiguredVscodePath,
+  getConfiguredVscodePath,
+  resolveVscodeExecutablePath,
+  getLastResolvedVscodePathInfo,
+  getLastVsCodeSpawnAt,
+  getLastSpawnDiagnostic,
+  setSpawnDiagnosticsEnabled,
+  setVsCodeLaunchLogger,
+  readCodeWorkspaceContext,
+  collectVsCodeLaunchDiagnostics,
+  logVsCodeLaunchDetails,
+  buildSpawnOkVerifyResult,
   resolveVSCodeCommand,
   resolveVSCodeAppExe,
   resolveVSCodeLaunchExecutable,

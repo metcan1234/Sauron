@@ -24,6 +24,7 @@ import {
 	resolveHandoffAction,
 	resolveWorkspaceRootFromHandoff,
 } from "./handoff/handleIncomingHandoff"
+import { ensureWorkspaceReady } from "./handoff/ensureWorkspaceReady"
 import { applyClineModelBeforeHandoff } from "./cost-optimizer/apply"
 import { syncCredentialsForWorkspace } from "./credentials/sync"
 import type { HandoffUserChoice } from "./handoff/types"
@@ -103,6 +104,10 @@ export async function handleIncomingHandoffWithActiveTask(
 ): Promise<boolean> {
 	const handoff = await readHandoffFile(fullPath)
 	const workspaceRoot = resolveWorkspaceRootFromHandoff(handoff, fullPath)
+	const workspaceReady = await ensureWorkspaceReady(workspaceRoot)
+	if (!workspaceReady.ready) {
+		return false
+	}
 	const prompt = await buildPromptFromHandoffForWorkspace(handoff, workspaceRoot)
 	if (!prompt) {
 		vscode.window.showWarningMessage("Sauron handoff dosyası boş — görev özeti bulunamadı.")

@@ -1,10 +1,20 @@
-const DEFAULT_COMPLEXITY_KEYWORDS = [
-  "refactor",
+const HIGH_COMPLEXITY_KEYWORDS = [
   "architecture",
-  "debug",
   "security",
+  "auth",
   "migrate",
+  "schema",
+  "database",
+];
+
+const MEDIUM_COMPLEXITY_KEYWORDS = [
+  "refactor",
   "rewrite",
+];
+
+const DEFAULT_COMPLEXITY_KEYWORDS = [
+  ...HIGH_COMPLEXITY_KEYWORDS,
+  ...MEDIUM_COMPLEXITY_KEYWORDS,
 ];
 
 const DEFAULT_TIER_MODELS = {
@@ -138,19 +148,24 @@ function resolveCoreModelOverlay(settings = {}) {
   };
 }
 
-function computeComplexityHint(text, keywords = DEFAULT_COMPLEXITY_KEYWORDS) {
+function countKeywordHits(normalized, keywords) {
+  return keywords.filter((keyword) => normalized.includes(String(keyword).toLowerCase())).length;
+}
+
+function computeComplexityHint(text) {
   const normalized = String(text || "").toLowerCase();
   if (!normalized.trim()) {
     return "low";
   }
 
   const wordCount = normalized.split(/\s+/).filter(Boolean).length;
-  const keywordHits = keywords.filter((keyword) => normalized.includes(String(keyword).toLowerCase())).length;
+  const highHits = countKeywordHits(normalized, HIGH_COMPLEXITY_KEYWORDS);
+  const mediumHits = countKeywordHits(normalized, MEDIUM_COMPLEXITY_KEYWORDS);
 
-  if (keywordHits >= 2 || wordCount > 800) {
+  if (highHits >= 2 || (highHits >= 1 && wordCount >= 400) || wordCount >= 1200) {
     return "high";
   }
-  if (keywordHits >= 1 || wordCount > 300) {
+  if (mediumHits >= 1 || wordCount >= 500) {
     return "medium";
   }
   return "low";
@@ -164,6 +179,8 @@ function resolveProjectBudget(projectType, optimizer) {
 
 module.exports = {
   DEFAULT_TIER_MODELS,
+  HIGH_COMPLEXITY_KEYWORDS,
+  MEDIUM_COMPLEXITY_KEYWORDS,
   DEFAULT_COMPLEXITY_KEYWORDS,
   DEFAULT_PROJECT_BUDGETS,
   buildDefaultCostOptimizerConfig,
