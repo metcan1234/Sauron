@@ -148,6 +148,7 @@ export function createPanelController({
   let lastBrowserExecutionSnapshot = null;
   let modeBarHideTimer = null;
   let workspacePollTimer = null;
+  let focusInProgress = false;
 
   const HANDOFF_POLL_INTERVAL_MS = 2000;
   const HANDOFF_POLL_TIMEOUT_MS = 90000;
@@ -203,6 +204,54 @@ export function createPanelController({
     }
   }
 
+  async function focusWorkspaceVSCode() {
+    if (focusInProgress) {
+      return { ok: false, skipped: true, reason: "in_flight" };
+    }
+
+    focusInProgress = true;
+    if (dom.workspaceStatusFocus) {
+      dom.workspaceStatusFocus.disabled = true;
+    }
+
+    try {
+      ui.showToast("VS Code açılıyor…", false);
+      const result = await api.invoke("focus-workspace-vscode");
+      if (!result?.ok) {
+        ui.showToast(result?.error || "VS Code odaklanamadı", true);
+      } else if (!result?.skipped) {
+        if (result?.verified) {
+          ui.showToast("VS Code açıldı", false);
+        }
+      }
+      return result;
+    } catch (error) {
+      log("ipc:focus-workspace-vscode error", error);
+      ui.showToast(error?.message || "VS Code odaklanamadı", true);
+      return { ok: false, error: error?.message };
+    } finally {
+      focusInProgress = false;
+      if (dom.workspaceStatusFocus) {
+        dom.workspaceStatusFocus.disabled = false;
+      }
+    }
+  }
+
+  function syncIncludeScreenBadge() {
+    const pendingCount = state.getPendingScreenshots()?.length || 0;
+    if (pendingCount > 0) {
+      ui.updateScreenPendingBadge(pendingCount);
+      return;
+    }
+    if (state.getIncludeScreen() && dom.screenPendingBadge) {
+      dom.screenPendingBadge.classList.remove("hidden");
+      dom.screenPendingBadge.textContent = "📷 Otomatik";
+      dom.screenPendingBadge.title = "Gönderimde ekran görüntüsü eklenecek";
+      return;
+    }
+    ui.updateScreenPendingBadge(0);
+  }
+
   function formatSetupWarnings(prerequisites) {
     const steps = Array.isArray(prerequisites?.steps) ? prerequisites.steps : [];
     const missing = steps.filter((step) => !step.ok);
@@ -231,7 +280,7 @@ export function createPanelController({
               title: "Cline görevi yüklendi",
               message: "Bridge handoff'u işledi. VS Code + Cline sidebar'da görevi görebilirsiniz.",
               tone: "success",
-              onFocus: () => api.invoke("focus-workspace-vscode"),
+              onFocus: () => focusWorkspaceVSCode(),
             });
             resolve("consumed");
             return;
@@ -243,7 +292,7 @@ export function createPanelController({
               title: "Görev reddedildi",
               message: "VS Code'da aktif Cline görevi vardı ve yeni görev reddedildi.",
               tone: "warning",
-              onFocus: () => api.invoke("focus-workspace-vscode"),
+              onFocus: () => focusWorkspaceVSCode(),
             });
             resolve("rejected");
             return;
@@ -255,7 +304,7 @@ export function createPanelController({
               title: "Bridge yanıt vermedi",
               message: "VS Code açıldı ama handoff henüz işlenmedi. Cline sidebar'ını açın (saoudrizwan.claude-dev) ve Bridge kurulumunu kontrol edin.",
               tone: "warning",
-              onFocus: () => api.invoke("focus-workspace-vscode"),
+              onFocus: () => focusWorkspaceVSCode(),
             });
             resolve("timeout");
           }
@@ -369,11 +418,22 @@ export function createPanelController({
         return;
       }
 
+      if (!result?.launchResult?.verified && result?.launchResult && !result.launchResult.skipped) {
+        ui.showToast(
+          result.launchResult.verificationReason === "process_only"
+            ? "VS Code arka planda — pencere görünmüyor"
+            : "VS Code başlatılamadı — Görev Yöneticisi'nde Code.exe kontrol edin",
+          true,
+        );
+      }
+
       ui.showWorkspaceStatus({
-        title: "VS Code açıldı",
-        message: "Bridge'in Cline'a görev yüklemesi bekleniyor…",
-        tone: "default",
-        onFocus: () => api.invoke("focus-workspace-vscode"),
+        title: result?.launchResult?.verified ? "VS Code açıldı" : "VS Code bekleniyor",
+        message: result?.launchResult?.verified
+          ? "Bridge'in Cline'a görev yüklemesi bekleniyor…"
+          : "VS Code penceresi doğrulanamadı. VS Code'a git ile tekrar deneyin.",
+        tone: result?.launchResult?.verified ? "default" : "warning",
+        onFocus: () => focusWorkspaceVSCode(),
       });
 
       if (Array.isArray(result.setupWarnings) && result.setupWarnings.length > 0) {
@@ -436,10 +496,24 @@ export function createPanelController({
   }
 
   async function invokePlanAction(channel) {
-    const images = state.getPendingScreenshots();
+    let images = state.getPendingScreenshots();
     if (channel === "mark-step-done" && (!images || images.length === 0)) {
-      ui.showToast("Tamamladım için önce Ekran Al butonuna basın.", true);
-      return;
+      if (state.getIncludeScreen()) {
+        try {
+          images = await api.invoke("capture-screenshot", { forceFresh: true });
+          state.setPendingScreenshots(images);
+          ui.renderScreenshotPreviewStrip(images, null);
+          ui.updateScreenPendingBadge(images?.length || 0);
+        } catch (error) {
+          log("plan-action auto-capture error", error);
+          ui.showToast("Ekran görüntüsü alınamadı — 📷 ile manuel deneyin.", true);
+          return;
+        }
+      }
+      if (!images?.length) {
+        ui.showToast("Tamamladım için önce Ekran Al butonuna basın.", true);
+        return;
+      }
     }
     try {
       await api.invoke(channel, images?.length ? { images } : {});
@@ -670,6 +744,20 @@ export function createPanelController({
         void addFiles(files);
       }
     });
+
+    if (dom.btnAttachFile && dom.attachmentFileInput) {
+      dom.btnAttachFile.addEventListener("click", () => {
+        dom.attachmentFileInput.click();
+      });
+      dom.attachmentFileInput.addEventListener("change", () => {
+        if (dom.attachmentFileInput.files?.length) {
+          void addFiles(dom.attachmentFileInput.files);
+        }
+        dom.attachmentFileInput.value = "";
+      });
+    }
+
+    return { addFiles };
   }
 
   function bindEvents() {
@@ -768,10 +856,17 @@ export function createPanelController({
     });
 
     if (dom.workspaceStatusFocus) {
-      dom.workspaceStatusFocus.addEventListener("click", () => {
-        api.invoke("focus-workspace-vscode").catch((error) => {
-          log("ipc:focus-workspace-vscode error", error);
-        });
+      dom.workspaceStatusFocus.addEventListener("click", async () => {
+        const handled = await ui.invokeWorkspaceStatusFocus();
+        if (!handled) {
+          await focusWorkspaceVSCode();
+        }
+      });
+    }
+
+    if (dom.workspaceStatusDismiss) {
+      dom.workspaceStatusDismiss.addEventListener("click", () => {
+        ui.hideWorkspaceStatus();
       });
     }
 
@@ -920,6 +1015,7 @@ export function createPanelController({
       ui.renderAssistantModeBadge(assistantMode);
       updatePlanActionVisibility(assistantMode);
       state.setIncludeScreen(nextSettings?.includeScreenshotByDefault === true);
+      syncIncludeScreenBadge();
     });
 
     api.on("finops-budget-alert", (payload) => {
@@ -1030,6 +1126,7 @@ export function createPanelController({
       dom.sendBtn.disabled = false;
       dom.pttBtn.disabled = false;
       state.setIncludeScreen(settings?.includeScreenshotByDefault === true);
+      syncIncludeScreenBadge();
       bindEvents();
       chatHistory.bindEvents();
       setupIPCListeners();

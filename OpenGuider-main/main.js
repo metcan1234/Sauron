@@ -3,11 +3,18 @@
 // screenshot capture, TTS, cursor overlay management.
 
 const { app } = require("electron");
-if (process.platform === "win32") {
+if (process.platform === "win32" && process.env.SAURON_DISABLE_GPU === "1") {
   app.disableHardwareAcceleration();
 }
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
+  console.warn("");
+  console.warn("[Sauron] Zaten çalışan bir örnek var (sistem tepsisi / arka plan).");
+  console.warn("[Sauron] Yeni pencere açılmadı — mevcut örnek odaklanmaya çalışıyor.");
+  console.warn("[Sauron] Tamamen kapatmak için terminalde:");
+  console.warn("         Get-Process electron,Sauron -ErrorAction SilentlyContinue | Stop-Process -Force");
+  console.warn("[Sauron] Geliştirme modu: npm run terminal");
+  console.warn("");
   app.quit();
   process.exit(0);
 }
@@ -635,9 +642,11 @@ function showPointer(pointer) {
     return null;
   }
 
-  if (isPanelVisible) {
-    hideCursorOverlay();
-  }
+  debugLog("pointer:show", {
+    hasCoordinate: Boolean(pointer?.coordinate),
+    isPanelVisible,
+    label: pointer?.label || null,
+  });
 
   if (panelWindow && !panelWindow.isDestroyed()) {
     panelWindow.webContents.send("pointer-updated", payload);
@@ -733,6 +742,21 @@ function revealPanelImmediate(panel, x, y) {
   raisePanelAboveOverlay(panel);
   panel.focus();
   notifyPanelOpened(panel);
+  const bounds = panel.getBounds();
+  appLogger.info("open-openguider:revealed", {
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+    visible: panel.isVisible(),
+    opacity: panel.getOpacity(),
+  });
+  if (process.env.SAURON_TERMINAL === "1") {
+    console.log(
+      `[Sauron][terminal] Panel konumu: x=${bounds.x} y=${bounds.y} ` +
+      `(${bounds.width}x${bounds.height}) visible=${panel.isVisible()}`,
+    );
+  }
   return true;
 }
 
@@ -1655,7 +1679,11 @@ async function speakWithElevenLabs(text, settings, sender, { shouldAbort } = {})
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
   app.setName("Sauron");
-  initializeLogger({ app, level: process.env.OPENGUIDER_LOG_LEVEL || "info" });
+  initializeLogger({
+    app,
+    level: process.env.OPENGUIDER_LOG_LEVEL
+      || (process.env.SAURON_TERMINAL === "1" ? "debug" : "info"),
+  });
   appLogger = createLogger("main");
   registerCrashTracking();
   debugLog("app:ready start");
@@ -1747,7 +1775,11 @@ app.whenReady().then(async () => {
     root: getRendererDir(),
     version: require("./package.json").version,
     pid: process.pid,
+    terminal: process.env.SAURON_TERMINAL === "1",
   });
+  if (process.env.SAURON_TERMINAL === "1") {
+    console.log("[Sauron][terminal] Boot tamam — widget + panel açılıyor. Hatalar bu terminalde görünür.");
+  }
   showPanelOnStartup();
   app.on("activate", () => {
     debugLog("app:activate");
@@ -1758,6 +1790,7 @@ app.whenReady().then(async () => {
 });
 
 app.on("second-instance", () => {
+  console.log("[Sauron] second-instance: mevcut örnek paneli açıyor");
   openOpenGuiderPanel({ source: "second-instance" });
 });
 

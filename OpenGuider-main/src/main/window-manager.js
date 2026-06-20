@@ -138,22 +138,25 @@ function createWindowManager({
     });
   }
 
+  const PRELOAD_WEB_PREFERENCES = {
+    preload: preloadPath,
+    nodeIntegration: false,
+    contextIsolation: true,
+    sandbox: false,
+  };
+
   function createPanelWindow() {
     const panelWindow = new BrowserWindow({
       width: PANEL_WIDTH,
       height: PANEL_HEIGHT,
       frame: false,
-      transparent: true,
+      transparent: false,
       backgroundColor: "#0a0a0a",
       resizable: false,
       show: false,
       skipTaskbar: true,
       alwaysOnTop: true,
-      webPreferences: {
-        preload: preloadPath,
-        nodeIntegration: false,
-        contextIsolation: true,
-      },
+      webPreferences: PRELOAD_WEB_PREFERENCES,
     });
     panelWindow.loadFile(path.join(rendererDir, "index.html"));
     panelWindow.webContents.on("did-finish-load", () => {
@@ -186,11 +189,7 @@ function createWindowManager({
       skipTaskbar: false,
       alwaysOnTop: false,
       parent: refs.panelWindow,
-      webPreferences: {
-        preload: preloadPath,
-        nodeIntegration: false,
-        contextIsolation: true,
-      },
+      webPreferences: PRELOAD_WEB_PREFERENCES,
     });
     settingsWindow.loadFile(path.join(rendererDir, "settings.html"));
     attachWindowCrashHandlers(settingsWindow, "settings");
@@ -213,11 +212,7 @@ function createWindowManager({
       skipTaskbar: true,
       focusable: false,
       show: false,
-      webPreferences: {
-        preload: preloadPath,
-        nodeIntegration: false,
-        contextIsolation: true,
-      },
+      webPreferences: PRELOAD_WEB_PREFERENCES,
     });
     cursorOverlayWindow.setAlwaysOnTop(true, "screen-saver", 1);
     cursorOverlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
@@ -252,11 +247,7 @@ function createWindowManager({
       resizable: false,
       alwaysOnTop: true,
       skipTaskbar: true,
-      webPreferences: {
-        preload: preloadPath,
-        nodeIntegration: false,
-        contextIsolation: true,
-      },
+      webPreferences: PRELOAD_WEB_PREFERENCES,
     });
 
     widgetWindow.loadFile(path.join(rendererDir, "widget.html"));

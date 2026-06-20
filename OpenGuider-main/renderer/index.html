@@ -73,22 +73,26 @@
   </div>
 
   <div class="workspace-status-banner hidden" id="workspace-status-banner">
-    <div class="workspace-status-main">
-      <strong id="workspace-status-title">Çalışma Kısmı</strong>
-      <span id="workspace-status-message"></span>
+    <div class="workspace-status-top">
+      <div class="workspace-status-main">
+        <strong id="workspace-status-title">Çalışma Kısmı</strong>
+        <span id="workspace-status-message"></span>
+      </div>
+      <div class="workspace-status-actions">
+        <button class="workspace-status-btn" id="workspace-status-focus" type="button">VS Code'a git</button>
+        <button class="workspace-status-btn ghost" id="workspace-status-dismiss" type="button" data-i18n="dismiss">Kapat</button>
+      </div>
     </div>
-    <div class="handoff-history-panel" id="handoff-history-panel">
-      <strong>Handoff geçmişi</strong>
-      <ul class="handoff-history-list" id="handoff-history-list"></ul>
-    </div>
-    <div class="build-pipeline-panel hidden" id="build-pipeline-panel">
-      <strong id="build-pipeline-title">Üretim Hattı</strong>
-      <div class="build-pipeline-meta" id="build-pipeline-meta"></div>
-      <button class="workspace-status-btn ghost hidden" id="build-pipeline-advance" type="button">Sonraki fazı başlat</button>
-    </div>
-    <div class="workspace-status-actions">
-      <button class="workspace-status-btn" id="workspace-status-focus" type="button">VS Code'a git</button>
-      <button class="workspace-status-btn ghost" id="workspace-status-dismiss" type="button" data-i18n="dismiss">Kapat</button>
+    <div class="workspace-status-details">
+      <div class="handoff-history-panel hidden" id="handoff-history-panel">
+        <strong>Handoff geçmişi</strong>
+        <ul class="handoff-history-list" id="handoff-history-list"></ul>
+      </div>
+      <div class="build-pipeline-panel hidden" id="build-pipeline-panel">
+        <strong id="build-pipeline-title">Üretim Hattı</strong>
+        <div class="build-pipeline-meta" id="build-pipeline-meta"></div>
+        <button class="workspace-status-btn ghost hidden" id="build-pipeline-advance" type="button">Sonraki fazı başlat</button>
+      </div>
     </div>
   </div>
 
@@ -106,10 +110,14 @@
 
   <div class="input-area">
     <div class="attachment-preview-strip hidden" id="attachment-preview-strip"></div>
-    <div class="input-row">
-      <button class="capture-screen-btn" id="btn-capture-screen" type="button" data-i18n="captureScreen" data-i18n-attr="title" title="Ekran Al">📷</button>
+    <div class="input-meta-row">
       <span class="mode-badge is-clickable" id="assistant-mode-badge" title="Mod değiştir: Asistan / Rehber">Asistan</span>
       <span class="screen-pending-badge hidden" id="screen-pending-badge" title="Gönderimde ekran görüntüsü eklenecek"></span>
+    </div>
+    <div class="input-row">
+      <input type="file" id="attachment-file-input" class="hidden" multiple accept="image/*,.txt,.md,.json,.js,.ts,.py,.html,.css,.csv"/>
+      <button class="attach-file-btn" id="btn-attach-file" type="button" title="Dosya / resim ekle">📎</button>
+      <button class="capture-screen-btn" id="btn-capture-screen" type="button" data-i18n="captureScreen" data-i18n-attr="title" title="Ekran Al">📷</button>
       <textarea class="text-input" id="text-input" data-i18n-placeholder="askPlaceholder" placeholder="Bana bir şey sor…" rows="1"></textarea>
       <button class="ptt-btn" id="ptt-btn" data-i18n="holdToTalk" data-i18n-attr="title" title="Konuşmak için basılı tut">⏺
         <span class="waveform" id="waveform" style="display:none">

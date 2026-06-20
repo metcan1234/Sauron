@@ -2,6 +2,8 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+.hidden { display: none !important; }
+
 :root {
   --bg:            #000000;
   --surface:       rgba(13, 13, 13, 0.95);
@@ -267,7 +269,8 @@ html, body {
   color: #f6a27a;
   border-color: rgba(198, 90, 58, 0.55);
 }
-.capture-screen-btn {
+.capture-screen-btn,
+.attach-file-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -281,7 +284,11 @@ html, body {
   cursor: pointer;
   flex-shrink: 0;
 }
-.capture-screen-btn:hover {
+#attachment-file-input {
+  display: none;
+}
+.capture-screen-btn:hover,
+.attach-file-btn:hover {
   border-color: var(--accent);
   background: var(--accent-soft);
 }
@@ -642,9 +649,9 @@ html, body {
 
 .workspace-status-banner {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
   margin: 8px 14px 0;
   padding: 10px;
   border: 1px solid rgba(198, 90, 58, 0.45);
@@ -673,6 +680,23 @@ html, body {
   gap: 3px;
   font-size: 11px;
   color: var(--text-dim);
+  flex: 1;
+  min-width: 0;
+}
+
+.workspace-status-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  width: 100%;
+  gap: 10px;
+}
+
+.workspace-status-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
 }
 
 .workspace-status-main strong {
@@ -687,6 +711,10 @@ html, body {
   display: flex;
   gap: 6px;
   align-items: center;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+  white-space: nowrap;
 }
 
 .workspace-status-btn {
@@ -1628,10 +1656,33 @@ html, body {
   background: var(--surface);
 }
 
+.input-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.input-meta-row .mode-badge {
+  min-width: auto;
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+.input-meta-row .screen-pending-badge {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .input-row {
   display: flex;
   align-items: flex-end;
   gap: 8px;
+}
+
+.input-row .text-input {
+  min-width: 0;
 }
 
 .text-input {
@@ -3091,11 +3142,14 @@ kbd {
 }
 
 .handoff-history-panel {
-  margin-top: 10px;
   padding: 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.2);
+}
+
+.handoff-history-panel.hidden {
+  display: none;
 }
 
 .handoff-history-list {
@@ -3171,4 +3225,34 @@ kbd {
   border: 1px solid var(--border);
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.25);
+}
+
+html.settings-window,
+body.settings-window {
+  width: 600px;
+  height: 700px;
+  overflow: hidden;
+  background: #000;
+}
+
+body.settings-window .settings-panel {
+  width: 100%;
+  height: 100%;
+}
+
+body.settings-window .settings-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+body.settings-window .settings-tabs {
+  flex-shrink: 0;
+}
+
+body.settings-window .settings-lead,
+body.settings-window .plugin-card-desc,
+body.settings-window .settings-section p {
+  overflow-wrap: anywhere;
+  word-wrap: break-word;
 }

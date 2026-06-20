@@ -23,6 +23,8 @@ export function queryPanelDom(doc = document) {
     agentStatus: doc.getElementById("agent-status"),
     assistantModeBadge: doc.getElementById("assistant-mode-badge"),
     btnCaptureScreen: doc.getElementById("btn-capture-screen"),
+    btnAttachFile: doc.getElementById("btn-attach-file"),
+    attachmentFileInput: doc.getElementById("attachment-file-input"),
     screenPendingBadge: doc.getElementById("screen-pending-badge"),
     modeBar: doc.getElementById("mode-bar"),
     modeBarPlugin: doc.getElementById("mode-bar-plugin"),
@@ -109,6 +111,8 @@ export function queryPanelDom(doc = document) {
 }
 
 export function createPanelUI({ api, doc = document, dom, log, state }) {
+  let workspaceStatusFocusCallback = null;
+
   function normalizeUrl(url) {
     const trimmed = String(url || "").trim();
     if (!trimmed) {
@@ -740,6 +744,15 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     }
     dom.workspaceStatusBanner.classList.add("hidden");
     dom.workspaceStatusBanner.classList.remove("is-success", "is-warning");
+    workspaceStatusFocusCallback = null;
+  }
+
+  async function invokeWorkspaceStatusFocus() {
+    if (typeof workspaceStatusFocusCallback === "function") {
+      await workspaceStatusFocusCallback();
+      return true;
+    }
+    return false;
   }
 
   function showWorkspaceStatus({
@@ -761,14 +774,7 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
       dom.workspaceStatusBanner.classList.add("is-warning");
     }
 
-    dom.workspaceStatusFocus.onclick = () => {
-      if (typeof onFocus === "function") {
-        onFocus();
-      }
-    };
-    dom.workspaceStatusDismiss.onclick = () => {
-      hideWorkspaceStatus();
-    };
+    workspaceStatusFocusCallback = typeof onFocus === "function" ? onFocus : null;
   }
 
   function renderHandoffHistory(items = []) {
@@ -785,9 +791,12 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     }
 
     if (!Array.isArray(items) || items.length === 0) {
-      dom.handoffHistoryList.innerHTML = `<li class="handoff-history-item"><span class="handoff-history-meta">Henüz handoff kaydı yok</span></li>`;
+      dom.handoffHistoryPanel?.classList.add("hidden");
+      dom.handoffHistoryList.innerHTML = "";
       return;
     }
+
+    dom.handoffHistoryPanel?.classList.remove("hidden");
 
     dom.handoffHistoryList.innerHTML = items.map((item) => {
       const status = escapeHtml(String(item?.status || "unknown"));
@@ -1284,6 +1293,7 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     hideErrorBanner,
     showWorkspaceStatus,
     hideWorkspaceStatus,
+    invokeWorkspaceStatusFocus,
     renderHandoffHistory,
     renderBuildPipeline,
     showOnboarding,

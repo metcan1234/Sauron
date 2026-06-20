@@ -1,4 +1,23 @@
 const fs = require("fs");
+const {
+  markHandoffLaunchVerified,
+  recordVerifiedLaunch,
+  recoverFromZombieVSCodeIfNeeded,
+} = require("../sauron/vscode-launcher");
+
+function buildVSCodeFocusErrorMessage(launchResult) {
+  const reason = String(launchResult?.verificationReason || "");
+  if (reason === "process_only") {
+    return "VS Code arka planda çalışıyor ama pencere görünmüyor.";
+  }
+  if (reason.startsWith("launch_") && launchResult?.launchProfile && launchResult.launchProfile !== "default") {
+    return `VS Code ${launchResult.launchProfile} profiliyle de açılamadı. Görev Yöneticisi'nde Code.exe süreçlerini kapatıp tekrar deneyin.`;
+  }
+  if (launchResult?.action === "launch_after_recovery" || launchResult?.action?.includes("launch_")) {
+    return "VS Code kurtarma sonrası da açılamadı. Görev Yöneticisi'nde Code.exe var mı kontrol edin.";
+  }
+  return "VS Code başlatılamadı. Görev Yöneticisi'nde Code.exe var mı kontrol edin.";
+}
 
 function registerWorkspaceIpc({
   ipcMain,
@@ -136,12 +155,53 @@ function registerWorkspaceIpc({
     try {
       const workspacePath = String(store.get("workspacePath") || "").trim();
       if (!workspacePath || !fs.existsSync(workspacePath)) {
-        return { ok: false, error: "Workspace path is not configured or missing." };
+        return { ok: false, error: "Çalışma klasörü ayarlanmamış veya bulunamıyor." };
       }
-      await focusVSCodeWorkspace(workspacePath);
-      return { ok: true, workspacePath };
+      let launchResult = await focusVSCodeWorkspace(workspacePath, {
+        force: true,
+      });
+      if (
+        !launchResult?.verified
+        && ["focus_only_no_window", "process_only"].includes(String(launchResult?.verificationReason || ""))
+      ) {
+        launchResult = await focusVSCodeWorkspace(workspacePath, {
+          force: true,
+          allowLaunch: true,
+        });
+      }
+      debugLog("ipc:focus-workspace-vscode result", {
+        workspacePath,
+        skipped: Boolean(launchResult?.skipped),
+        executable: launchResult?.executable,
+        executableKind: launchResult?.executableKind,
+        launchMethod: launchResult?.launchMethod,
+        launchProfile: launchResult?.launchProfile,
+        verified: Boolean(launchResult?.verified),
+        verificationReason: launchResult?.verificationReason,
+        action: launchResult?.action,
+        pid: launchResult?.pid,
+      });
+      if (launchResult?.skipped) {
+        return { ok: true, workspacePath, ...launchResult };
+      }
+      if (!launchResult?.verified) {
+        return {
+          ok: false,
+          error: buildVSCodeFocusErrorMessage(launchResult),
+          workspacePath,
+          ...launchResult,
+        };
+      }
+      return { ok: true, workspacePath, ...launchResult };
     } catch (error) {
-      return { ok: false, error: error?.message || "Failed to focus VS Code." };
+      const message = String(error?.message || "");
+      if (/VS Code CLI \(code\) not found/i.test(message)) {
+        return {
+          ok: false,
+          error: "VS Code CLI (code) bulunamadı. VS Code kurun ve \"Shell Command: Install 'code' command in PATH\" komutunu çalıştırın.",
+        };
+      }
+      return { ok: false, error: message || "VS Code odaklanamadı." };
     }
   });
 
@@ -220,7 +280,12 @@ function registerWorkspaceIpc({
         }
       }
       const written = writeHandoff(workspacePath, payload);
-      const launchResult = await launchVSCode(workspacePath, { newWindow: true });
+      await recoverFromZombieVSCodeIfNeeded({ forceRecovery: true });
+      const launchResult = await launchVSCode(workspacePath, { newWindow: true, force: true });
+      if (launchResult?.verified) {
+        markHandoffLaunchVerified();
+        recordVerifiedLaunch(launchResult);
+      }
 
       return {
         ok: true,

@@ -7,9 +7,13 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "terminal": "node scripts/start-terminal.js",
     "debug": "cross-env DEBUG_PREPOST=1 electron .",
     "dev": "electron . --inspect",
     "test": "node --test \"tests/**/*.test.js\"",
+    "test:integration": "node --test tests/integration/vscode-launch.integration.test.js",
+    "test:vscode-launch": "node scripts/verify-vscode-launch.js",
+    "test:vscode-stability": "node scripts/diagnose-vscode-launch.js",
     "predist:win": "node scripts/pre-dist-check.js",
     "pack": "electron-builder --dir",
     "dist": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder",

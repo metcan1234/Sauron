@@ -233,8 +233,21 @@ export function createMessagingController({
     const skipUserPersist = Boolean(options.skipUserPersist);
     const regenerate = Boolean(options.regenerate);
 
-    const { images: collectedImages } = collectImagesForSend();
-    let images = collectedImages;
+    let { images } = collectImagesForSend();
+    if ((!images || images.length === 0) && state.getIncludeScreen()) {
+      try {
+        const screens = await api.invoke("capture-screenshot", { forceFresh: true });
+        images = screens;
+        if (screens?.length) {
+          ui.renderScreenshotPreviewStrip(screens, null);
+          ui.updateScreenPendingBadge(screens.length);
+          ui.showToast("Ekran yakalandı — gönderince modele gidecek", false);
+        }
+      } catch (error) {
+        log("auto-capture-screenshot error", error);
+        ui.showToast("Ekran görüntüsü alınamadı — 📷 ile manuel deneyin.", true);
+      }
+    }
 
     state.setPendingScreenshots(null);
     state.clearPendingAttachments();

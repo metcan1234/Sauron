@@ -177,7 +177,10 @@ export function createWebStudioController({ api, ui, win, doc }) {
   async function openPreview() {
     const result = await api.invoke("open-web-preview", { port: 3000 });
     if (!result?.ok) {
-      ui.showToast(result?.error || "Önizleme açılamadı", true);
+      ui.showToast(
+        result?.error || "Bu workspace'te web sitesi yok. Ekran yardımı için mesaj gönderin (📷 Otomatik açık).",
+        true,
+      );
       return;
     }
     if (result.hint) {

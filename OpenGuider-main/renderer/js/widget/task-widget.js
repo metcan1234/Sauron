@@ -252,19 +252,20 @@ export function createTaskWidgetController({ api, doc = document }) {
   }
 
   async function setExpanded(nextExpanded) {
-    isExpanded = Boolean(nextExpanded);
-    dom.widget.classList.toggle("expanded", isExpanded);
-    dom.details.classList.toggle("hidden", !isExpanded);
-    dom.btnShowPlan.classList.toggle("expanded", isExpanded);
-    if (isExpanded) {
+    const willExpand = Boolean(nextExpanded);
+    isExpanded = willExpand;
+    dom.widget.classList.toggle("expanded", willExpand);
+    dom.details.classList.toggle("hidden", !willExpand);
+    dom.btnShowPlan.classList.toggle("expanded", willExpand);
+    if (willExpand) {
       void openOpenGuiderAssistant({ source: "widget-expand" });
     }
     try {
-      await api.invoke("set-widget-expanded", isExpanded);
+      await api.invoke("set-widget-expanded", willExpand);
     } catch (error) {
-      console.warn("[Sauron][widget] set-widget-expanded failed", { isExpanded, error });
+      console.warn("[Sauron][widget] set-widget-expanded failed", { isExpanded: willExpand, error });
     }
-    if (isExpanded) {
+    if (willExpand) {
       scheduleExpandedHeightSync();
     }
   }

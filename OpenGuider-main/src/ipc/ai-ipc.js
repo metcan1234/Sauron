@@ -251,6 +251,10 @@ function registerAiIpc({
       }
 
       if (finalCoordinate) {
+        debugLog("send-message:pointer", {
+          hasCoordinate: true,
+          label: parsed.label || null,
+        });
         showPointer({
           coordinate: finalCoordinate,
           label: parsed.label,
