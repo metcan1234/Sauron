@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "id": "2026-06-21T00-00-47-595Z-d69e84ca-25db-456a-b1d8-6ab1cd5b620c",
+  "source": "sauron-core",
+  "workspacePath": "C:\\Users\\Can\\OneDrive\\Desktop\\Sauron Core\\OpenGuider-main",
+  "taskSummary": "Chat session: test mesajı iki gönder\n\nLatest chat context:\nUser: test mesajı iki gönder\nAssistant: Merhaba! Size nasıl yardımcı olabilirim?",
+  "goal": "",
+  "sessionId": "a3698310-9b67-433a-8623-5d003a28f5b4",
+  "createdAt": "2026-06-21T00:00:47.597Z",
+  "autoStart": true,
+  "autoChain": false,
+  "complexityHint": "low",
+  "costContext": {
+    "coreModelTier": "economy",
+    "optimizerEnabled": true,
+    "mode": "balanced",
+    "budgetGovernorActive": false,
+    "suggestedClineAgent": {
+      "providerId": "deepseek",
+      "modelId": "deepseek-chat",
+      "agentId": "deepseek",
+      "reason": "complexity-low",
+      "walletFallbackFrom": null,
+      "allCloudExhausted": false
+    }
+  },
+  "projectType": "electron-core"
+}

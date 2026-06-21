@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "id": "2026-06-21T07-29-08-137Z-a7275e65-41fa-4bdb-a77a-9a8072edc00c",
+  "source": "sauron-core",
+  "workspacePath": "C:\\Users\\Can\\OneDrive\\Desktop\\Sauron Core\\OpenGuider-main",
+  "taskSummary": "Chat session: Yeni sohbet",
+  "goal": "",
+  "sessionId": "464c7ba2-d6fa-4471-af40-2729ac20545e",
+  "createdAt": "2026-06-21T07:29:08.140Z",
+  "autoStart": true,
+  "autoChain": false,
+  "complexityHint": "low",
+  "costContext": {
+    "coreModelTier": "economy",
+    "optimizerEnabled": true,
+    "mode": "balanced",
+    "budgetGovernorActive": false,
+    "suggestedClineAgent": {
+      "providerId": "deepseek",
+      "modelId": "deepseek-chat",
+      "agentId": "deepseek",
+      "reason": "complexity-low",
+      "walletFallbackFrom": null,
+      "allCloudExhausted": false
+    }
+  },
+  "projectType": "electron-core"
+}

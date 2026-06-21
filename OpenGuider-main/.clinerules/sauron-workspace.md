@@ -1,3 +1,4 @@
+<!-- sauron-rules-version: 1.2 -->
 # Sauron Workspace — Cline Kuralları
 
 ## Token / Maliyet Disiplini
