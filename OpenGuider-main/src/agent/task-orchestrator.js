@@ -488,10 +488,16 @@ class TaskOrchestrator {
   }
 
   async _runPluginExecutionMode({ text, images, settings, signal, executionMode }) {
+    const availablePlugins = registry.listPlugins().filter((plugin) => {
+      if (plugin.id === "browser" && settings?.browserAgentEnabled === false) {
+        return false;
+      }
+      return true;
+    });
     const route = await this._intentRouter.route(
       text,
       "",
-      registry.listPlugins(),
+      availablePlugins,
       settings,
       signal,
     );
@@ -512,6 +518,17 @@ class TaskOrchestrator {
     }
 
     if (route.pluginId === "browser") {
+      if (settings?.browserAgentEnabled === false) {
+        const msg = "Browser agent devre dışı. Ayarlar → Eklentiler bölümünden açabilirsiniz.";
+        this.sessionManager.addMessage({ role: "assistant", content: msg });
+        this.sessionManager.setStatus("idle");
+        return {
+          assistantMessage: msg,
+          pointer: null,
+          session: this.sessionManager.getSnapshot(),
+          userInputRequest: null,
+        };
+      }
       const { checkBrowserAgentReady } = require("../sauron/doctor");
       const browserReady = checkBrowserAgentReady();
       if (browserReady.status !== "pass") {

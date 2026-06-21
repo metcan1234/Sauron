@@ -42,7 +42,17 @@ export function createSelfBuildStudioController({ api, ui, doc }) {
     }
   }
 
-  function openWizard() {
+  async function openWizard() {
+    try {
+      const settings = await api.invoke("get-settings");
+      const { isSelfBuildEnabled } = await import("./feature-visibility.js");
+      if (!isSelfBuildEnabled(settings)) {
+        ui.showToast("Self-Build devre dışı — Ayarlar → Eklentiler", true);
+        return;
+      }
+    } catch {
+      // continue if settings unavailable
+    }
     overlay?.classList.remove("hidden");
     overlay?.setAttribute("aria-hidden", "false");
     showStep(0);

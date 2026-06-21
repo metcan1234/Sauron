@@ -235,21 +235,37 @@ function registerWorkspaceIpc({
       const force = Boolean(options?.force);
       let workspacePath = String(store.get("workspacePath") || "").trim();
 
-      if (!workspacePath) {
+      const pickWorkspaceFolder = async (title) => {
         const parentWindow = panelWindow && !panelWindow.isDestroyed() ? panelWindow : null;
         const pickResult = await dialog.showOpenDialog(parentWindow, {
           properties: ["openDirectory"],
-          title: "Select Workspace Folder for Çalışma Kısmı",
+          title: title || "Select Workspace Folder for Çalışma Kısmı",
         });
         if (pickResult.canceled || !pickResult.filePaths?.[0]) {
+          return null;
+        }
+        const picked = pickResult.filePaths[0];
+        store.set("workspacePath", picked);
+        return picked;
+      };
+
+      if (!workspacePath) {
+        workspacePath = await pickWorkspaceFolder("Select Workspace Folder for Çalışma Kısmı");
+        if (!workspacePath) {
           return { ok: false, error: "Workspace folder not selected." };
         }
-        workspacePath = pickResult.filePaths[0];
-        store.set("workspacePath", workspacePath);
       }
 
       if (!fs.existsSync(workspacePath)) {
-        return { ok: false, error: `Workspace path does not exist: ${workspacePath}` };
+        workspacePath = await pickWorkspaceFolder(
+          "Workspace klasörü bulunamadı — yeni bir klasör seçin",
+        );
+        if (!workspacePath) {
+          return {
+            ok: false,
+            error: "Workspace path does not exist and no replacement folder was selected.",
+          };
+        }
       }
 
       let prerequisites = checkWorkspacePrerequisites();

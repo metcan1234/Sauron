@@ -123,6 +123,10 @@ async function init() {
   document.getElementById("trustLevel").value = normalizeTrustLevel(settings.trustLevel, executionMode);
   document.getElementById("browserAgentEnabled").checked = settings.browserAgentEnabled !== false;
   document.getElementById("browserHeadless").checked = settings.browserHeadless === true;
+  const webStudioEnabledEl = document.getElementById("webStudioEnabled");
+  const selfBuildEnabledEl = document.getElementById("selfBuildEnabled");
+  if (webStudioEnabledEl) webStudioEnabledEl.checked = settings.webStudioEnabled !== false;
+  if (selfBuildEnabledEl) selfBuildEnabledEl.checked = settings.selfBuildEnabled !== false;
   document.getElementById("awareAssistanceEnabled").checked = settings.awareAssistanceEnabled === true;
 
   setSelectValue("sttProvider", normalizeSttProvider(settings.sttProvider));
@@ -342,50 +346,7 @@ async function init() {
   void refreshBrowserRuntimeHint();
   void refreshClineSyncStatus();
 
-  function renderDoctorResults(result) {
-    const summaryEl = document.getElementById("doctor-summary");
-    const bannerEl = document.getElementById("doctor-readiness-banner");
-    const listEl = document.getElementById("doctor-results");
-    if (!summaryEl || !listEl) {
-      return;
-    }
-    if (!result?.checks?.length) {
-      summaryEl.textContent = result?.error || "Tanı başarısız";
-      if (bannerEl) {
-        bannerEl.classList.add("hidden");
-        bannerEl.innerHTML = "";
-      }
-      listEl.innerHTML = "";
-      return;
-    }
-    const { pass, warn, fail } = result.summary || {};
-    summaryEl.textContent = `${pass || 0} geçti · ${warn || 0} uyarı · ${fail || 0} hata`;
-
-    if (bannerEl && result.readiness) {
-      const ready = result.readiness.status === "ready";
-      bannerEl.classList.remove("hidden");
-      bannerEl.classList.toggle("is-ready", ready);
-      bannerEl.classList.toggle("is-blocked", !ready);
-      const blockerText = (result.readiness.blockers || []).length
-        ? `<p class="doctor-readiness-detail"><strong>Eksik:</strong> ${escapeHtml(result.readiness.blockers.join(", "))}</p>`
-        : "";
-      const warningText = (result.readiness.warnings || []).length
-        ? `<p class="doctor-readiness-detail"><strong>Uyarı:</strong> ${escapeHtml(result.readiness.warnings.join(", "))}</p>`
-        : "";
-      bannerEl.innerHTML = `<strong>${escapeHtml(result.readiness.headline || (ready ? "Kullanıma Hazır" : "Eksikler var"))}</strong>${blockerText}${warningText}`;
-    }
-
-    listEl.innerHTML = result.checks.map((check) => {
-      const statusClass = check.status === "pass" ? "pass" : (check.status === "warn" ? "warn" : "fail");
-      const optionalTag = check.tier === "optional" ? " <em>(opsiyonel)</em>" : "";
-      const hint = check.fixHint
-        ? `<span class="doctor-fix-hint">${escapeHtml(check.fixHint)}</span>`
-        : "";
-      return `<li class="doctor-check ${statusClass}"><strong>${escapeHtml(check.message)}</strong>${optionalTag}${hint}</li>`;
-    }).join("");
-  }
-
-  document.getElementById("btn-run-doctor")?.addEventListener("click", async () => {
+  runDoctorCheck = async () => {
     const button = document.getElementById("btn-run-doctor");
     const summaryEl = document.getElementById("doctor-summary");
     if (button) {
@@ -407,6 +368,10 @@ async function init() {
         button.disabled = false;
       }
     }
+  };
+
+  document.getElementById("btn-run-doctor")?.addEventListener("click", () => {
+    void runDoctorCheck();
   });
 
   bindSettingsTabs();
@@ -532,28 +497,118 @@ function toggleElevenLabs() {
 }
 
 let finopsRefreshTimer = null;
+let runDoctorCheck = async () => {};
 
-function bindSettingsTabs() {
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+const DOCTOR_ACTION_TAB_LINKS = {
+  "ai-credentials": "agents",
+  "workspace-path": "workspace",
+  "sauron-dir": "workspace",
+  "vscode-cli": "workspace",
+  "vscode-not-cursor": "workspace",
+  "bridge-extension": "workspace",
+  "cline-extension": "workspace",
+};
+
+function renderDoctorResults(result) {
+  const summaryEl = document.getElementById("doctor-summary");
+  const bannerEl = document.getElementById("doctor-readiness-banner");
+  const listEl = document.getElementById("doctor-results");
+  if (!summaryEl || !listEl) {
+    return;
+  }
+  if (!result?.checks?.length) {
+    summaryEl.textContent = result?.error || "Tanı başarısız";
+    if (bannerEl) {
+      bannerEl.classList.add("hidden");
+      bannerEl.innerHTML = "";
+    }
+    listEl.innerHTML = "";
+    return;
+  }
+  const { pass, warn, fail } = result.summary || {};
+  summaryEl.textContent = `${pass || 0} geçti · ${warn || 0} uyarı · ${fail || 0} hata`;
+
+  if (bannerEl && result.readiness) {
+    const ready = result.readiness.status === "ready";
+    bannerEl.classList.remove("hidden");
+    bannerEl.classList.toggle("is-ready", ready);
+    bannerEl.classList.toggle("is-blocked", !ready);
+    const actionItems = result.readiness.actionItems || [];
+    const actionList = actionItems.length
+      ? `<ol class="doctor-readiness-actions">${actionItems.map((item) => {
+        const tab = DOCTOR_ACTION_TAB_LINKS[item.id];
+        const link = tab
+          ? ` <button type="button" class="doctor-action-link" data-doctor-tab="${escapeHtml(tab)}">Ayarla →</button>`
+          : "";
+        return `<li>${escapeHtml(item.fixHint || item.label)}${link}</li>`;
+      }).join("")}</ol>`
+      : "";
+    const warningText = (result.readiness.warnings || []).length
+      ? `<p class="doctor-readiness-detail"><strong>Uyarı:</strong> ${escapeHtml(result.readiness.warnings.join("; "))}</p>`
+      : "";
+    bannerEl.innerHTML = `<strong>${escapeHtml(result.readiness.headline || (ready ? "Kullanıma Hazır" : "Eksikler var"))}</strong>${actionList}${warningText}`;
+    bannerEl.querySelectorAll("[data-doctor-tab]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const tabId = button.getAttribute("data-doctor-tab");
+        if (tabId) {
+          activateSettingsTab(tabId);
+          if (tabId === "workspace") {
+            document.getElementById("workspacePath")?.focus();
+          }
+        }
+      });
+    });
+  }
+
+  listEl.innerHTML = result.checks.map((check) => {
+    const statusClass = check.status === "pass" ? "pass" : (check.status === "warn" ? "warn" : "fail");
+    const optionalTag = check.tier === "optional" ? " <em>(opsiyonel)</em>" : "";
+    const hint = check.fixHint
+      ? `<span class="doctor-fix-hint">${escapeHtml(check.fixHint)}</span>`
+      : "";
+    return `<li class="doctor-check ${statusClass}"><strong>${escapeHtml(check.message)}</strong>${optionalTag}${hint}</li>`;
+  }).join("");
+}
+
+function activateSettingsTab(tabId) {
   const tabButtons = [...document.querySelectorAll(".settings-tab-btn")];
   const tabContents = [...document.querySelectorAll(".settings-tab-section")];
   tabButtons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.tab === tabId);
+  });
+  tabContents.forEach((section) => {
+    section.classList.toggle("active", section.dataset.tabContent === tabId);
+  });
+  if (tabId === "finops") {
+    void refreshFinOpsSummary();
+    void refreshFinOpsAnalytics();
+    if (finopsRefreshTimer) clearInterval(finopsRefreshTimer);
+    finopsRefreshTimer = setInterval(() => {
+      void refreshFinOpsSummary();
+      void refreshFinOpsAnalytics();
+    }, 10000);
+  } else if (finopsRefreshTimer) {
+    clearInterval(finopsRefreshTimer);
+    finopsRefreshTimer = null;
+  }
+}
+
+function bindSettingsTabs() {
+  const tabButtons = [...document.querySelectorAll(".settings-tab-btn")];
+  tabButtons.forEach((button) => {
     button.addEventListener("click", () => {
       const target = button.dataset.tab;
-      tabButtons.forEach((b) => b.classList.toggle("active", b === button));
-      tabContents.forEach((section) => {
-        section.classList.toggle("active", section.dataset.tabContent === target);
-      });
-      if (target === "finops") {
-        void refreshFinOpsSummary();
-        void refreshFinOpsAnalytics();
-        if (finopsRefreshTimer) clearInterval(finopsRefreshTimer);
-        finopsRefreshTimer = setInterval(() => {
-          void refreshFinOpsSummary();
-          void refreshFinOpsAnalytics();
-        }, 10000);
-      } else if (finopsRefreshTimer) {
-        clearInterval(finopsRefreshTimer);
-        finopsRefreshTimer = null;
+      activateSettingsTab(target);
+      if (target === "workspace") {
+        void runDoctorCheck();
       }
     });
   });
@@ -1149,6 +1204,8 @@ async function saveSettings() {
     trustLevel,
     browserAgentEnabled:     document.getElementById("browserAgentEnabled").checked,
     browserHeadless:         document.getElementById("browserHeadless").checked,
+    webStudioEnabled:        document.getElementById("webStudioEnabled")?.checked !== false,
+    selfBuildEnabled:        document.getElementById("selfBuildEnabled")?.checked !== false,
     awareAssistanceEnabled:  document.getElementById("awareAssistanceEnabled").checked,
     includeScreenshotByDefault: false,
     workspacePath:           document.getElementById("workspacePath").value.trim(),

@@ -1,6 +1,14 @@
-# Sauron Overview (v1.0)
+# Sauron Overview (v1.2)
 
 Sauron is a desktop AI assistant (Electron) focused on **live screen micro-guide** and **Cline workspace handoff** as the primary workflow. Secondary capabilities include planned guide mode, memory chat, FinOps cost routing, Web Studio scaffolding, and the optional Browser agent.
+
+## Solo-user checklist (v1.2)
+
+1. **Doctor yeşil** — Ayarlar → Çalışma Kısmı: workspace, gerçek VS Code CLI (Cursor değil), Bridge, Cline, API key.
+2. **Sabit workspace** — `workspacePath` electron-store'da kalıcı; handoff aynı projeye gider.
+3. **İsteğe bağlı özellikler** — Ayarlar → Eklentiler: Web Studio, Self-Build, Browser aç/kapa; kapalıyken panel girişleri gizlenir.
+4. **Kişisel varsayılanlar** — Provider: AI Ajanları; bütçe: Bütçe/FinOps; mod: varsayılan Asistan (panel rozeti).
+5. **Cline kuralları** — `.clinerules/sauron-workspace.md` sürüm `1.2`; handoff/bootstrap eski sürümü günceller.
 
 ## Primary story
 
@@ -56,7 +64,7 @@ Before writing `.sauron/handoff-*.json`, Sauron enriches the Cline task with:
 2. **Clarified task** — optional single economy-tier LLM pass (`handoff-task-clarify`) that adds an action-oriented summary beside the original chat context; failures are skipped silently.
 3. **Cline rules** — `.clinerules/sauron-workspace.md` seeded on bootstrap (token discipline + Cursor-style quality gates).
 
-Doctor **readiness** banner summarizes whether core setup (VS Code CLI, Bridge, workspace, API key) is complete vs optional warnings (Cline, Browser, Web Studio).
+Doctor **readiness** banner summarizes solo setup (workspace, VS Code CLI, Bridge, Cline, API key) with numbered fix steps and settings deep-links. Optional features (Browser, Web Studio, Self-Build) can be disabled in Settings → Plugins without removing code.
 
 ## Error resilience
 

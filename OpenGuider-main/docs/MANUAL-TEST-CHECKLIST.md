@@ -1,5 +1,24 @@
 # Manuel Test Checklist — v1.4.2
 
+## v1.2 Solo kullanım (her faz sonrası handoff)
+
+- [ ] Ayarlar → Çalışma Kısmı sekmesi açılınca Sistem tanısı otomatik çalışır; banner **Kullanıma Hazır** / **Eksikler var**
+- [ ] Eksikler numaralı adımlar + **Ayarla →** linkleri (AI Ajanları / Workspace)
+- [ ] Cline eksik → hazır sayılmaz; Cursor `code` shim → blocker
+- [ ] Workspace kapat-aç → path korunur; silinmiş path ile ⌘ → klasör seçici açılır
+- [ ] Eklentiler → Web Studio / Self-Build kapat → panel girişleri gizlenir; Doctor ilgili uyarıları sormaz
+- [ ] Tekrar aç → UI geri gelir
+- [ ] Handoff sonrası `.clinerules/sauron-workspace.md` sürüm `1.2` (eski dosya güncellenir)
+- [ ] **Güvenilirlik 5+5:** mikro-tur 5 deneme, handoff 5 deneme (hedef 9–10/10) — aşağıdaki protokol
+
+### v1.2 güvenilirlik protokolü (5+5)
+
+**Mikro-tur (5x):** Boş panel → Ekranımda yardım et; basit hedefler (tarayıcı sekmesi, VS Code menü, Windows ayar). Her denemede pointer + talimat + Yaptım.
+
+**Handoff (5x):** Farklı kısa görev mesajları → ⌘ veya Kod yaz CTA → VS Code + `.sauron/handoff-*.json` + Cline.
+
+Skor tablosu: Mikro __/5, Handoff __/5. Tekrarlayan hata → log + hedefli düzeltme.
+
 ## v1.1 Cline bağlam + olgunluk (her faz sonrası handoff)
 
 - [ ] Handoff JSON / `.sauron/handoff-*.json` içinde `Workspace snapshot:` bloğu var (~700 char altı)

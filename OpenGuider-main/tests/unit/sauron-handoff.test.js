@@ -150,19 +150,39 @@ test("buildHandoffPayload assigns complexityHint for complex tasks", () => {
   assert.equal(payload.costContext.suggestedClineAgent.providerId, "openai");
 });
 
-test("seedSauronRules does not overwrite existing rules file", () => {
+test("seedSauronRules does not overwrite when rules version is current", () => {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "sauron-rules-"));
   try {
     const rulesDir = path.join(workspace, ".clinerules");
     fs.mkdirSync(rulesDir, { recursive: true });
     const rulesPath = path.join(rulesDir, "sauron-workspace.md");
-    fs.writeFileSync(rulesPath, "custom rules", "utf8");
+    const currentContent = `<!-- sauron-rules-version: 1.2 -->\ncustom rules body`;
+    fs.writeFileSync(rulesPath, currentContent, "utf8");
     const mtimeBefore = fs.statSync(rulesPath).mtimeMs;
 
     const result = seedSauronRules(workspace);
     assert.equal(result.seeded, false);
-    assert.equal(fs.readFileSync(rulesPath, "utf8"), "custom rules");
+    assert.equal(result.updated, false);
+    assert.equal(fs.readFileSync(rulesPath, "utf8"), currentContent);
     assert.equal(fs.statSync(rulesPath).mtimeMs, mtimeBefore);
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test("seedSauronRules refreshes stale rules file", () => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "sauron-rules-stale-"));
+  try {
+    const rulesDir = path.join(workspace, ".clinerules");
+    fs.mkdirSync(rulesDir, { recursive: true });
+    const rulesPath = path.join(rulesDir, "sauron-workspace.md");
+    fs.writeFileSync(rulesPath, "<!-- sauron-rules-version: 1.0 -->\nold", "utf8");
+
+    const result = seedSauronRules(workspace);
+    assert.equal(result.seeded, false);
+    assert.equal(result.updated, true);
+    assert.match(fs.readFileSync(rulesPath, "utf8"), /sauron-rules-version: 1\.2/);
+    assert.match(fs.readFileSync(rulesPath, "utf8"), /Kod Kalitesi/);
   } finally {
     fs.rmSync(workspace, { recursive: true, force: true });
   }

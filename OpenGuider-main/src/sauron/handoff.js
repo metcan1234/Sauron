@@ -27,10 +27,12 @@ const { buildWorkspaceTreeHint } = require("./workspace-tree-snapshot");
 const { clarifyHandoffTask, extractHandoffClarifySource } = require("./handoff-task-clarify");
 
 const SAURON_RULES_FILENAME = "sauron-workspace.md";
+const SAURON_RULES_VERSION = "1.2";
 const HANDOFF_DIR = ".sauron";
 const LEGACY_HANDOFF_FILE = "handoff.json";
 
-const SAURON_RULES_CONTENT = `# Sauron Workspace — Cline Kuralları
+const SAURON_RULES_CONTENT = `<!-- sauron-rules-version: ${SAURON_RULES_VERSION} -->
+# Sauron Workspace — Cline Kuralları
 
 ## Token / Maliyet Disiplini
 1. Her görev öncesi kısa bir plan yaz (2-5 madde), onaysız uzun kod bloklarına girme.
@@ -478,15 +480,33 @@ function writeHandoff(workspacePath, payload) {
   return { handoffPath, handoffId, fileName };
 }
 
+function parseRulesVersion(fileContent) {
+  const text = String(fileContent || "");
+  const match = text.match(/sauron-rules-version:\s*([^\s>]+)/i);
+  return match ? String(match[1]).trim() : "";
+}
+
 function seedSauronRules(workspacePath) {
   const rulesDir = path.join(workspacePath, ".clinerules");
   const rulesPath = path.join(rulesDir, SAURON_RULES_FILENAME);
-  if (fs.existsSync(rulesPath)) {
-    return { seeded: false, path: rulesPath };
+  if (!fs.existsSync(rulesPath)) {
+    fs.mkdirSync(rulesDir, { recursive: true });
+    fs.writeFileSync(rulesPath, SAURON_RULES_CONTENT, "utf8");
+    return { seeded: true, updated: false, path: rulesPath };
+  }
+  let existing = "";
+  try {
+    existing = fs.readFileSync(rulesPath, "utf8");
+  } catch {
+    existing = "";
+  }
+  const existingVersion = parseRulesVersion(existing);
+  if (existingVersion === SAURON_RULES_VERSION) {
+    return { seeded: false, updated: false, path: rulesPath };
   }
   fs.mkdirSync(rulesDir, { recursive: true });
   fs.writeFileSync(rulesPath, SAURON_RULES_CONTENT, "utf8");
-  return { seeded: true, path: rulesPath };
+  return { seeded: false, updated: true, path: rulesPath };
 }
 
 function rejectPendingHandoffs(workspacePath) {
@@ -617,6 +637,8 @@ function listHandoffHistory(workspacePath, options = {}) {
 
 module.exports = {
   SAURON_RULES_CONTENT,
+  SAURON_RULES_VERSION,
+  parseRulesVersion,
   HANDOFF_DIR,
   LEGACY_HANDOFF_FILE,
   generateHandoffId,

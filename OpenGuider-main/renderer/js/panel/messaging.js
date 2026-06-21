@@ -1,4 +1,5 @@
 import { MAX_AI_CONTEXT_MESSAGES, MAX_STORED_MESSAGES } from "./constants.js";
+import { isWebStudioEnabled } from "./feature-visibility.js";
 
 export function createMessagingController({
   api,
@@ -189,6 +190,9 @@ export function createMessagingController({
 
   async function maybeSuggestWebStudio(rawText) {
     if (!rawText || isGuideMode() || !webStudio?.openWizard) {
+      return;
+    }
+    if (!isWebStudioEnabled(state.getSettings())) {
       return;
     }
     try {

@@ -105,6 +105,16 @@ export function createWebStudioController({ api, ui, win, doc }) {
   async function openWizard() {
     if (!overlay) return;
     try {
+      const settings = await api.invoke("get-settings");
+      const { isWebStudioEnabled } = await import("./feature-visibility.js");
+      if (!isWebStudioEnabled(settings)) {
+        ui.showToast("Web Studio devre dışı — Ayarlar → Eklentiler", true);
+        return;
+      }
+    } catch {
+      // continue if settings unavailable
+    }
+    try {
       const doctor = await api.invoke("run-sauron-doctor");
       const webCheck = doctor?.checks?.find((entry) => entry.id === "web-studio-ready");
       if (webCheck && webCheck.status !== "pass") {

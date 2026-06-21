@@ -1,6 +1,7 @@
 import { createChatHistoryController } from "./chat-history.js";
 import { createWebStudioController } from "./web-studio.js";
 import { createSelfBuildStudioController } from "./self-build-studio.js";
+import { applyOptionalFeatureVisibility } from "./feature-visibility.js";
 import { applyI18nToDocument, t } from "../i18n/index.js";
 import { createMessagingController } from "./messaging.js";
 import { createPlanView } from "./plan-view.js";
@@ -1104,6 +1105,8 @@ export function createPanelController({
       updatePlanActionVisibility(assistantMode);
       state.setIncludeScreen(nextSettings?.includeScreenshotByDefault === true);
       syncIncludeScreenBadge();
+      void updateWorkspaceButtonState();
+      applyOptionalFeatureVisibility(doc, nextSettings);
     });
 
     api.on("finops-budget-alert", (payload) => {
@@ -1226,6 +1229,7 @@ export function createPanelController({
       }
       await ensureRuntimePermissions();
       await updateWorkspaceButtonState();
+      applyOptionalFeatureVisibility(doc, settings);
       startHandoffHistoryRefresh();
       await ui.refreshFinOpsBadge();
       dom.textInput.focus();

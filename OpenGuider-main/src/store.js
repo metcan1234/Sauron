@@ -62,6 +62,8 @@ const schema = {
   trustLevel: { type:"string", enum:["paranoid","balanced","autopilot"], default:"balanced" },
   browserAgentEnabled: { type:"boolean", default:true },
   browserHeadless: { type:"boolean", default:false },
+  webStudioEnabled: { type:"boolean", default:true },
+  selfBuildEnabled: { type:"boolean", default:true },
   awareAssistanceEnabled: { type:"boolean", default:false },
   includeScreenshotByDefault: { type:"boolean", default:false },
   systemPromptOverride: { type:"string", default:"" },

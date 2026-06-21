@@ -10,18 +10,26 @@ const {
   resolveChildProcessAssetPath,
 } = require("../plugins/browser/sidecar");
 const { hasAgentCredential } = require("./finops/agent-matrix");
+const { isCursorCliPath } = require("./vscode-launcher");
 
-const CORE_READINESS_LABELS = {
-  "vscode-cli": "VS Code CLI",
-  "bridge-extension": "Sauron Bridge",
+const SOLO_READINESS_IDS = new Set([
+  "workspace-path",
+  "vscode-cli",
+  "vscode-not-cursor",
+  "bridge-extension",
+  "cline-extension",
+  "ai-credentials",
+  "sauron-dir",
+]);
+
+const CHECK_LABELS = {
   "workspace-path": "Workspace klasörü",
-  "sauron-dir": ".sauron yazılabilirliği",
-  "ai-credentials": "AI provider anahtarı",
-  "bridge-vsix": "Bridge VSIX paketi",
-};
-
-const READINESS_WARNING_LABELS = {
+  "vscode-cli": "VS Code CLI",
+  "vscode-not-cursor": "VS Code (Cursor değil)",
+  "bridge-extension": "Sauron Bridge",
   "cline-extension": "Cline extension",
+  "ai-credentials": "AI provider anahtarı",
+  "sauron-dir": ".sauron yazılabilirliği",
 };
 
 function pushCheck(checks, entry) {
@@ -121,6 +129,7 @@ function checkSauronDir(workspacePath) {
 }
 
 function checkBridgeVsix() {
+  const optionalTier = { tier: "optional" };
   const vsixPath = getBridgeVsixPath();
   if (fs.existsSync(vsixPath)) {
     return {
@@ -128,6 +137,7 @@ function checkBridgeVsix() {
       status: "pass",
       message: `Bridge VSIX mevcut (${path.basename(vsixPath)})`,
       fixHint: "",
+      ...optionalTier,
     };
   }
   return {
@@ -135,14 +145,42 @@ function checkBridgeVsix() {
     status: "warn",
     message: "Bridge VSIX henüz derlenmemiş",
     fixHint: "Settings → Bridge'i kur / yenile veya scripts/install-sauron-stack.ps1 çalıştırın.",
+    ...optionalTier,
   };
 }
 
-function appendClineCapabilityChecks(checks, prerequisites) {
+function checkVscodeNotCursor(prerequisites) {
+  if (!prerequisites.vscodeCli) {
+    return {
+      id: "vscode-not-cursor",
+      status: "pass",
+      message: "VS Code CLI (Cursor kontrolü atlandı)",
+      fixHint: "",
+    };
+  }
+  const codeCmd = String(prerequisites.codeCmd || "");
+  if (isCursorCliPath(codeCmd)) {
+    return {
+      id: "vscode-not-cursor",
+      status: "fail",
+      message: "PATH'teki code komutu Cursor shim gibi görünüyor",
+      fixHint: "Gerçek VS Code kurun; Ayarlar → Çalışma Kısmı → VS Code yolu veya PATH'teki code komutu Cursor olmamalı.",
+    };
+  }
+  return {
+    id: "vscode-not-cursor",
+    status: "pass",
+    message: "VS Code CLI Cursor değil",
+    fixHint: "",
+  };
+}
+
+function appendClineCapabilityChecks(checks, prerequisites, options = {}) {
   const probe = probeClineCapabilities({
     codeCmd: prerequisites.codeCmd || resolveVSCodeCommand(),
   });
   const report = probe.report;
+  const selfBuildEnabled = options.selfBuildEnabled !== false;
 
   const variantStatus = probe.variant === "fork"
     ? "pass"
@@ -191,6 +229,16 @@ function appendClineCapabilityChecks(checks, prerequisites) {
   ];
 
   for (const entry of capabilityChecks) {
+    if (entry.id === "cap-pipeline-autochain" && !selfBuildEnabled) {
+      pushCheck(checks, {
+        id: entry.id,
+        status: "pass",
+        message: "Build pipeline devre dışı (atlandı)",
+        fixHint: "",
+        tier: "optional",
+      });
+      continue;
+    }
     const supported = Boolean(probe.capabilities?.[entry.key]);
     pushCheck(checks, {
       id: entry.id,
@@ -380,6 +428,20 @@ function checkBrowserAgentReady() {
   };
 }
 
+function appendWebStudioCheck(checks, store, settings = {}) {
+  if (settings.webStudioEnabled === false) {
+    pushCheck(checks, {
+      id: "web-studio-ready",
+      status: "pass",
+      message: "Web Studio devre dışı (atlandı)",
+      fixHint: "",
+      tier: "optional",
+    });
+    return;
+  }
+  pushCheck(checks, checkWebStudioReady(store));
+}
+
 function appendBrowserAgentChecks(checks, settings = {}) {
   if (settings.browserAgentEnabled === false) {
     pushCheck(checks, {
@@ -419,7 +481,7 @@ function checkAiCredentials(settings = {}) {
 }
 
 function computeReadinessReport(checks = []) {
-  const blockers = [];
+  const actionItems = [];
   const warnings = [];
 
   for (const check of checks) {
@@ -430,32 +492,35 @@ function computeReadinessReport(checks = []) {
       continue;
     }
 
-    const coreLabel = CORE_READINESS_LABELS[check.id];
-    if (coreLabel) {
+    if (SOLO_READINESS_IDS.has(check.id)) {
       if (check.status !== "pass") {
-        blockers.push(coreLabel);
+        actionItems.push({
+          id: check.id,
+          label: CHECK_LABELS[check.id] || check.message,
+          fixHint: check.fixHint || check.message,
+        });
       }
       continue;
     }
 
-    const warningLabel = READINESS_WARNING_LABELS[check.id];
-    if (warningLabel && check.status === "warn") {
-      warnings.push(warningLabel);
-      continue;
-    }
-
     if (check.status === "fail") {
-      blockers.push(check.message);
+      actionItems.push({
+        id: check.id,
+        label: check.message,
+        fixHint: check.fixHint || check.message,
+      });
     } else if (check.status === "warn") {
       warnings.push(check.message);
     }
   }
 
-  const status = blockers.length === 0 ? "ready" : "blocked";
+  const status = actionItems.length === 0 ? "ready" : "blocked";
+  const blockers = actionItems.map((item) => item.fixHint || item.label);
   return {
     status,
     headline: status === "ready" ? "Kullanıma Hazır" : "Eksikler var",
     blockers,
+    actionItems,
     warnings,
   };
 }
@@ -483,6 +548,8 @@ function runSauronDoctor(store, options = {}) {
       fixHint: 'VS Code → Command Palette → Shell Command: Install "code" command in PATH',
     });
   }
+
+  pushCheck(checks, checkVscodeNotCursor(prerequisites));
 
   if (prerequisites.clineExtension) {
     pushCheck(checks, {
@@ -518,19 +585,23 @@ function runSauronDoctor(store, options = {}) {
 
   pushCheck(checks, checkBridgeVsix());
 
-  const clineProbe = appendClineCapabilityChecks(checks, prerequisites);
+  const runtimeSettings = {
+    browserAgentEnabled: store?.get?.("browserAgentEnabled") !== false,
+    webStudioEnabled: store?.get?.("webStudioEnabled") !== false,
+    selfBuildEnabled: store?.get?.("selfBuildEnabled") !== false,
+    ...(options.settings || {}),
+  };
+
+  const clineProbe = appendClineCapabilityChecks(checks, prerequisites, {
+    selfBuildEnabled: runtimeSettings.selfBuildEnabled,
+  });
 
   const workspacePath = String(store?.get?.("workspacePath") || "").trim();
   pushCheck(checks, checkSauronDir(workspacePath));
 
-  const settings = options.settings || {};
-  appendBrowserAgentChecks(checks, {
-    browserAgentEnabled: store?.get?.("browserAgentEnabled") !== false,
-    ...settings,
-  });
-
-  pushCheck(checks, checkWebStudioReady(store));
-  pushCheck(checks, checkAiCredentials(settings));
+  appendBrowserAgentChecks(checks, runtimeSettings);
+  appendWebStudioCheck(checks, store, runtimeSettings);
+  pushCheck(checks, checkAiCredentials(runtimeSettings));
 
   const failCount = checks.filter((entry) => entry.status === "fail").length;
   const warnCount = checks.filter((entry) => entry.status === "warn").length;
@@ -574,4 +645,5 @@ module.exports = {
   checkWebStudioReady,
   checkAiCredentials,
   computeReadinessReport,
+  checkVscodeNotCursor,
 };

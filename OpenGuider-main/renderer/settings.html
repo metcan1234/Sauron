@@ -198,6 +198,7 @@
       <div class="settings-section">
         <h3>Çalışma Kısmı (Workspace)</h3>
         <p class="settings-lead">Sauron Core ile VS Code + Cline arasında paylaşılan proje klasörü. "Çalışma Kısmı" butonu bu klasörü VS Code'da açar ve görev özetini Cline'a aktarır.</p>
+        <p class="hint" style="margin-bottom:12px;">Varsayılan mod: <strong>Asistan</strong> (panel rozetinden Rehber'e geçilir). Provider ve bütçe: AI Ajanları / Bütçe sekmeleri.</p>
         <div class="form-group">
           <label>VS Code yolu</label>
           <input class="form-input" id="vscodePath" type="text" placeholder="C:\Users\...\Microsoft VS Code\bin\code.cmd"/>
@@ -487,6 +488,31 @@
       <div class="settings-section plugins-overview-section">
         <h3>Plugins</h3>
         <p class="settings-lead">Sauron Core can route tasks into specialized plugins. Browser automation is live today; more workspaces can plug in here later without changing your overall setup.</p>
+
+        <section class="settings-card" style="margin-bottom:16px;">
+          <div class="settings-card-title">İsteğe bağlı özellikler</div>
+          <p class="hint" style="margin-bottom:12px;">Kullanmadığınız özellikleri kapatarak paneli sadeleştirin. Kod silinmez; istediğiniz zaman tekrar açabilirsiniz.</p>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="webStudioEnabled" class="plugin-checkbox"/>
+              <span class="toggle-copy">
+                <strong>Web Studio</strong>
+                <span>Kurumsal site sihirbazı ve sohbet önerileri.</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="selfBuildEnabled" class="plugin-checkbox"/>
+              <span class="toggle-copy">
+                <strong>Self-Build Pipeline</strong>
+                <span>Çok fazlı üretim hattı ve build pipeline paneli.</span>
+              </span>
+            </label>
+          </div>
+          <p class="hint">Browser Agent aç/kapa: aşağıdaki Browser eklentisi kartında.</p>
+        </section>
+
         <div class="plugin-grid">
           <article class="plugin-card plugin-card-active plugin-card-expandable" data-plugin-card="browser">
             <button class="plugin-card-trigger" type="button" aria-expanded="false" aria-controls="plugin-panel-browser">

@@ -363,7 +363,7 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
 
   function buildModelSelector() {
     const settings = state.getSettings();
-    const provider = settings.aiProvider || "claude";
+    const provider = settings.aiProvider || "gemini";
     const customKey = provider + "ModelCustom";
     const savedModel = settings[customKey] || settings.aiModel || "";
 
@@ -409,7 +409,7 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
   }
 
   function updateProviderDot() {
-    const provider = state.getSetting("aiProvider") || "claude";
+    const provider = state.getSetting("aiProvider") || "gemini";
     dom.providerDot.style.background = PROVIDER_COLORS[provider] || "#64748b";
     dom.providerDot.title = provider;
   }
