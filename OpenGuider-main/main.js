@@ -32,6 +32,7 @@ const { streamAIResponse, parsePointTag, fetchOllamaModels } = require("./src/ai
 const {
   buildHandoffPayload,
   enrichHandoffPayloadFinOps,
+  prepareHandoffPayloadAsync,
   writeHandoff,
   seedSauronRules,
   launchVSCode,
