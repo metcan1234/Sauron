@@ -3,7 +3,7 @@ const { calculateCostTl } = require("./finops-pricing");
 const { resolveTokenCounts } = require("./token-counter");
 const { checkPreCallBudgetAlert, maybePostCallBudgetAlert, emitBudgetAlert } = require("./budget-alert");
 const { resolveCoreModelOverlay } = require("./cost-optimizer-config");
-const { resolveAgentForCore } = require("./agent-matrix");
+const { resolveAgentForCore, ECONOMY_VISION_OPERATIONS } = require("./agent-matrix");
 const {
   resolveAgentWalletState,
   buildWalletFallbackAlert,
@@ -107,7 +107,9 @@ async function recordLlmUsage({
 
 async function prepareLlmCall(settings = {}, options = {}) {
   const operation = options.operation || "chat";
-  const complexityHint = options.complexityHint || "low";
+  const complexityHint = ECONOMY_VISION_OPERATIONS.has(operation)
+    ? "low"
+    : (options.complexityHint || "low");
   const liveSettings = {
     ...budgetContext.getSettings(),
     ...settings,

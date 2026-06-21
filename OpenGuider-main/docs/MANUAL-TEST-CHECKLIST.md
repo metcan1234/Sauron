@@ -1,5 +1,14 @@
 # Manuel Test Checklist — v1.4.2
 
+## v1.0 Sağlamlaştırma (her faz sonrası)
+
+- [ ] Boş panelde **Ekranımda yardım et** ve **Kod yaz / Çalışma Kısmı** CTA görünür
+- [ ] Mod rozeti: Asistan / Rehber · Planlı / Rehber · Mikro-tur doğru geçiş yapar
+- [ ] Rehber modunda mikro intent → mikro-tur (planlı rehbere düşmez)
+- [ ] Planlı rehber planı ≤6 adım
+- [ ] Web Studio / Browser eksik kurulumda ön-uyarı (Sistem tanısı)
+- [ ] **Handoff:** sohbet → ⌘ Çalışma Kısmı → VS Code açılır
+
 ## CMD + Windows EXE (v1.4.2)
 
 - [ ] ⌘ Çalışma Kısmı → VS Code açılır, **görünür cmd.exe penceresi yok**

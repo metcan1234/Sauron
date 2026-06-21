@@ -18,6 +18,15 @@ const { MICRO_GUIDE_IDLE_MS } = require("./micro-guide/micro-guide-constants");
 const logger = createLogger("task-orchestrator");
 const DECISION_TIMEOUT_MS = 120_000;
 const SCREEN_CAPTURE_REQUIRED_MSG = "Sonraki adım için önce Ekran Al butonuna basın, ardından Tamamladım'a tıklayın.";
+const GUIDE_LOCATOR_MAX_ATTEMPTS = Number.parseInt(process.env.GUIDE_LOCATOR_MAX_ATTEMPTS || "3", 10) || 3;
+
+function countLocatorAttemptsForStep(snapshot, stepId) {
+  const history = Array.isArray(snapshot?.evaluationHistory) ? snapshot.evaluationHistory : [];
+  return history.filter((entry) => (
+    entry?.stepId === stepId
+    && (entry?.kind === "locator_fallback" || entry?.suggestedAction === "repeat_guidance")
+  )).length;
+}
 
 function hasUsableScreenshots(images) {
   return Array.isArray(images) && images.length > 0;
@@ -270,6 +279,23 @@ class TaskOrchestrator {
     }
     this.sessionManager.setLastScreenshots(images);
 
+    const locatorAttempts = countLocatorAttemptsForStep(snapshot, step.id);
+    if (locatorAttempts >= GUIDE_LOCATOR_MAX_ATTEMPTS) {
+      const limitMessage = [
+        `"${step.title}" için konum bulma denemeleri sınırına ulaşıldı (${GUIDE_LOCATOR_MAX_ATTEMPTS}).`,
+        step.instruction,
+        "Adımı atlayabilir veya Tamamladım ile devam edebilirsiniz.",
+      ].join("\n\n");
+      this.sessionManager.addMessage({ role: "assistant", content: limitMessage });
+      this.sessionManager.setStatus("waiting_user");
+      return {
+        assistantMessage: limitMessage,
+        pointer: null,
+        session: this.sessionManager.getSnapshot(),
+        userInputRequest: null,
+      };
+    }
+
     let preprocessingContext = { ocrResult: null, windowInfo: null, matchedElements: [] };
     if (this.isAwareAssistanceEnabled() && images.length > 0) {
       preprocessingContext = await this.interactionPipeline.preprocess({
@@ -483,6 +509,22 @@ class TaskOrchestrator {
         settings,
         signal,
       });
+    }
+
+    if (route.pluginId === "browser") {
+      const { checkBrowserAgentReady } = require("../sauron/doctor");
+      const browserReady = checkBrowserAgentReady();
+      if (browserReady.status !== "pass") {
+        const msg = `${browserReady.message} Ayarlar → Sistem tanısı bölümünden kontrol edin.`;
+        this.sessionManager.addMessage({ role: "assistant", content: msg });
+        this.sessionManager.setStatus("idle");
+        return {
+          assistantMessage: msg,
+          pointer: null,
+          session: this.sessionManager.getSnapshot(),
+          userInputRequest: null,
+        };
+      }
     }
 
     let plugin;

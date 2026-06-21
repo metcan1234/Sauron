@@ -57,6 +57,14 @@ const CLINE_COMPLEXITY_MAP = {
 const CORE_CLOUD_FALLBACK_ORDER = ["gemini", "deepseek", "openai"];
 const CLINE_CLOUD_FALLBACK_ORDER = ["deepseek", "gemini", "openai"];
 
+const ECONOMY_VISION_OPERATIONS = new Set([
+  "guide-micro-instruct",
+  "planner",
+  "locator",
+  "locator_strict",
+  "evaluator",
+]);
+
 function normalizeHint(hint) {
   if (hint === "medium" || hint === "high" || hint === "low") {
     return hint;
@@ -331,6 +339,7 @@ module.exports = {
   AGENT_IDS,
   CLOUD_AGENT_IDS,
   AGENT_DEFINITIONS,
+  ECONOMY_VISION_OPERATIONS,
   CORE_CLOUD_FALLBACK_ORDER,
   CLINE_CLOUD_FALLBACK_ORDER,
   hasAgentCredential,

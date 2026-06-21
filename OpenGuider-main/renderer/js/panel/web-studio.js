@@ -105,6 +105,25 @@ export function createWebStudioController({ api, ui, win, doc }) {
   async function openWizard() {
     if (!overlay) return;
     try {
+      const doctor = await api.invoke("run-sauron-doctor");
+      const webCheck = doctor?.checks?.find((entry) => entry.id === "web-studio-ready");
+      if (webCheck && webCheck.status !== "pass") {
+        ui.showToast(`${webCheck.message} — Ayarlar → Sistem tanısı`, true);
+        const proceed = await ui.confirmDialog({
+          title: "Web Studio hazır değil",
+          message: `${webCheck.message}\n\n${webCheck.fixHint || ""}\n\nYine de devam edilsin mi?`,
+          confirmLabel: "Devam",
+          cancelLabel: "İptal",
+          confirmDanger: false,
+        });
+        if (!proceed) {
+          return;
+        }
+      }
+    } catch {
+      // doctor unavailable — allow wizard
+    }
+    try {
       const loaded = await api.invoke("load-web-brief");
       if (loaded?.brief) {
         fillForm(loaded.brief);

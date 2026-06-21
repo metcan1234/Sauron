@@ -8,6 +8,8 @@ const PLANNER_SYSTEM_PROMPT = [
   "Use screenshots only to adapt step details and UI path, not to change the goal.",
   "Break the user's goal into actionable UI steps.",
   "Return concise, user-facing instructions that can be shown one step at a time in a todo widget.",
+  "Prefer 3–4 steps; never exceed 6 unless the goal is genuinely complex.",
+  "Combine trivial UI actions into one step when safe.",
   "Avoid combining multiple UI actions into one step when they should be verified separately.",
   "Always return valid JSON only.",
 ].join(" ");

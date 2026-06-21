@@ -281,6 +281,15 @@ html, body {
   color: #f6a27a;
   border-color: rgba(198, 90, 58, 0.55);
 }
+.mode-badge.is-assistant {
+  color: var(--text-dim);
+  border-color: var(--border);
+}
+.mode-badge.is-micro-guide {
+  color: #fdba74;
+  border-color: rgba(249, 115, 22, 0.45);
+  background: rgba(249, 115, 22, 0.12);
+}
 .mode-badge.micro-guide-badge {
   color: #fdba74;
   border-color: rgba(249, 115, 22, 0.45);
@@ -537,6 +546,52 @@ html, body {
 
 .chat-area.has-messages #chat-background-content p {
   display: none;
+}
+
+.chat-area.has-messages .empty-state-cta {
+  display: none;
+}
+
+.empty-state-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  pointer-events: auto;
+  max-width: 320px;
+}
+
+.empty-state-cta-btn {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: #000;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 11px 14px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.empty-state-cta-btn:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.empty-state-cta-btn.primary {
+  color: #fdba74;
+  border-color: rgba(249, 115, 22, 0.45);
+  background: rgba(249, 115, 22, 0.1);
+}
+
+.empty-state-advanced {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: center;
+  line-height: 1.4;
 }
 
 .chat-messages {

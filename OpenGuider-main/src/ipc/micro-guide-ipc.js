@@ -14,6 +14,7 @@ function registerMicroGuideIpc({
   wrapUserFacingError,
 }) {
   const { detectMicroGuideIntent } = require("../agent/micro-guide/detect-micro-guide-intent");
+  const { resolveMessageRoute, resolvePanelModeState } = require("../routing/message-route");
 
   function getCurrentAIController() {
     return currentAIControllerRef.current;
@@ -39,15 +40,10 @@ function registerMicroGuideIpc({
         signal: controller.signal,
         requestId: requestContext.requestId,
       });
-      let handled = result;
-      try {
-        handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
-      } catch (postProcessError) {
-        appLogger.error(`ipc:${channel} post-process failed`, {
-          requestId: requestContext.requestId,
-          error: postProcessError,
-        });
-      }
+      const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender, {
+        channel,
+        requestId: requestContext.requestId,
+      });
       if (result?.session) {
         broadcastSessionSnapshot(result.session);
       }
@@ -66,6 +62,16 @@ function registerMicroGuideIpc({
   ipcMain.handle("detect-micro-guide-intent", (_event, { text } = {}) => {
     debugLog("ipc:detect-micro-guide-intent");
     return detectMicroGuideIntent(String(text || ""));
+  });
+
+  ipcMain.handle("resolve-message-route", (_event, params = {}) => {
+    debugLog("ipc:resolve-message-route");
+    return resolveMessageRoute(params);
+  });
+
+  ipcMain.handle("resolve-panel-mode-state", (_event, params = {}) => {
+    debugLog("ipc:resolve-panel-mode-state");
+    return resolvePanelModeState(params);
   });
 
   ipcMain.handle("start-micro-guide-session", async (event, { goal, images } = {}) => {
@@ -129,7 +135,9 @@ function registerMicroGuideIpc({
     debugLog("ipc:micro-guide-cancel");
     const runtimeSettings = await getRuntimeSettings();
     const result = taskOrchestrator.cancelMicroGuide({ reason: "user" });
-    const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
+    const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender, {
+      channel: "micro-guide-cancel",
+    });
     if (result?.session) {
       broadcastSessionSnapshot(result.session);
     }

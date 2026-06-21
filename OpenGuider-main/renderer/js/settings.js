@@ -357,10 +357,11 @@ async function init() {
     summaryEl.textContent = `${pass || 0} geçti · ${warn || 0} uyarı · ${fail || 0} hata`;
     listEl.innerHTML = result.checks.map((check) => {
       const statusClass = check.status === "pass" ? "pass" : (check.status === "warn" ? "warn" : "fail");
+      const optionalTag = check.tier === "optional" ? " <em>(opsiyonel)</em>" : "";
       const hint = check.fixHint
         ? `<span class="doctor-fix-hint">${escapeHtml(check.fixHint)}</span>`
         : "";
-      return `<li class="doctor-check ${statusClass}"><strong>${escapeHtml(check.message)}</strong>${hint}</li>`;
+      return `<li class="doctor-check ${statusClass}"><strong>${escapeHtml(check.message)}</strong>${optionalTag}${hint}</li>`;
     }).join("");
   }
 

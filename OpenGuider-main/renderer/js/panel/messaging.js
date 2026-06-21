@@ -298,15 +298,21 @@ export function createMessagingController({
     await runMicroGuideIpc("micro-guide-ack", { images: screens });
   }
 
-  async function maybeStartMicroGuide(rawText) {
-    if (!rawText) {
-      return false;
+  async function routeOutgoingMessage(rawText, text, options) {
+    const intent = await api.invoke("detect-micro-guide-intent", { text: rawText });
+    const routeResult = await api.invoke("resolve-message-route", {
+      assistantMode: state.getSetting("assistantMode") || "assistant",
+      microGuideActive: Boolean(state.getSessionSnapshot()?.microGuideSession?.active),
+      microIntent: intent,
+      text: rawText,
+    });
+
+    if (routeResult?.route === "micro_guide_busy") {
+      ui.showToast("Mikro rehber aktif — Yaptım veya İptal kullanın.", false);
+      return true;
     }
-    try {
-      const intent = await api.invoke("detect-micro-guide-intent", { text: rawText });
-      if (!intent?.shouldSuggest) {
-        return false;
-      }
+
+    if (routeResult?.route === "micro_guide") {
       const confirmed = await ui.confirmDialog({
         title: "Ekran rehberliği",
         message: "Ekran rehberliği başlatılsın mı? Tek adımda yönlendirileceksiniz.",
@@ -314,40 +320,29 @@ export function createMessagingController({
         cancelLabel: "Sohbete devam",
       });
       if (!confirmed) {
-        return false;
+        if (isGuideMode()) {
+          await sendGuideMessage(text, options);
+        } else {
+          await sendAssistantMessage(text, options);
+        }
+        return true;
       }
       await startMicroGuideSession(rawText);
       return true;
-    } catch (error) {
-      log("detect-micro-guide-intent error", error);
-      return false;
     }
+
+    if (routeResult?.route === "plan_guide") {
+      await sendGuideMessage(text, options);
+      return true;
+    }
+
+    return false;
   }
 
-  async function sendMessage(overrideText, options = {}) {
-    const rawText = typeof overrideText === "string"
-      ? overrideText
-      : dom.textInput.value.trim();
+  async function sendAssistantMessage(text, options = {}, rawText = "") {
+    const displayText = rawText || text;
 
-    const attachmentPayload = buildAttachmentPayload(state.getPendingAttachments());
-    const attachmentSuffix = attachmentPayload.textSuffix;
-    const text = [rawText, attachmentSuffix].filter(Boolean).join("\n\n").trim();
-
-    if (!text || state.isStreaming()) {
-      return;
-    }
-
-    const startedMicroGuide = await maybeStartMicroGuide(rawText);
-    if (startedMicroGuide) {
-      return;
-    }
-
-    if (isGuideMode()) {
-      await sendGuideMessage(text, options);
-      return;
-    }
-
-    void maybeSuggestWebStudio(rawText);
+    void maybeSuggestWebStudio(displayText);
 
     const skipUserPersist = Boolean(options.skipUserPersist);
     const regenerate = Boolean(options.regenerate);
@@ -398,7 +393,7 @@ export function createMessagingController({
     log("ai:send-message start", {
       hasImages: Boolean(images && images.length),
       historyCount: state.getConversationHistory().length,
-      textLength: rawText.length,
+      textLength: displayText.length,
       skipUserPersist,
       regenerate,
     });
@@ -433,6 +428,31 @@ export function createMessagingController({
         ui.removeTypingIndicator(typingId);
       }
     }
+  }
+
+  async function sendMessage(overrideText, options = {}) {
+    const rawText = typeof overrideText === "string"
+      ? overrideText
+      : dom.textInput.value.trim();
+
+    const attachmentPayload = buildAttachmentPayload(state.getPendingAttachments());
+    const attachmentSuffix = attachmentPayload.textSuffix;
+    const text = [rawText, attachmentSuffix].filter(Boolean).join("\n\n").trim();
+
+    if (!text || state.isStreaming()) {
+      return;
+    }
+
+    try {
+      const routed = await routeOutgoingMessage(rawText, text, options);
+      if (routed) {
+        return;
+      }
+    } catch (error) {
+      log("route-outgoing-message error", error);
+    }
+
+    await sendAssistantMessage(text, options, rawText);
   }
 
   async function regenerateLastResponse() {

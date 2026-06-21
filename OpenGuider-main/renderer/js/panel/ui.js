@@ -1112,25 +1112,42 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     return "assistant";
   }
 
-  function renderAssistantModeBadge(mode) {
-    if (!dom.assistantModeBadge) {
-      return;
+  function renderPanelModeState({ assistantMode, sessionSnapshot } = {}) {
+    const snapshot = sessionSnapshot || {};
+    const microActive = Boolean(snapshot.microGuideSession?.active);
+    const normalized = normalizePanelAssistantMode(assistantMode);
+    const planActive = normalized === "guide" || Boolean(snapshot.activePlan);
+
+    if (dom.assistantModeBadge) {
+      let label = t("modeAssistant");
+      let badgeClass = "is-assistant";
+      if (microActive) {
+        label = "Rehber · Mikro-tur";
+        badgeClass = "is-micro-guide";
+      } else if (planActive) {
+        label = "Rehber · Planlı";
+        badgeClass = "is-guide";
+      }
+      dom.assistantModeBadge.textContent = label;
+      dom.assistantModeBadge.dataset.mode = microActive ? "micro_guide" : normalized;
+      dom.assistantModeBadge.classList.remove("is-assistant", "is-guide", "is-micro-guide");
+      dom.assistantModeBadge.classList.add(badgeClass);
     }
-    const normalized = normalizePanelAssistantMode(mode);
-    dom.assistantModeBadge.textContent = normalized === "guide" ? t("modeGuide") : t("modeAssistant");
-    dom.assistantModeBadge.dataset.mode = normalized;
-    dom.assistantModeBadge.classList.toggle("is-guide", normalized === "guide");
+
+    if (dom.microGuideBadge) {
+      dom.microGuideBadge.classList.add("hidden");
+    }
+  }
+
+  function renderAssistantModeBadge(mode) {
+    renderPanelModeState({ assistantMode: mode });
   }
 
   function renderMicroGuideBadge(microGuideSession) {
-    if (!dom.microGuideBadge) {
-      return;
-    }
-    const active = Boolean(microGuideSession?.active);
-    dom.microGuideBadge.classList.toggle("hidden", !active);
-    if (active) {
-      dom.microGuideBadge.textContent = "Rehber · Mikro-tur";
-    }
+    renderPanelModeState({
+      assistantMode: dom.assistantModeBadge?.dataset?.mode === "guide" ? "guide" : "assistant",
+      sessionSnapshot: { microGuideSession },
+    });
   }
 
   function renderAttachmentPreviewStrip(attachments, onRemove) {
@@ -1358,6 +1375,7 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     renderAttachmentPreviewStrip,
     renderScreenshotPreviewStrip,
     updateScreenPendingBadge,
+    renderPanelModeState,
     renderAssistantModeBadge,
     renderMicroGuideBadge,
     renderFinOpsBadge,

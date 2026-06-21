@@ -15,7 +15,7 @@ const PlannerResultSchema = z.object({
   goal: z.string().min(1),
   assistantResponse: z.string().min(1),
   assumptions: z.array(z.string()).default([]),
-  steps: z.array(StepSchema).min(1),
+  steps: z.array(StepSchema).min(1).max(6),
 });
 
 const StepPointerSchema = z.object({

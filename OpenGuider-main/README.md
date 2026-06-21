@@ -15,6 +15,8 @@ Download from [GitHub Releases](https://github.com/metcan1234/Sauron/releases/la
 
 Sauron is an Electron desktop AI assistant designed to help you complete real UI tasks on your machine.
 
+**Overview:** See [docs/SAURON-OVERVIEW.md](./docs/SAURON-OVERVIEW.md) for mode routing, prerequisites, and the micro-guide + handoff workflow.
+
 It combines chat, planning, screenshot context, pointer hints, optional voice features, and a growing plugin system in one desktop workflow.
 
 ## Quick Configuration Guides (PDF)

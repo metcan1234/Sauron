@@ -16,6 +16,7 @@ function pushCheck(checks, entry) {
     status: entry.status,
     message: entry.message,
     fixHint: entry.fixHint || "",
+    ...(entry.tier ? { tier: entry.tier } : {}),
   });
 }
 
@@ -208,6 +209,78 @@ function resolveSystemPythonBin() {
   return null;
 }
 
+function resolveOptionalToolBin(toolName) {
+  const candidates = process.platform === "win32"
+    ? [`${toolName}.cmd`, toolName]
+    : [toolName];
+  for (const command of candidates) {
+    try {
+      execFileSync(command, ["--version"], {
+        encoding: "utf8",
+        timeout: 5000,
+        windowsHide: true,
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      return command;
+    } catch {
+      // try next
+    }
+  }
+  return null;
+}
+
+function checkWebStudioReady(store) {
+  const workspacePath = String(store?.get?.("workspacePath") || "").trim();
+  const base = {
+    id: "web-studio-ready",
+    tier: "optional",
+  };
+  if (!workspacePath) {
+    return {
+      ...base,
+      status: "warn",
+      message: "Web Studio için workspace klasörü seçilmemiş",
+      fixHint: "Ayarlar → Workspace → proje kök klasörünü seçin.",
+    };
+  }
+  if (!fs.existsSync(workspacePath)) {
+    return {
+      ...base,
+      status: "fail",
+      message: `Web Studio workspace bulunamadı: ${workspacePath}`,
+      fixHint: "Geçerli bir klasör seçin veya yolu düzeltin.",
+    };
+  }
+  try {
+    fs.accessSync(workspacePath, fs.constants.R_OK | fs.constants.W_OK);
+  } catch {
+    return {
+      ...base,
+      status: "fail",
+      message: `Web Studio workspace yazılabilir değil: ${workspacePath}`,
+      fixHint: "Klasör izinlerini kontrol edin.",
+    };
+  }
+
+  const nodeBin = resolveOptionalToolBin("node");
+  const npmBin = resolveOptionalToolBin("npm");
+  if (!nodeBin || !npmBin) {
+    return {
+      ...base,
+      status: "warn",
+      message: "Web Studio scaffold için Node.js/npm PATH'te bulunamadı",
+      fixHint: "nodejs.org adresinden Node.js LTS kurun (npm dahil).",
+    };
+  }
+
+  return {
+    ...base,
+    status: "pass",
+    message: "Web Studio hazır (workspace + Node.js)",
+    fixHint: "",
+  };
+}
+
 function checkPythonSystem() {
   const pythonBin = resolveSystemPythonBin();
   if (pythonBin) {
@@ -278,6 +351,7 @@ function checkBrowserAgentReady() {
       status: "pass",
       message: "Browser agent başlatılabilir",
       fixHint: "",
+      tier: "optional",
     };
   }
 
@@ -288,6 +362,7 @@ function checkBrowserAgentReady() {
     fixHint: runtimeInfo?.pythonBin
       ? "Sidecar script eksik — uygulamayı yeniden kurun."
       : "Ayarlar → Eklentiler → Browser → Runtime indir (veya sistem Python kurun).",
+    tier: "optional",
   };
 }
 
@@ -298,13 +373,15 @@ function appendBrowserAgentChecks(checks, settings = {}) {
       status: "pass",
       message: "Browser agent devre dışı (atlandı)",
       fixHint: "",
+      tier: "optional",
     });
     return;
   }
 
-  pushCheck(checks, checkPythonSystem());
-  pushCheck(checks, checkPythonRuntime());
-  pushCheck(checks, checkPythonSidecarScript());
+  const optionalTier = { tier: "optional" };
+  pushCheck(checks, { ...checkPythonSystem(), ...optionalTier });
+  pushCheck(checks, { ...checkPythonRuntime(), ...optionalTier });
+  pushCheck(checks, { ...checkPythonSidecarScript(), ...optionalTier });
   pushCheck(checks, checkBrowserAgentReady());
 }
 
@@ -377,6 +454,8 @@ function runSauronDoctor(store, options = {}) {
     ...settings,
   });
 
+  pushCheck(checks, checkWebStudioReady(store));
+
   const failCount = checks.filter((entry) => entry.status === "fail").length;
   const warnCount = checks.filter((entry) => entry.status === "warn").length;
 
@@ -413,4 +492,6 @@ function getClineCapabilityReport(store) {
 module.exports = {
   runSauronDoctor,
   getClineCapabilityReport,
+  checkBrowserAgentReady,
+  checkWebStudioReady,
 };

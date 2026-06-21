@@ -51,15 +51,10 @@ function registerAiIpc({
         signal: controller.signal,
         requestId: requestContext.requestId,
       });
-      let handled = result;
-      try {
-        handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
-      } catch (postProcessError) {
-        appLogger.error(`ipc:${channel} post-process failed`, {
-          requestId: requestContext.requestId,
-          error: postProcessError,
-        });
-      }
+      const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender, {
+        channel,
+        requestId: requestContext.requestId,
+      });
       if (result?.session) {
         broadcastSessionSnapshot(result.session);
       }
@@ -93,15 +88,10 @@ function registerAiIpc({
         signal: controller.signal,
         requestId: requestContext.requestId,
       });
-      let handled = result;
-      try {
-        handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
-      } catch (postProcessError) {
-        appLogger.error("ipc:start-goal-session post-process failed", {
-          requestId: requestContext.requestId,
-          error: postProcessError,
-        });
-      }
+      const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender, {
+        channel: "start-goal-session",
+        requestId: requestContext.requestId,
+      });
       if (result?.session) {
         broadcastSessionSnapshot(result.session);
       }
@@ -139,7 +129,10 @@ function registerAiIpc({
         signal: controller.signal,
         requestId: requestContext.requestId,
       });
-      const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
+      const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender, {
+        channel: "submit-user-message",
+        requestId: requestContext.requestId,
+      });
       if (result?.session) {
         broadcastSessionSnapshot(result.session);
       }
@@ -319,7 +312,14 @@ function registerAiIpc({
         });
       }
 
-      await speakAssistantResponse(parsed.spokenText || fullText, settings, event.sender);
+      try {
+        await speakAssistantResponse(parsed.spokenText || fullText, settings, event.sender);
+      } catch (ttsErr) {
+        appLogger.error("send-message:tts-failed", {
+          requestId: requestContext.requestId,
+          error: ttsErr,
+        });
+      }
       recordPerformanceMetric("ipc.send-message", startedAt, {
         ok: true,
         meta: {

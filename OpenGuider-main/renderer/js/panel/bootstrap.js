@@ -537,7 +537,10 @@ export function createPanelController({
     const current = normalizeAssistantMode(state.getSetting("assistantMode"));
     const nextMode = current === "guide" ? "assistant" : "guide";
     state.setSetting("assistantMode", nextMode);
-    ui.renderAssistantModeBadge(nextMode);
+    ui.renderPanelModeState({
+      assistantMode: nextMode,
+      sessionSnapshot: state.getSessionSnapshot(),
+    });
     updatePlanActionVisibility(nextMode, state.getSessionSnapshot());
     try {
       await api.invoke("save-settings", { assistantMode: nextMode });
@@ -571,7 +574,10 @@ export function createPanelController({
     const waiting = micro?.status === "waiting_user" || micro?.status === "limit_reached";
     const shouldShow = active && waiting;
     dom.microGuideActions.classList.toggle("hidden", !shouldShow);
-    ui.renderMicroGuideBadge(micro);
+    ui.renderPanelModeState({
+      assistantMode: normalizeAssistantMode(state.getSetting("assistantMode")),
+      sessionSnapshot: snapshot,
+    });
 
     if (dom.btnMicroGuideDone) {
       dom.btnMicroGuideDone.disabled = !active || micro?.status === "limit_reached";
@@ -827,6 +833,14 @@ export function createPanelController({
     });
 
     dom.sendBtn.addEventListener("click", messaging.sendMessage);
+
+    doc.getElementById("empty-cta-micro-guide")?.addEventListener("click", () => {
+      void messaging.startMicroGuideSession("Ekranımda yardım et");
+    });
+    doc.getElementById("empty-cta-workspace")?.addEventListener("click", () => {
+      void openWorkspaceHandoff();
+    });
+
     const stopBtn = doc.getElementById("stop-btn");
     if (stopBtn) {
       stopBtn.addEventListener("click", messaging.cancelMessage);
@@ -1083,7 +1097,10 @@ export function createPanelController({
       applyShortcutTitles();
       const assistantMode = normalizeAssistantMode(nextSettings?.assistantMode);
       state.setSetting("assistantMode", assistantMode);
-      ui.renderAssistantModeBadge(assistantMode);
+      ui.renderPanelModeState({
+        assistantMode,
+        sessionSnapshot: state.getSessionSnapshot(),
+      });
       updatePlanActionVisibility(assistantMode);
       state.setIncludeScreen(nextSettings?.includeScreenshotByDefault === true);
       syncIncludeScreenBadge();
@@ -1192,7 +1209,10 @@ export function createPanelController({
       updatePlanActionButtons(session);
       const assistantMode = normalizeAssistantMode(settings?.assistantMode);
       state.setSetting("assistantMode", assistantMode);
-      ui.renderAssistantModeBadge(assistantMode);
+      ui.renderPanelModeState({
+        assistantMode,
+        sessionSnapshot: state.getSessionSnapshot(),
+      });
       updatePlanActionVisibility(assistantMode, session);
       dom.sendBtn.disabled = false;
       dom.pttBtn.disabled = false;

@@ -84,6 +84,7 @@ const {
 } = require("./src/session/chat-sessions");
 const { emitPointerTool } = require("./src/agent/tools/pointer-tool");
 const { TaskOrchestrator } = require("./src/agent/task-orchestrator");
+const { safeHandleOrchestratorResult: wrapOrchestratorResult } = require("./src/orchestrator/safe-handle-orchestrator-result");
 const { formatStructuredUserError } = require("./src/ai/structured");
 const { configureFinOpsContext } = require("./src/sauron/finops/llm-tracker");
 const { emitBudgetAlert } = require("./src/sauron/finops/budget-alert");
@@ -1018,7 +1019,7 @@ async function runPlanShortcutAction(actionName) {
     }
 
     if (result) {
-      await handleOrchestratorResult(result, store.store, sender);
+      await safeHandleOrchestratorResult(result, store.store, sender, { source: "hotkey", actionName });
     }
   } catch (err) {
     if (err?.name !== "AbortError") {
@@ -1281,6 +1282,17 @@ async function handleOrchestratorResult(result, settings, sender) {
   return result;
 }
 
+async function safeHandleOrchestratorResult(result, settings, sender, logContext = {}) {
+  return wrapOrchestratorResult(
+    handleOrchestratorResult,
+    result,
+    settings,
+    sender,
+    logContext,
+    appLogger,
+  );
+}
+
 function registerModularIpcHandlers() {
   const currentAIControllerRef = {
     get current() { return currentAIController; },
@@ -1343,7 +1355,7 @@ function registerModularIpcHandlers() {
     debugLog,
     fetchOllamaModels,
     getRuntimeSettings,
-    handleOrchestratorResult,
+    handleOrchestratorResult: safeHandleOrchestratorResult,
     parsePointTag,
     persistActiveSession,
     recordPerformanceMetric,
@@ -1409,7 +1421,7 @@ function registerModularIpcHandlers() {
     currentAIControllerRef,
     debugLog,
     getRuntimeSettings,
-    handleOrchestratorResult,
+    handleOrchestratorResult: safeHandleOrchestratorResult,
     recordPerformanceMetric,
     sessionManager,
     taskOrchestrator,
