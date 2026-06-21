@@ -41,7 +41,8 @@ export function createChatHistoryController({ api, doc = document, dom, log, ui,
     const count = Number(session?.messageCount) || 0;
     const when = formatRelativeTime(session?.updatedAt);
     const pinLabel = session.pinned ? " · Sabitlendi" : "";
-    return `${count} mesaj${pinLabel}${when ? ` · ${when}` : ""}`;
+    const memoryLabel = session.isMemoryChat ? " · Hafızalı" : "";
+    return `${count} mesaj${memoryLabel}${pinLabel}${when ? ` · ${when}` : ""}`;
   }
 
   async function promptRename(session) {
@@ -132,6 +133,9 @@ export function createChatHistoryController({ api, doc = document, dom, log, ui,
     if (session.ephemeral) {
       item.classList.add("is-ephemeral");
     }
+    if (session.isMemoryChat) {
+      item.classList.add("is-memory-chat");
+    }
     item.dataset.sessionId = session.id;
 
     const body = doc.createElement("div");
@@ -141,7 +145,9 @@ export function createChatHistoryController({ api, doc = document, dom, log, ui,
     title.className = "chat-drawer-item-title";
     title.textContent = session.ephemeral
       ? `${session.title || "Geçici sohbet"} · geçici`
-      : (session.title || "Yeni sohbet");
+      : session.isMemoryChat
+        ? `${session.title || "Kalıcı sohbet"} · hafızalı`
+        : (session.title || "Yeni sohbet");
 
     const meta = doc.createElement("div");
     meta.className = "chat-drawer-item-meta";
@@ -516,6 +522,39 @@ export function createChatHistoryController({ api, doc = document, dom, log, ui,
     }
   }
 
+  async function createMemoryChat() {
+    const title = await ui.promptDialog({
+      title: "Kalıcı hafızalı sohbet",
+      message: "Bu konu için bir isim verin (örn. Diyet ve Spor):",
+      defaultValue: "",
+      confirmLabel: "Oluştur",
+      cancelLabel: "İptal",
+    });
+    if (title === null) {
+      return;
+    }
+    const trimmed = String(title).trim() || "Kalıcı sohbet";
+    try {
+      const result = await api.invoke("create-memory-chat-session", { title: trimmed });
+      if (!result?.ok && result?.session === undefined) {
+        ui.showToast(result?.error || "Kalıcı sohbet açılamadı", true);
+        return;
+      }
+      const snapshot = result.snapshot || result.session?.snapshot || { messages: [] };
+      state.setSessionSnapshot(snapshot);
+      ui.renderConversation(snapshot.messages || []);
+      ui.renderAgentState("idle");
+      ui.hideErrorBanner();
+      renderSessionList(result.sessions || []);
+      closeDrawer();
+      dom.textInput?.focus();
+      ui.showToast("Kalıcı hafızalı sohbet oluşturuldu");
+    } catch (error) {
+      log("create-memory-chat-session error", error);
+      ui.showToast("Kalıcı sohbet açılamadı", true);
+    }
+  }
+
   async function createEphemeralChat() {
     try {
       const result = await api.invoke("create-ephemeral-chat-session");
@@ -562,6 +601,9 @@ export function createChatHistoryController({ api, doc = document, dom, log, ui,
     dom.chatDrawerClose?.addEventListener("click", closeDrawer);
     dom.chatDrawerNew?.addEventListener("click", () => {
       void createNewChat();
+    });
+    dom.chatDrawerMemory?.addEventListener("click", () => {
+      void createMemoryChat();
     });
     dom.chatDrawerCreateFolder?.addEventListener("click", () => {
       void createFolder();

@@ -11,6 +11,7 @@ function registerAiIpc({
   getRuntimeSettings,
   handleOrchestratorResult,
   parsePointTag,
+  persistActiveSession,
   recordPerformanceMetric,
   sessionManager,
   speakAssistantResponse,
@@ -24,7 +25,10 @@ function registerAiIpc({
   broadcastSessionSnapshot,
   showPointer,
   wrapUserFacingError,
+  getActiveChatSessionRecord,
 }) {
+  const { buildMemoryChatHistory } = require("../session/memory-chat-context");
+  const { maybeCompressMemoryChat } = require("../session/memory-chat-compressor");
   function getCurrentAIController() {
     return currentAIControllerRef.current;
   }
@@ -47,7 +51,15 @@ function registerAiIpc({
         signal: controller.signal,
         requestId: requestContext.requestId,
       });
-      const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
+      let handled = result;
+      try {
+        handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
+      } catch (postProcessError) {
+        appLogger.error(`ipc:${channel} post-process failed`, {
+          requestId: requestContext.requestId,
+          error: postProcessError,
+        });
+      }
       if (result?.session) {
         broadcastSessionSnapshot(result.session);
       }
@@ -81,7 +93,15 @@ function registerAiIpc({
         signal: controller.signal,
         requestId: requestContext.requestId,
       });
-      const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
+      let handled = result;
+      try {
+        handled = await handleOrchestratorResult(result, runtimeSettings, event.sender);
+      } catch (postProcessError) {
+        appLogger.error("ipc:start-goal-session post-process failed", {
+          requestId: requestContext.requestId,
+          error: postProcessError,
+        });
+      }
       if (result?.session) {
         broadcastSessionSnapshot(result.session);
       }
@@ -165,9 +185,25 @@ function registerAiIpc({
       updatePointerCalibration(images);
     }
 
-    const effectiveHistory = Array.isArray(history) && history.length > 0
-      ? history.slice(-MAX_AI_CONTEXT_MESSAGES)
-      : (sessionManager?.getSnapshot()?.messages || []).slice(-MAX_AI_CONTEXT_MESSAGES);
+    const activeSession = getActiveChatSessionRecord?.(store);
+    const isMemoryChat = Boolean(activeSession?.isMemoryChat);
+    let effectiveHistory;
+    let chatOperation = "chat";
+
+    if (isMemoryChat) {
+      try {
+        const allMessages = sessionManager?.getSnapshot()?.messages || [];
+        effectiveHistory = buildMemoryChatHistory(allMessages, { maxRecent: MAX_AI_CONTEXT_MESSAGES });
+        chatOperation = "memory-chat";
+      } catch (historyError) {
+        appLogger.warn("memory-chat-history-fallback", { error: historyError });
+        effectiveHistory = (sessionManager?.getSnapshot()?.messages || []).slice(-MAX_AI_CONTEXT_MESSAGES);
+      }
+    } else {
+      effectiveHistory = Array.isArray(history) && history.length > 0
+        ? history.slice(-MAX_AI_CONTEXT_MESSAGES)
+        : (sessionManager?.getSnapshot()?.messages || []).slice(-MAX_AI_CONTEXT_MESSAGES);
+    }
 
     if (regenerate) {
       sessionManager.removeLastAssistantMessage();
@@ -175,7 +211,9 @@ function registerAiIpc({
 
     if (!skipUserPersist && text) {
       sessionManager.addMessage({ role: "user", content: text });
-      sessionManager.trimMessages(MAX_STORED_MESSAGES);
+      if (!isMemoryChat) {
+        sessionManager.trimMessages(MAX_STORED_MESSAGES);
+      }
     }
 
     broadcastAgentState("thinking");
@@ -214,6 +252,7 @@ function registerAiIpc({
         settings: requestSettings,
         signal: controller.signal,
         sessionId: sessionManager?.getSnapshot?.()?.sessionId || "",
+        operation: chatOperation,
         onChunk: (chunk) => {
           if (!event.sender.isDestroyed()) {
             event.sender.send("ai-chunk", chunk);
@@ -224,7 +263,24 @@ function registerAiIpc({
       const parsed = parsePointTag(fullText);
       const assistantContent = parsed.spokenText || fullText;
       sessionManager.addMessage({ role: "assistant", content: assistantContent });
-      sessionManager.trimMessages(MAX_STORED_MESSAGES);
+      if (!isMemoryChat) {
+        sessionManager.trimMessages(MAX_STORED_MESSAGES);
+      }
+
+      if (isMemoryChat) {
+        setImmediate(() => {
+          void maybeCompressMemoryChat({
+            store,
+            sessionManager,
+            streamAIResponse,
+            getRuntimeSettings,
+            persistActiveSession,
+            broadcastSessionSnapshot,
+            getActiveChatSessionRecord,
+            appLogger,
+          });
+        });
+      }
 
       if (!event.sender.isDestroyed()) {
         event.sender.send("ai-done", { ...parsed, requestId: requestContext.requestId });

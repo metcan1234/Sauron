@@ -9,6 +9,7 @@ const {
   normalizeBrowserExecutionSubstep,
   normalizePlan,
 } = require("./session-schema");
+const { MICRO_GUIDE_MAX_TURNS } = require("../agent/micro-guide/micro-guide-constants");
 
 class SessionManager extends EventEmitter {
   constructor() {
@@ -41,6 +42,9 @@ class SessionManager extends EventEmitter {
       evaluationHistory: session.evaluationHistory.slice(),
       status: session.status,
       lastPointer: session.lastPointer,
+      microGuideSession: session.microGuideSession
+        ? { ...session.microGuideSession }
+        : null,
       updatedAt: session.updatedAt,
     };
   }
@@ -83,6 +87,50 @@ class SessionManager extends EventEmitter {
       }
     }
     return false;
+  }
+
+  applyMemoryCompression({ summaryText, removeCount }) {
+    const trimmedSummary = String(summaryText || "").trim();
+    const count = Number(removeCount);
+    if (!trimmedSummary || !Number.isFinite(count) || count <= 0) {
+      return false;
+    }
+
+    const messages = this.session.messages;
+    const existingSummary = messages.find((entry) => entry.role === "memory-summary");
+    const mergedSummary = existingSummary?.content
+      ? `${trimmedSummary}\n\n${String(existingSummary.content).trim()}`.trim()
+      : trimmedSummary;
+
+    const nextMessages = [{
+      role: "memory-summary",
+      content: mergedSummary,
+      createdAt: new Date().toISOString(),
+    }];
+
+    let remaining = count;
+    for (const entry of messages) {
+      if (entry?.role === "memory-summary") {
+        continue;
+      }
+      if ((entry?.role === "user" || entry?.role === "assistant") && remaining > 0) {
+        remaining -= 1;
+        continue;
+      }
+      nextMessages.push({
+        role: entry.role,
+        content: String(entry.content || ""),
+        createdAt: entry.createdAt || new Date().toISOString(),
+      });
+    }
+
+    if (remaining > 0) {
+      return false;
+    }
+
+    this.session.messages = nextMessages;
+    this.emitUpdate();
+    return true;
   }
 
   trimMessages(maxCount) {
@@ -313,6 +361,72 @@ class SessionManager extends EventEmitter {
     this.emitUpdate();
   }
 
+  getMicroGuideSession() {
+    return this.session.microGuideSession;
+  }
+
+  startMicroGuideSession({ goal, maxTurns = MICRO_GUIDE_MAX_TURNS } = {}) {
+    const now = new Date().toISOString();
+    this.session.microGuideSession = {
+      active: true,
+      goal: String(goal || "").trim(),
+      turnCount: 0,
+      maxTurns: Number.isFinite(maxTurns) && maxTurns > 0 ? maxTurns : MICRO_GUIDE_MAX_TURNS,
+      lastInstruction: "",
+      lastActivityAt: now,
+      status: "thinking",
+    };
+    this.emitUpdate();
+    return this.session.microGuideSession;
+  }
+
+  clearMicroGuideSession() {
+    this.session.microGuideSession = null;
+    this.emitUpdate();
+  }
+
+  incrementMicroGuideTurn() {
+    if (!this.session.microGuideSession?.active) {
+      return null;
+    }
+    this.session.microGuideSession.turnCount += 1;
+    this.emitUpdate();
+    return this.session.microGuideSession.turnCount;
+  }
+
+  resetMicroGuideTurnCount() {
+    if (!this.session.microGuideSession?.active) {
+      return null;
+    }
+    this.session.microGuideSession.turnCount = 0;
+    this.emitUpdate();
+    return 0;
+  }
+
+  touchMicroGuideActivity() {
+    if (!this.session.microGuideSession?.active) {
+      return;
+    }
+    this.session.microGuideSession.lastActivityAt = new Date().toISOString();
+    this.emitUpdate();
+  }
+
+  setMicroGuideStatus(status) {
+    if (!this.session.microGuideSession?.active) {
+      return;
+    }
+    this.session.microGuideSession.status = status;
+    this.emitUpdate();
+  }
+
+  setMicroGuideLastInstruction(instruction) {
+    if (!this.session.microGuideSession?.active) {
+      return;
+    }
+    this.session.microGuideSession.lastInstruction = String(instruction || "").trim();
+    this.emitUpdate();
+  }
+
   hydrateSession(snapshot) {
     if (!snapshot || typeof snapshot !== "object") {
       this.session = createEmptySession();
@@ -334,6 +448,9 @@ class SessionManager extends EventEmitter {
       evaluationHistory: Array.isArray(snapshot.evaluationHistory) ? snapshot.evaluationHistory.slice() : [],
       status: snapshot.status || "idle",
       lastPointer: snapshot.lastPointer || null,
+      microGuideSession: snapshot.microGuideSession
+        ? { ...snapshot.microGuideSession }
+        : null,
       updatedAt: snapshot.updatedAt || new Date().toISOString(),
     };
     this.emitUpdate();

@@ -552,11 +552,36 @@ export function createPanelController({
       return;
     }
     const snapshot = sessionSnapshot || state.getSessionSnapshot();
+    const microActive = Boolean(snapshot?.microGuideSession?.active);
     const hasActivePlan = Boolean(snapshot?.activePlan);
     const waitingUser = snapshot?.status === "waiting_user";
     const browserActive = isActiveBrowserExecution(snapshot?.browserExecution || state.getBrowserExecution());
-    const shouldShow = hasActivePlan && waitingUser && !browserActive;
+    const shouldShow = hasActivePlan && waitingUser && !browserActive && !microActive;
     dom.panelActions.classList.toggle("hidden", !shouldShow);
+    updateMicroGuideActionVisibility(snapshot);
+  }
+
+  function updateMicroGuideActionVisibility(sessionSnapshot = null) {
+    if (!dom.microGuideActions) {
+      return;
+    }
+    const snapshot = sessionSnapshot || state.getSessionSnapshot();
+    const micro = snapshot?.microGuideSession;
+    const active = Boolean(micro?.active);
+    const waiting = micro?.status === "waiting_user" || micro?.status === "limit_reached";
+    const shouldShow = active && waiting;
+    dom.microGuideActions.classList.toggle("hidden", !shouldShow);
+    ui.renderMicroGuideBadge(micro);
+
+    if (dom.btnMicroGuideDone) {
+      dom.btnMicroGuideDone.disabled = !active || micro?.status === "limit_reached";
+    }
+    if (dom.btnMicroGuideContinue) {
+      dom.btnMicroGuideContinue.classList.toggle("hidden", micro?.status !== "limit_reached");
+    }
+    if (dom.btnMicroGuideCancel) {
+      dom.btnMicroGuideCancel.disabled = !active;
+    }
   }
 
   function updateModeBarStepCounter(stepNumber) {
@@ -816,6 +841,47 @@ export function createPanelController({
 
     if (dom.btnCaptureScreen) {
       dom.btnCaptureScreen.addEventListener("click", () => messaging.captureScreenshot());
+    }
+    if (dom.btnMicroGuide) {
+      dom.btnMicroGuide.addEventListener("click", async () => {
+        if (state.isStreaming()) {
+          return;
+        }
+        const goal = await ui.promptDialog({
+          title: "Mikro rehber",
+          message: "Ne konuda ekran yardımı istersiniz?",
+          defaultValue: "Ekranımda yardım et",
+          confirmLabel: "Başlat",
+          cancelLabel: "İptal",
+        });
+        if (!goal) {
+          return;
+        }
+        await messaging.startMicroGuideSession(goal);
+      });
+    }
+    if (dom.btnMicroGuideDone) {
+      dom.btnMicroGuideDone.addEventListener("click", () => messaging.ackMicroGuide());
+    }
+    if (dom.btnMicroGuideContinue) {
+      dom.btnMicroGuideContinue.addEventListener("click", async () => {
+        try {
+          await api.invoke("micro-guide-continue");
+        } catch (error) {
+          log("ipc:micro-guide-continue error", error);
+          ui.showToast(error?.message || "Devam edilemedi", true);
+        }
+      });
+    }
+    if (dom.btnMicroGuideCancel) {
+      dom.btnMicroGuideCancel.addEventListener("click", async () => {
+        try {
+          await api.invoke("micro-guide-cancel");
+        } catch (error) {
+          log("ipc:micro-guide-cancel error", error);
+          ui.showToast(error?.message || "İptal edilemedi", true);
+        }
+      });
     }
     if (dom.assistantModeBadge) {
       dom.assistantModeBadge.addEventListener("click", () => toggleAssistantMode());

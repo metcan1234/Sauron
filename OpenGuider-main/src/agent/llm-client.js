@@ -11,6 +11,10 @@ async function loadLangChainCore() {
   };
 }
 
+function usesLocatorJsonFallback(operationName = "") {
+  return operationName.startsWith("locator") || operationName === "guide-micro-instruct";
+}
+
 async function invokeStructuredChain({
   settings,
   systemPrompt,
@@ -49,7 +53,7 @@ async function invokeStructuredChain({
         try {
           return {
             rawText,
-            value: schema ? parseStructuredJSON(rawText, schema, operationName.startsWith("locator")) : rawText,
+            value: schema ? parseStructuredJSON(rawText, schema, usesLocatorJsonFallback(operationName)) : rawText,
           };
         } catch (error) {
           throw new Error(`[${operationName}] ${error.message}`);

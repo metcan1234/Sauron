@@ -55,5 +55,8 @@ export async function ensureWorkspaceReady(workspaceRoot: string): Promise<Works
 	}
 
 	await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(target), false)
+	if (await waitForWorkspaceFolder(target, WORKSPACE_WAIT_MS * 2)) {
+		return { ready: true, opened: true }
+	}
 	return { ready: false, opened: true }
 }

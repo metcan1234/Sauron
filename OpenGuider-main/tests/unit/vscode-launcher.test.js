@@ -82,7 +82,42 @@ function installLaunchTransportMocks(t, { passthroughExecFile = false } = {}) {
   };
 }
 
-test("spawnVSCodeProcess on Windows uses PowerShell Start-Process for code.cmd", async (t) => {
+test("spawnVSCodeProcess on Windows redirects code.cmd to Code.exe via detached spawn", async (t) => {
+  if (process.platform !== "win32") {
+    t.skip("Windows-only spawn path");
+    return;
+  }
+
+  const { spawnCalls } = installLaunchTransportMocks(t);
+
+  const installRoot = fs.mkdtempSync(path.join(os.tmpdir(), "og-vscode-launch-"));
+  const binDir = path.join(installRoot, "bin");
+  fs.mkdirSync(binDir, { recursive: true });
+  const codeCmd = path.join(binDir, "code.cmd");
+  const codeExe = path.join(installRoot, "Code.exe");
+  fs.writeFileSync(codeCmd, "@echo off\r\n", "utf8");
+  fs.writeFileSync(codeExe, "", "utf8");
+  const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "og-vscode-workspace-"));
+
+  delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
+  delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
+  const { spawnVSCodeProcess } = require("../../src/sauron/vscode-launcher");
+
+  await spawnVSCodeProcess(
+    { kind: "cmd", path: codeCmd },
+    ["-n", workspaceDir],
+  );
+
+  assert.equal(spawnCalls.length, 1);
+  assert.match(String(spawnCalls[0].command), /Code\.exe$/i);
+  assert.deepEqual(spawnCalls[0].args, ["--new-window", workspaceDir]);
+  assert.equal(spawnCalls[0].options?.windowsHide, false);
+
+  fs.rmSync(installRoot, { recursive: true, force: true });
+  fs.rmSync(workspaceDir, { recursive: true, force: true });
+});
+
+test("spawnVSCodeProcess falls back to hidden code.cmd when Code.exe is missing", async (t) => {
   if (process.platform !== "win32") {
     t.skip("Windows-only spawn path");
     return;
@@ -111,49 +146,36 @@ test("spawnVSCodeProcess on Windows uses PowerShell Start-Process for code.cmd",
     delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
   });
 
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "og-vscode-launch-"));
+  const installRoot = fs.mkdtempSync(path.join(os.tmpdir(), "og-vscode-launch-fallback-"));
+  const codeCmd = path.join(installRoot, "code.cmd");
+  fs.writeFileSync(codeCmd, "@echo off\r\n", "utf8");
+  const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "og-vscode-workspace-fallback-"));
+
   delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
   delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
   const { spawnVSCodeProcess } = require("../../src/sauron/vscode-launcher");
 
   await spawnVSCodeProcess(
-    { kind: "cmd", path: "C:\\Microsoft VS Code\\bin\\code.cmd" },
-    ["-n", tmpDir],
+    { kind: "cmd", path: codeCmd },
+    ["-n", workspaceDir],
   );
 
   assert.equal(execCalls.length, 1);
   const psCommand = execCalls[0][1][execCalls[0][1].indexOf("-Command") + 1];
-  assert.match(psCommand, /Start-Process/);
   assert.match(psCommand, /code\.cmd/);
-  assert.match(psCommand, /-n/);
   assert.match(psCommand, /-WindowStyle Hidden/);
+
+  fs.rmSync(installRoot, { recursive: true, force: true });
+  fs.rmSync(workspaceDir, { recursive: true, force: true });
 });
 
-test("spawnVSCodeProcess on Windows uses PowerShell Start-Process for Code.exe", async (t) => {
+test("spawnVSCodeProcess on Windows uses detached spawn for Code.exe", async (t) => {
   if (process.platform !== "win32") {
     t.skip("Windows-only spawn guard");
     return;
   }
 
-  const execCalls = [];
-  const originalExecFile = childProcess.execFile;
-  childProcess.execFile = (command, args, options, callback) => {
-    if (typeof options === "function") {
-      callback = options;
-      options = {};
-    }
-    execCalls.push([command, args, options]);
-    if (callback) {
-      callback(null, "", "");
-    }
-    return {};
-  };
-
-  t.after(() => {
-    childProcess.execFile = originalExecFile;
-    delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
-    delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
-  });
+  const { spawnCalls } = installLaunchTransportMocks(t);
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "og-vscode-launch-"));
   delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
@@ -162,16 +184,12 @@ test("spawnVSCodeProcess on Windows uses PowerShell Start-Process for Code.exe",
 
   await spawnVSCodeProcess({ kind: "exe", path: "C:\\VS Code\\Code.exe" }, ["--new-window", tmpDir]);
 
-  assert.equal(execCalls.length, 1);
-  const [command, args] = execCalls[0];
-  assert.equal(command, "powershell.exe");
-  assert.ok(args.includes("-Command"));
-  const psCommand = args[args.indexOf("-Command") + 1];
-  assert.match(psCommand, /Start-Process/);
-  assert.match(psCommand, /Code\.exe/);
-  assert.match(psCommand, /--new-window/);
-  assert.match(psCommand, /-WindowStyle Normal/);
-  assert.doesNotMatch(psCommand, /cmd\.exe start/i);
+  assert.equal(spawnCalls.length, 1);
+  assert.equal(spawnCalls[0].command, "C:\\VS Code\\Code.exe");
+  assert.deepEqual(spawnCalls[0].args, ["--new-window", tmpDir]);
+  assert.equal(spawnCalls[0].options?.windowsHide, false);
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
 test("openWorkspaceInVSCode debounces duplicate launches", async (t) => {
@@ -1221,8 +1239,8 @@ test("openWorkspaceInVSCode tries disable-gpu profile when default launch fails 
   assert.equal(result.launchProfile, "disable-gpu");
   assert.equal(result.action, "launch_disable_gpu");
   assert.ok(countLaunchCalls(execCalls, spawnCalls) >= 2);
-  const psCommands = execCalls.map(([, args]) => args[args.indexOf("-Command") + 1]);
-  assert.ok(psCommands.some((cmd) => String(cmd).includes("--disable-gpu")));
+  const allSpawnArgs = spawnCalls.flatMap((entry) => entry.args || []);
+  assert.ok(allSpawnArgs.some((arg) => String(arg).includes("--disable-gpu")));
 });
 
 test("focusWorkspaceInVSCode escalates during post-verify grace when window is lost", async (t) => {

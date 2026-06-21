@@ -22,6 +22,8 @@ export function queryPanelDom(doc = document) {
     panelRoot: doc.querySelector(".panel"),
     agentStatus: doc.getElementById("agent-status"),
     assistantModeBadge: doc.getElementById("assistant-mode-badge"),
+    microGuideBadge: doc.getElementById("micro-guide-badge"),
+    btnMicroGuide: doc.getElementById("btn-micro-guide"),
     btnCaptureScreen: doc.getElementById("btn-capture-screen"),
     btnAttachFile: doc.getElementById("btn-attach-file"),
     attachmentFileInput: doc.getElementById("attachment-file-input"),
@@ -51,6 +53,7 @@ export function queryPanelDom(doc = document) {
     planGoal: doc.getElementById("plan-goal"),
     planPanel: doc.getElementById("plan-panel"),
     panelActions: doc.getElementById("panel-actions"),
+    microGuideActions: doc.getElementById("micro-guide-actions"),
     planProgress: doc.getElementById("plan-progress"),
     planSteps: doc.getElementById("plan-steps"),
     btnPlanDone: doc.getElementById("btn-plan-done"),
@@ -60,6 +63,9 @@ export function queryPanelDom(doc = document) {
     btnPlanRegenerate: doc.getElementById("btn-plan-regenerate"),
     btnPlanRecheck: doc.getElementById("btn-plan-recheck"),
     btnPlanCancel: doc.getElementById("btn-plan-cancel"),
+    btnMicroGuideDone: doc.getElementById("btn-micro-guide-done"),
+    btnMicroGuideContinue: doc.getElementById("btn-micro-guide-continue"),
+    btnMicroGuideCancel: doc.getElementById("btn-micro-guide-cancel"),
     errorBanner: doc.getElementById("error-banner"),
     errorBannerTitle: doc.getElementById("error-banner-title"),
     errorBannerMessage: doc.getElementById("error-banner-message"),
@@ -80,6 +86,7 @@ export function queryPanelDom(doc = document) {
     chatDrawerClose: doc.getElementById("chat-drawer-close"),
     chatDrawerSearch: doc.getElementById("chat-drawer-search"),
     chatDrawerNew: doc.getElementById("chat-drawer-new"),
+    chatDrawerMemory: doc.getElementById("chat-drawer-memory"),
     chatDrawerCreateFolder: doc.getElementById("chat-drawer-create-folder"),
     chatDrawerEphemeral: doc.getElementById("chat-drawer-ephemeral"),
     chatDrawerList: doc.getElementById("chat-drawer-list"),
@@ -407,6 +414,30 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     dom.providerDot.title = provider;
   }
 
+  function appendMemorySummaryMessage(text, messageIndex) {
+    const messageElement = doc.createElement("div");
+    messageElement.className = "message memory-summary";
+    if (Number.isFinite(messageIndex)) {
+      messageElement.dataset.messageIndex = String(messageIndex);
+    }
+
+    const card = doc.createElement("div");
+    card.className = "memory-summary-card";
+
+    const heading = doc.createElement("div");
+    heading.className = "memory-summary-title";
+    heading.textContent = "Geçmiş özeti";
+
+    const body = doc.createElement("p");
+    body.textContent = String(text || "").trim();
+
+    card.appendChild(heading);
+    card.appendChild(body);
+    messageElement.appendChild(card);
+    dom.chatMessages.appendChild(messageElement);
+    scrollToBottom();
+  }
+
   function appendUserMessage(text, images, messageIndex) {
     const messageElement = doc.createElement("div");
     messageElement.className = "message user";
@@ -590,7 +621,9 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     }
 
     messages.forEach((message, index) => {
-      if (message.role === "user") {
+      if (message.role === "memory-summary") {
+        appendMemorySummaryMessage(message.content, index);
+      } else if (message.role === "user") {
         appendUserMessage(message.content, message.images, index);
       } else {
         appendAssistantMessage(message.content, index);
@@ -1089,6 +1122,17 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     dom.assistantModeBadge.classList.toggle("is-guide", normalized === "guide");
   }
 
+  function renderMicroGuideBadge(microGuideSession) {
+    if (!dom.microGuideBadge) {
+      return;
+    }
+    const active = Boolean(microGuideSession?.active);
+    dom.microGuideBadge.classList.toggle("hidden", !active);
+    if (active) {
+      dom.microGuideBadge.textContent = "Rehber · Mikro-tur";
+    }
+  }
+
   function renderAttachmentPreviewStrip(attachments, onRemove) {
     if (!dom.attachmentPreviewStrip) {
       return;
@@ -1315,6 +1359,7 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     renderScreenshotPreviewStrip,
     updateScreenPendingBadge,
     renderAssistantModeBadge,
+    renderMicroGuideBadge,
     renderFinOpsBadge,
     confirmDialog,
     showTypingIndicator,

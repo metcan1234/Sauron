@@ -63,6 +63,15 @@ export function createSelfBuildStudioController({ api, ui, doc }) {
       finishBtn.textContent = "Başlatılıyor…";
     }
     try {
+      const capReport = await api.invoke("get-cline-capability-report");
+      if (capReport?.variant && capReport.variant !== "fork") {
+        const proceed = window.confirm(
+          "Pipeline otomatik faz zinciri Cline fork gerektirir; Marketplace'te fazlar manuel ilerler. Devam edilsin mi?",
+        );
+        if (!proceed) {
+          return;
+        }
+      }
       const result = await api.invoke("start-build-pipeline", {
         pipelineId,
         options: { taskDescription, costProfile },
@@ -70,6 +79,9 @@ export function createSelfBuildStudioController({ api, ui, doc }) {
       if (!result?.ok) {
         ui.showToast(result?.error || "Pipeline başlatılamadı", true);
         return;
+      }
+      if (Array.isArray(result.forkLimitations) && result.forkLimitations.length > 0) {
+        ui.showToast(result.forkLimitations[0]);
       }
       ui.showToast(`Pipeline başladı — faz 1/${result.pipeline?.totalPhases || "?"}`);
       closeWizard();

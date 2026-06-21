@@ -39,6 +39,20 @@ const EvaluationSchema = z.object({
   assistantResponse: z.string().min(1),
 });
 
+const MicroGuidePointerSchema = z.object({
+  x: z.number().min(0).max(1000),
+  y: z.number().min(0).max(1000),
+  label: z.string().nullable().optional(),
+}).nullable().default(null);
+
+const MicroGuideInstructSchema = z.object({
+  chatMessage: z.string().min(1),
+  pointer: MicroGuidePointerSchema,
+  shouldPoint: z.boolean().default(false),
+  isTaskComplete: z.boolean().default(false),
+  typeHint: z.string().nullable().optional(),
+});
+
 function extractJSONObject(rawText = "") {
   const fencedMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = fencedMatch ? fencedMatch[1] : rawText;
@@ -89,6 +103,7 @@ function parseStructuredJSON(rawText, schema, isLocator = false) {
 
 module.exports = {
   EvaluationSchema,
+  MicroGuideInstructSchema,
   PlannerResultSchema,
   StepPointerSchema,
   extractJSONObject,

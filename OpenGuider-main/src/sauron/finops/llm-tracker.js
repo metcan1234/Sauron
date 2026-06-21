@@ -18,7 +18,7 @@ class BudgetExceededError extends Error {
   }
 }
 
-const OVERLAY_SKIP_OPERATIONS = new Set(["handoff-summary"]);
+const OVERLAY_SKIP_OPERATIONS = new Set(["handoff-summary", "memory-chat-summary", "guide-micro-instruct"]);
 
 let budgetContext = {
   getWindows: () => [],

@@ -8,6 +8,11 @@ const {
 const { runVerification } = require("../sauron/build-pipeline/pipeline-state");
 const { detectWorkspaceLayout } = require("../sauron/workspace-detector");
 const { launchVSCode } = require("../sauron/handoff");
+const {
+  probeClineCapabilities,
+  getForkLimitations,
+  requiresForkForAutoChain,
+} = require("../sauron/cline-capability-probe");
 
 function registerBuildPipelineIpc({
   ipcMain,
@@ -42,6 +47,11 @@ function registerBuildPipelineIpc({
     }
     try {
       const settings = getRuntimeSettings();
+      const clineProbe = probeClineCapabilities();
+      const autoChainEnabled = settings.pipelineAutoChain !== false;
+      const forkLimitations = autoChainEnabled && requiresForkForAutoChain(clineProbe)
+        ? getForkLimitations(clineProbe)
+        : [];
       const result = await startBuildPipeline({
         pipelineId,
         workspacePath: resolved,
@@ -49,7 +59,7 @@ function registerBuildPipelineIpc({
         options: options || {},
       });
       if (!result.ok) {
-        return result;
+        return { ...result, forkLimitations };
       }
       try {
         await launchVSCode(resolved, { newWindow: false });
@@ -61,7 +71,7 @@ function registerBuildPipelineIpc({
       if (panelWindow && !panelWindow.isDestroyed()) {
         panelWindow.webContents.send("pipeline-updated", getBuildPipelineStatus(resolved));
       }
-      return result;
+      return { ...result, forkLimitations };
     } catch (error) {
       return { ok: false, error: error?.message || "Failed to start build pipeline." };
     }

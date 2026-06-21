@@ -11,7 +11,8 @@
     "debug": "cross-env DEBUG_PREPOST=1 electron .",
     "dev": "electron . --inspect",
     "test": "node --test \"tests/**/*.test.js\"",
-    "test:integration": "node --test tests/integration/vscode-launch.integration.test.js",
+    "test:unit": "node --test \"tests/unit/**/*.test.js\" \"tests/ui/**/*.test.js\"",
+    "test:integration": "node --test \"tests/integration/**/*.test.js\"",
     "test:vscode-launch": "node scripts/verify-vscode-launch.js",
     "test:vscode-stability": "node scripts/diagnose-vscode-launch.js",
     "predist:win": "node scripts/pre-dist-check.js",
@@ -92,7 +93,7 @@
     },
     "win": {
       "icon": "renderer/assets/logo.ico",
-      "signAndEditExecutable": true,
+      "signAndEditExecutable": false,
       "target": [
         {
           "target": "nsis",

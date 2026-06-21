@@ -14,6 +14,7 @@ function registerChatSessionsIpc({
   panelWindow,
   createChatFolder,
   createEphemeralChatSession,
+  createMemoryChatSession,
   createNewChatSession,
   deleteChatFolder,
   deleteChatSession,
@@ -65,6 +66,14 @@ function registerChatSessionsIpc({
   ipcMain.handle("create-ephemeral-chat-session", () => {
     debugLog("ipc:create-ephemeral-chat-session");
     const created = createEphemeralChatSession(store, sessionManager);
+    const snapshot = sessionManager.getSnapshot();
+    broadcastSessionSnapshot(snapshot);
+    return { ok: true, ...created, snapshot };
+  });
+
+  ipcMain.handle("create-memory-chat-session", (_event, { title } = {}) => {
+    debugLog("ipc:create-memory-chat-session", { title: title || "" });
+    const created = createMemoryChatSession(store, sessionManager, { title });
     const snapshot = sessionManager.getSnapshot();
     broadcastSessionSnapshot(snapshot);
     return { ok: true, ...created, snapshot };

@@ -56,6 +56,7 @@ const {
 const {
   createEphemeralChatSession,
   createChatFolder,
+  createMemoryChatSession,
   createNewChatSession,
   deleteChatFolder,
   deleteChatSession,
@@ -69,6 +70,7 @@ const {
   exportAllSessionsJson,
   formatChatExportMarkdown,
   getActiveChatSessionTitle,
+  getActiveChatSessionRecord,
   getChatSessionById,
   importChatSessionsFromJson,
   renameChatFolder,
@@ -111,6 +113,7 @@ const { registerWorkspaceIpc } = require("./src/ipc/workspace-ipc");
 const { registerFinOpsIpc } = require("./src/ipc/finops-ipc");
 const { registerBrowserIpc } = require("./src/ipc/browser-ipc");
 const { registerWebStudioIpc } = require("./src/ipc/web-studio-ipc");
+const { registerMicroGuideIpc } = require("./src/ipc/micro-guide-ipc");
 const { registerBuildPipelineIpc } = require("./src/ipc/build-pipeline-ipc");
 const { createWindowManager } = require("./src/main/window-manager");
 const { createTrayMenu } = require("./src/main/tray-menu");
@@ -1268,7 +1271,11 @@ async function handleOrchestratorResult(result, settings, sender) {
   // In planning flow, speak only the current actionable step once when pointer appears.
   if (result?.pointer?.shouldPoint && result?.assistantMessage) {
     const ttsText = result?.userInputRequest?.message || result.assistantMessage;
-    await speakAssistantResponse(ttsText, settings, sender);
+    try {
+      await speakAssistantResponse(ttsText, settings, sender);
+    } catch (err) {
+      appLogger.error("orchestrator:tts-failed", { error: err });
+    }
   }
 
   return result;
@@ -1306,6 +1313,7 @@ function registerModularIpcHandlers() {
     panelWindow,
     createChatFolder,
     createEphemeralChatSession,
+    createMemoryChatSession,
     createNewChatSession,
     deleteChatFolder,
     deleteChatSession,
@@ -1337,6 +1345,7 @@ function registerModularIpcHandlers() {
     getRuntimeSettings,
     handleOrchestratorResult,
     parsePointTag,
+    persistActiveSession,
     recordPerformanceMetric,
     sessionManager,
     speakAssistantResponse,
@@ -1350,6 +1359,7 @@ function registerModularIpcHandlers() {
     broadcastSessionSnapshot,
     showPointer,
     wrapUserFacingError,
+    getActiveChatSessionRecord,
   });
 
   registerWorkspaceIpc({
@@ -1390,6 +1400,22 @@ function registerModularIpcHandlers() {
     shell,
     store,
     debugLog,
+  });
+
+  registerMicroGuideIpc({
+    ipcMain,
+    appLogger,
+    createRequestContext,
+    currentAIControllerRef,
+    debugLog,
+    getRuntimeSettings,
+    handleOrchestratorResult,
+    recordPerformanceMetric,
+    sessionManager,
+    taskOrchestrator,
+    updatePointerCalibration,
+    broadcastSessionSnapshot,
+    wrapUserFacingError,
   });
 
   registerBuildPipelineIpc({

@@ -337,6 +337,40 @@ Examples:
 
 ## Build Installers (Windows/macOS/Linux)
 
+### Windows Setup.exe (kendi bilgisayarınız için)
+
+Önkoşullar: Node.js 20+, npm, Git. VS Code Bridge VSIX paketlenmiş olmalı (`sauron-vscode-bridge/dist/sauron-vscode-bridge.vsix`).
+
+```powershell
+cd OpenGuider-main
+npm install
+
+# Bridge VSIX (henüz yoksa)
+cd ..\sauron-vscode-bridge
+npm install
+npm run package:vsix
+cd ..\OpenGuider-main
+
+# Tek komut (test + syntax + NSIS installer)
+npm run dist:win
+```
+
+Çıktı: `release/Sauron-{version}-win-x64.exe` — çift tıklayın, kurulum yolunu seçin; masaüstü ve Başlat menüsü kısayolları otomatik oluşur.
+
+Alternatif tam script: `scripts/build-windows-release.ps1` (npm ci + bridge + dist:win).
+
+Geliştirme akışı değişmez: `npm start` ile terminalden çalıştırmaya devam edebilirsiniz.
+
+**Paket içeriği notları**
+
+- Python browser sidecar script'leri `app.asar.unpacked` altına kopyalanır; Python binary pakete gömülmez — sistem Python'unuz veya daha önce indirilmiş `userData/python-runtime` kullanılır.
+- `.sauron/` usage logları ve ayarlar Electron `userData` (workspace bazlı) altında kalır; geliştirme yollarına kilitlenmez.
+- VS Code launcher (`resolveVscodeExecutablePath`) kurulu uygulamada da sistemdeki `code`/`Code.exe` yolunu dinamik arar.
+
+Code signing gerekmez (`CSC_IDENTITY_AUTO_DISCOVERY=false`).
+
+### Tüm platformlar
+
 - Build all platform targets on your current OS: `npm run dist`
 - Build only Windows NSIS installer (`.exe`): `npm run dist:win`
 - Build only macOS installer (`.dmg`): `npm run dist:mac`

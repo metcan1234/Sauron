@@ -12,6 +12,8 @@ const { createInteractionPipeline } = require("./interaction-pipeline");
 const { ExecutionEngine } = require("../core/execution-engine");
 const { registry } = require("../core/plugin-registry");
 const { IntentRouter } = require("../core/intent-router");
+const { instructMicroGuideTurn } = require("./micro-guide/micro-guide-instructor");
+const { MICRO_GUIDE_IDLE_MS } = require("./micro-guide/micro-guide-constants");
 
 const logger = createLogger("task-orchestrator");
 const DECISION_TIMEOUT_MS = 120_000;
@@ -375,6 +377,9 @@ class TaskOrchestrator {
 
   async startGoalSession({ text, images, settings, signal, requestId }) {
     logger.info("start-goal-session", { requestId, textLength: text?.length || 0, imageCount: images?.length || 0 });
+    if (this.sessionManager.getMicroGuideSession()?.active) {
+      throw new Error("Mikro rehber aktifken planlı rehber başlatılamaz.");
+    }
     this.sessionManager.addMessage({ role: "user", content: text });
     this.sessionManager.setGoalIntent(text);
 
@@ -1358,6 +1363,205 @@ class TaskOrchestrator {
       signal,
       forcePointing: true,
     });
+  }
+
+  isMicroGuideIdle(microSession) {
+    if (!microSession?.lastActivityAt) {
+      return false;
+    }
+    const elapsed = Date.now() - new Date(microSession.lastActivityAt).getTime();
+    return elapsed > MICRO_GUIDE_IDLE_MS;
+  }
+
+  buildMicroGuidePointer(instruction) {
+    if (!instruction?.shouldPoint || !instruction?.pointer) {
+      return null;
+    }
+    return {
+      coordinate: { x: instruction.pointer.x, y: instruction.pointer.y },
+      label: instruction.pointer.label,
+      explanation: instruction.chatMessage,
+      shouldPoint: true,
+    };
+  }
+
+  completeMicroGuide(message) {
+    const assistantMessage = message || "Mikro rehber oturumu tamamlandı.";
+    this.sessionManager.addMessage({ role: "assistant", content: assistantMessage });
+    this.sessionManager.setCurrentPointer(null);
+    this.sessionManager.clearMicroGuideSession();
+    this.sessionManager.setStatus("idle");
+    return {
+      assistantMessage,
+      pointer: null,
+      session: this.sessionManager.getSnapshot(),
+      microGuideComplete: true,
+    };
+  }
+
+  async runMicroGuideInstructTurn({ images, settings, signal }) {
+    const micro = this.sessionManager.getMicroGuideSession();
+    if (!micro?.active) {
+      return {
+        assistantMessage: "Aktif mikro rehber oturumu yok.",
+        pointer: null,
+        session: this.sessionManager.getSnapshot(),
+      };
+    }
+
+    this.sessionManager.setMicroGuideStatus("thinking");
+    this.sessionManager.setStatus("executing");
+    const turnNumber = micro.turnCount + 1;
+
+    try {
+      const instruction = await instructMicroGuideTurn({
+        goal: micro.goal,
+        lastInstruction: micro.lastInstruction,
+        turnNumber,
+        maxTurns: micro.maxTurns,
+        images,
+        settings,
+        signal,
+      });
+
+      this.sessionManager.incrementMicroGuideTurn();
+      this.sessionManager.setMicroGuideLastInstruction(instruction.chatMessage);
+      this.sessionManager.touchMicroGuideActivity();
+      this.sessionManager.addMessage({ role: "assistant", content: instruction.chatMessage });
+
+      if (instruction.isTaskComplete) {
+        return this.completeMicroGuide("Görev tamamlandı. Başka bir konuda yardımcı olabilir miyim?");
+      }
+
+      const pointer = this.buildMicroGuidePointer(instruction);
+      this.sessionManager.setCurrentPointer(pointer);
+      this.sessionManager.setMicroGuideStatus("waiting_user");
+      this.sessionManager.setStatus("waiting_user");
+
+      return {
+        assistantMessage: instruction.chatMessage,
+        pointer,
+        session: this.sessionManager.getSnapshot(),
+        microGuideComplete: false,
+      };
+    } catch (error) {
+      logger.error("micro-guide-instruct-failed", { error: error.message });
+      this.sessionManager.setMicroGuideStatus("waiting_user");
+      this.sessionManager.setStatus("waiting_user");
+      const assistantMessage = "Şu an adımı belirleyemedim, lütfen tekrar deneyin";
+      this.sessionManager.addMessage({ role: "assistant", content: assistantMessage });
+      return {
+        assistantMessage,
+        pointer: null,
+        session: this.sessionManager.getSnapshot(),
+        parseError: true,
+      };
+    }
+  }
+
+  async startMicroGuideSession({ goal, images, settings, signal, requestId }) {
+    logger.info("start-micro-guide-session", {
+      requestId,
+      goalLength: goal?.length || 0,
+      imageCount: images?.length || 0,
+    });
+    const snapshot = this.sessionManager.getSnapshot();
+    if (snapshot.activePlan) {
+      throw new Error("Planlı rehber aktifken mikro rehber başlatılamaz.");
+    }
+    if (snapshot.microGuideSession?.active) {
+      this.cancelMicroGuide({ reason: "replaced", message: null });
+    }
+    if (!hasUsableScreenshots(images)) {
+      throw new Error("Ekran görüntüsü gerekli. Lütfen önce ekran yakalayın.");
+    }
+
+    this.sessionManager.addMessage({ role: "user", content: goal });
+    this.sessionManager.setLastScreenshots(images);
+    this.sessionManager.startMicroGuideSession({ goal });
+
+    return this.runMicroGuideInstructTurn({ images, settings, signal });
+  }
+
+  async ackMicroGuide({ images, settings, signal, requestId }) {
+    logger.info("micro-guide-ack", { requestId, imageCount: images?.length || 0 });
+    const micro = this.sessionManager.getMicroGuideSession();
+    if (!micro?.active) {
+      return {
+        assistantMessage: "Aktif mikro rehber oturumu yok.",
+        pointer: null,
+        session: this.sessionManager.getSnapshot(),
+      };
+    }
+
+    if (this.isMicroGuideIdle(micro)) {
+      return this.cancelMicroGuide({
+        reason: "idle",
+        message: "Mikro rehber oturumu zaman aşımı nedeniyle kapatıldı (5 dk).",
+      });
+    }
+
+    if (micro.turnCount >= micro.maxTurns) {
+      this.sessionManager.setMicroGuideStatus("limit_reached");
+      this.sessionManager.setStatus("waiting_user");
+      const assistantMessage = "Bu görev beklenenden uzun sürdü, devam etmek ister misiniz?";
+      this.sessionManager.addMessage({ role: "assistant", content: assistantMessage });
+      return {
+        assistantMessage,
+        pointer: null,
+        session: this.sessionManager.getSnapshot(),
+        limitReached: true,
+      };
+    }
+
+    if (!hasUsableScreenshots(images)) {
+      throw new Error("Yeni adım için ekran görüntüsü gerekli.");
+    }
+
+    this.sessionManager.setLastScreenshots(images);
+    return this.runMicroGuideInstructTurn({ images, settings, signal });
+  }
+
+  cancelMicroGuide({ reason, message } = {}) {
+    logger.info("micro-guide-cancel", { reason });
+    const hadSession = Boolean(this.sessionManager.getMicroGuideSession()?.active);
+    const assistantMessage = message
+      || (reason === "user" ? "Mikro rehber iptal edildi." : "Mikro rehber kapatıldı.");
+    if (hadSession && message !== null) {
+      this.sessionManager.addMessage({ role: "assistant", content: assistantMessage });
+    }
+    this.sessionManager.setCurrentPointer(null);
+    this.sessionManager.clearMicroGuideSession();
+    this.sessionManager.setStatus("idle");
+    return {
+      assistantMessage: hadSession && message !== null ? assistantMessage : "",
+      pointer: null,
+      session: this.sessionManager.getSnapshot(),
+    };
+  }
+
+  continueMicroGuide({ settings, signal, requestId }) {
+    logger.info("micro-guide-continue", { requestId });
+    const micro = this.sessionManager.getMicroGuideSession();
+    if (!micro?.active || micro.status !== "limit_reached") {
+      return {
+        assistantMessage: "Devam edilecek limit durumu yok.",
+        pointer: null,
+        session: this.sessionManager.getSnapshot(),
+      };
+    }
+
+    this.sessionManager.resetMicroGuideTurnCount();
+    this.sessionManager.touchMicroGuideActivity();
+    this.sessionManager.setMicroGuideStatus("waiting_user");
+    this.sessionManager.setStatus("waiting_user");
+    const assistantMessage = "Devam ediyoruz. Hazır olduğunuzda Yaptım'a basın.";
+    this.sessionManager.addMessage({ role: "assistant", content: assistantMessage });
+    return {
+      assistantMessage,
+      pointer: null,
+      session: this.sessionManager.getSnapshot(),
+    };
   }
 }
 

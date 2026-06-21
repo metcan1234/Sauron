@@ -4,6 +4,7 @@ node_modules/
 # Build outputs
 dist/
 release/
+release-v*/
 out/
 build/
 

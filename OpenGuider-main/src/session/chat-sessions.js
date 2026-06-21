@@ -51,10 +51,56 @@ function createDefaultState() {
   };
 }
 
-function createChatSnapshot(sessionSnapshot) {
-  const messages = Array.isArray(sessionSnapshot?.messages)
-    ? sessionSnapshot.messages.slice(-MAX_STORED_MESSAGES)
-    : [];
+function isMemoryChatSession(session) {
+  return Boolean(session?.isMemoryChat);
+}
+
+function getActiveChatSessionRecord(store) {
+  const state = ensureChatSessionsState(store);
+  return state.sessions[state.activeSessionId] || null;
+}
+
+function findRemovableSessionIndex(state) {
+  for (let index = state.order.length - 1; index >= 0; index -= 1) {
+    const sessionId = state.order[index];
+    const session = state.sessions[sessionId];
+    if (!session || sessionId === state.activeSessionId) {
+      continue;
+    }
+    if (session.pinned || session.isMemoryChat) {
+      continue;
+    }
+    return index;
+  }
+
+  for (let index = state.order.length - 1; index >= 0; index -= 1) {
+    const sessionId = state.order[index];
+    if (sessionId !== state.activeSessionId && state.sessions[sessionId] && !state.sessions[sessionId].pinned) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function enforceSessionLimit(state) {
+  state.order = state.order.slice(0, MAX_SESSIONS);
+  while (state.order.length > MAX_SESSIONS) {
+    const removableIndex = findRemovableSessionIndex(state);
+    if (removableIndex < 0) {
+      break;
+    }
+    const [removedId] = state.order.splice(removableIndex, 1);
+    if (removedId && removedId !== state.activeSessionId) {
+      delete state.sessions[removedId];
+    }
+  }
+}
+
+function createChatSnapshot(sessionSnapshot, options = {}) {
+  const isMemoryChat = Boolean(options.isMemoryChat);
+  const rawMessages = Array.isArray(sessionSnapshot?.messages) ? sessionSnapshot.messages : [];
+  const messages = isMemoryChat ? rawMessages.slice() : rawMessages.slice(-MAX_STORED_MESSAGES);
 
   return {
     sessionId: sessionSnapshot?.sessionId || randomUUID(),
@@ -78,7 +124,9 @@ function deriveSessionTitle(messages, fallback = "Yeni sohbet") {
 }
 
 function deriveSessionPreview(messages) {
-  const last = [...(Array.isArray(messages) ? messages : [])].reverse().find((entry) => entry?.content);
+  const last = [...(Array.isArray(messages) ? messages : [])]
+    .reverse()
+    .find((entry) => entry?.content && (entry.role === "user" || entry.role === "assistant"));
   if (!last?.content) {
     return "";
   }
@@ -111,7 +159,11 @@ function formatChatExportMarkdown(session) {
   ];
 
   for (const entry of messages) {
-    const roleLabel = entry?.role === "user" ? "Sen" : "Sauron";
+    const roleLabel = entry?.role === "user"
+      ? "Sen"
+      : entry?.role === "memory-summary"
+        ? "Geçmiş özeti"
+        : "Sauron";
     lines.push(`## ${roleLabel}`, "", String(entry?.content || "").trim(), "");
   }
 
@@ -203,6 +255,7 @@ function listChatSessionSummaries(store, options = {}) {
       updatedAt: session.updatedAt,
       pinned: Boolean(session.pinned),
       ephemeral: Boolean(session.ephemeral),
+      isMemoryChat: Boolean(session.isMemoryChat),
       folderId: session.folderId || null,
       messageCount: Array.isArray(session.snapshot?.messages) ? session.snapshot.messages.length : 0,
       preview: deriveSessionPreview(session.snapshot?.messages),
@@ -233,8 +286,9 @@ function persistActiveSession(store, sessionSnapshot) {
     updatedAt: now,
     pinned: Boolean(existing?.pinned),
     ephemeral: Boolean(existing?.ephemeral),
+    isMemoryChat: Boolean(existing?.isMemoryChat),
     folderId: existing?.folderId || null,
-    snapshot: createChatSnapshot(sessionSnapshot),
+    snapshot: createChatSnapshot(sessionSnapshot, { isMemoryChat: Boolean(existing?.isMemoryChat) }),
   };
 
   if (!state.order.includes(activeId)) {
@@ -270,14 +324,47 @@ function createNewChatSession(store, sessionManager) {
     snapshot: emptySnapshot,
   };
   state.activeSessionId = id;
-  state.order = [id, ...state.order.filter((entry) => entry !== id)].slice(0, MAX_SESSIONS);
+  state.order = [id, ...state.order.filter((entry) => entry !== id)];
+  enforceSessionLimit(state);
 
-  while (state.order.length > MAX_SESSIONS) {
-    const removedId = state.order.pop();
-    if (removedId && removedId !== state.activeSessionId) {
-      delete state.sessions[removedId];
-    }
+  saveChatSessionsState(store, state);
+
+  if (sessionManager) {
+    sessionManager.hydrateSession(emptySnapshot);
   }
+
+  return {
+    activeSessionId: id,
+    session: state.sessions[id],
+    sessions: listChatSessionSummaries(store),
+  };
+}
+
+function createMemoryChatSession(store, sessionManager, options = {}) {
+  const state = ensureChatSessionsState(store);
+  if (sessionManager) {
+    persistActiveSession(store, sessionManager.getSnapshot());
+  }
+
+  const id = randomUUID();
+  const now = new Date().toISOString();
+  const emptySnapshot = createChatSnapshot(createEmptySession(), { isMemoryChat: true });
+  const title = String(options.title || "").trim() || "Kalıcı sohbet";
+
+  state.sessions[id] = {
+    id,
+    title: title.slice(0, 80),
+    titleManuallySet: true,
+    createdAt: now,
+    updatedAt: now,
+    pinned: false,
+    isMemoryChat: true,
+    folderId: null,
+    snapshot: emptySnapshot,
+  };
+  state.activeSessionId = id;
+  state.order = [id, ...state.order.filter((entry) => entry !== id)];
+  enforceSessionLimit(state);
 
   saveChatSessionsState(store, state);
 
@@ -400,7 +487,10 @@ function duplicateChatSession(store, sessionManager, sessionId) {
 
   const id = randomUUID();
   const now = new Date().toISOString();
-  const copiedSnapshot = createChatSnapshot(source.snapshot || createEmptySession());
+  const copiedSnapshot = createChatSnapshot(
+    source.snapshot || createEmptySession(),
+    { isMemoryChat: Boolean(source.isMemoryChat) },
+  );
 
   state.sessions[id] = {
     id,
@@ -409,10 +499,12 @@ function duplicateChatSession(store, sessionManager, sessionId) {
     createdAt: now,
     updatedAt: now,
     pinned: false,
+    isMemoryChat: Boolean(source.isMemoryChat),
     snapshot: copiedSnapshot,
   };
   state.activeSessionId = id;
-  state.order = [id, ...state.order.filter((entry) => entry !== id)].slice(0, MAX_SESSIONS);
+  state.order = [id, ...state.order.filter((entry) => entry !== id)];
+  enforceSessionLimit(state);
   saveChatSessionsState(store, state);
 
   if (sessionManager) {
@@ -667,6 +759,7 @@ module.exports = {
   MAX_STORED_MESSAGES,
   createEphemeralChatSession,
   createChatFolder,
+  createMemoryChatSession,
   createNewChatSession,
   deleteChatFolder,
   deleteChatSession,
@@ -675,10 +768,12 @@ module.exports = {
   deriveSessionTitle,
   ensureChatSessionsState,
   formatChatExportMarkdown,
+  getActiveChatSessionRecord,
   getActiveChatSessionTitle,
   getChatSessionById,
   exportAllSessionsJson,
   importChatSessionsFromJson,
+  isMemoryChatSession,
   listChatSessionSummaries,
   listChatFolders,
   loadChatSession,

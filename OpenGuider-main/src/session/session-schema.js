@@ -33,6 +33,7 @@ function createEmptySession() {
     evaluationHistory: [],
     status: "idle",
     lastPointer: null,
+    microGuideSession: null,
     updatedAt: new Date().toISOString(),
   };
 }

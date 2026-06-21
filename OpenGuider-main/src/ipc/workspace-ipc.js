@@ -112,6 +112,19 @@ function registerWorkspaceIpc({
     }
   });
 
+  ipcMain.handle("get-cline-capability-report", () => {
+    debugLog("ipc:get-cline-capability-report");
+    try {
+      const { getClineCapabilityReport } = require("../sauron/doctor");
+      return getClineCapabilityReport(store);
+    } catch (error) {
+      return {
+        ok: false,
+        error: error?.message || "Cline capability report failed.",
+      };
+    }
+  });
+
   ipcMain.handle("list-handoff-history", (_event, options = {}) => {
     const resolvedPath = String(options?.workspacePath || store.get("workspacePath") || "").trim();
     if (!resolvedPath) {
@@ -297,12 +310,19 @@ function registerWorkspaceIpc({
         }
       }
       const written = writeHandoff(workspacePath, finopsEnriched.payload);
-      const launchResult = await launchVSCode(workspacePath, {
-        newWindow: true,
-        force: true,
-        skipRecovery: true,
-        skipVerification: true,
+      const focused = await focusVSCodeWorkspace(workspacePath, {
+        allowLaunch: false,
+        verifyTimeoutMs: 4000,
+        skipPostVerifySettle: true,
       });
+      const launchResult = focused?.verified
+        ? focused
+        : await launchVSCode(workspacePath, {
+          newWindow: false,
+          force: true,
+          skipRecovery: true,
+          skipVerification: true,
+        });
       appLogger.info("vscode-launch-resolve", {
         ...getLastResolvedVscodePathInfo(),
         executable: launchResult?.executable,

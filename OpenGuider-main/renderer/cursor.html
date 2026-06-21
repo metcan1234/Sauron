@@ -7,109 +7,164 @@
 html, body { width:100%; height:100%; overflow:hidden; background:transparent; }
 body { pointer-events:none; }
 
-.cursor-wrap {
-  position:fixed; inset:0; pointer-events:none;
+:root {
+  --sauron-accent: #c65a3a;
+  --sauron-accent-light: #f6a27a;
+  --sauron-accent-glow: rgba(198, 90, 58, 0.75);
+  --sauron-accent-ring: rgba(198, 90, 58, 0.55);
 }
 
-/* The orange cursor dot */
+.cursor-wrap {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Pointer anchor — position only; visual size comes from children */
 .ai-cursor {
-  position:absolute;
-  width:22px; height:22px;
-  transform:translate(-50%,-50%);
-  opacity:0;
-  transition: left 0.65s cubic-bezier(0.25,0.46,0.45,0.94),
-              top  0.65s cubic-bezier(0.25,0.46,0.45,0.94),
-              opacity 0.25s ease;
+  position: absolute;
+  width: 0;
+  height: 0;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition:
+    left 0.65s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+    top 0.65s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+    opacity 0.25s ease;
   will-change: left, top, opacity;
 }
-.ai-cursor.visible { opacity:1; }
+.ai-cursor.visible { opacity: 1; }
 
-/* Outer glow ring */
-.cursor-ring {
-  position:absolute; inset:-6px;
-  border-radius:50%;
-  border:2px solid rgba(198,90,58,0.45);
-  animation:ringPulse 2s ease-in-out infinite;
-}
-@keyframes ringPulse {
-  0%,100% { transform:scale(1); opacity:0.6; }
-  50%      { transform:scale(1.4); opacity:0.2; }
+/* Outward ripple rings (GPU-friendly: transform + opacity only) */
+.pointer-pulse {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 56px;
+  height: 56px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 
-/* Inner dot */
+.pointer-ring {
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--sauron-accent-ring);
+  border-radius: 50%;
+  will-change: transform, opacity;
+  animation: pointer-pulse 1.8s ease-out infinite;
+}
+
+.pointer-ring:nth-child(1) { animation-delay: 0s; }
+.pointer-ring:nth-child(2) { animation-delay: 0.45s; }
+.pointer-ring:nth-child(3) { animation-delay: 0.9s; }
+
+.ai-cursor:not(.visible) .pointer-ring {
+  animation-play-state: paused;
+}
+
+@keyframes pointer-pulse {
+  0% {
+    transform: scale(0.55);
+    opacity: 0.85;
+  }
+  70% {
+    transform: scale(1.65);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.65);
+    opacity: 0;
+  }
+}
+
+/* Solid center target */
 .cursor-dot {
-  width:22px; height:22px;
-  background:radial-gradient(circle at 35% 35%, #f6a27a, #c65a3a);
-  border-radius:50%;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 2;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle at 35% 35%, var(--sauron-accent-light), var(--sauron-accent));
+  border-radius: 50%;
   box-shadow:
-    0 0 0 3px rgba(198,90,58,0.3),
-    0 0 20px rgba(198,90,58,0.75),
-    0 0 40px rgba(198,90,58,0.35);
-  animation:dotPulse 1.8s ease-in-out infinite;
-}
-@keyframes dotPulse {
-  0%,100% { box-shadow:0 0 0 3px rgba(198,90,58,0.3),0 0 20px rgba(198,90,58,0.65); }
-  50%     { box-shadow:0 0 0 6px rgba(198,90,58,0.15),0 0 30px rgba(198,90,58,0.95); }
+    0 0 0 2px rgba(198, 90, 58, 0.35),
+    0 0 16px var(--sauron-accent-glow);
 }
 
-/* Click ripple effect */
+/* One-shot click emphasis (unchanged behaviour) */
 .ripple {
-  position:absolute;
-  inset:-4px;
-  border-radius:50%;
-  border:2px solid rgba(198,90,58,0.8);
-  opacity:0;
-  pointer-events:none;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid rgba(198, 90, 58, 0.8);
+  opacity: 0;
+  pointer-events: none;
 }
 .ripple.animate {
-  animation:rippleOut 0.6s ease-out forwards;
+  animation: rippleOut 0.6s ease-out forwards;
 }
 .ripple2 {
-  position:absolute;
-  inset:-4px;
-  border-radius:50%;
-  border:2px solid rgba(246,162,122,0.6);
-  opacity:0;
-  pointer-events:none;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid rgba(246, 162, 122, 0.6);
+  opacity: 0;
+  pointer-events: none;
 }
 .ripple2.animate {
-  animation:rippleOut 0.6s ease-out 0.15s forwards;
+  animation: rippleOut 0.6s ease-out 0.15s forwards;
 }
 @keyframes rippleOut {
-  0%   { transform:scale(1); opacity:0.9; }
-  100% { transform:scale(3.5); opacity:0; }
+  0%   { transform: translate(-50%, -50%) scale(1); opacity: 0.9; }
+  100% { transform: translate(-50%, -50%) scale(3.5); opacity: 0; }
 }
 
 /* Label bubble */
 .cursor-label {
-  position:absolute;
-  top:28px; left:50%;
-  transform:translateX(-50%);
-  white-space:nowrap;
-  background:rgba(8,9,18,0.92);
-  border:1px solid rgba(198,90,58,0.45);
-  color:#f6a27a;
-  font-family:"Inter","Segoe UI",system-ui,sans-serif;
-  font-size:12px; font-weight:600;
-  padding:5px 12px;
-  border-radius:20px;
-  backdrop-filter:blur(12px);
-  box-shadow:0 4px 16px rgba(0,0,0,0.5);
-  opacity:0;
-  transform:translateX(-50%) translateY(6px);
-  transition:opacity 0.25s ease, transform 0.25s ease;
+  position: absolute;
+  top: 34px;
+  left: 50%;
+  white-space: nowrap;
+  background: rgba(8, 9, 18, 0.92);
+  border: 1px solid rgba(198, 90, 58, 0.45);
+  color: var(--sauron-accent-light);
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 20px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transform: translateX(-50%) translateY(6px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
 }
 .ai-cursor.visible .cursor-label {
-  opacity:1;
-  transform:translateX(-50%) translateY(0);
-  transition-delay:0.4s;
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  transition-delay: 0.4s;
 }
 </style>
 </head>
 <body>
 <div class="cursor-wrap">
   <div class="ai-cursor" id="cursor">
-    <div class="cursor-ring"></div>
+    <div class="pointer-pulse" aria-hidden="true">
+      <span class="pointer-ring"></span>
+      <span class="pointer-ring"></span>
+      <span class="pointer-ring"></span>
+    </div>
     <div class="cursor-dot"></div>
     <div class="ripple"  id="ripple1"></div>
     <div class="ripple2" id="ripple2"></div>

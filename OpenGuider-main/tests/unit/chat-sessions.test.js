@@ -8,6 +8,7 @@ const {
   deriveSessionTitle,
   deriveSessionPreview,
   createEphemeralChatSession,
+  createMemoryChatSession,
   createNewChatSession,
   duplicateChatSession,
   formatChatExportMarkdown,
@@ -375,4 +376,35 @@ test("createChatFolder and moveChatSession organize sessions", () => {
   assert.equal(moved.folderId, created.folder.id);
   const summaries = listChatSessionSummaries(store);
   assert.equal(summaries[0].folderId, created.folder.id);
+});
+
+test("createMemoryChatSession marks session as persistent memory chat", () => {
+  const store = makeStore();
+  const sessionManager = new SessionManager();
+  const created = createMemoryChatSession(store, sessionManager, { title: "Diyet ve Spor" });
+  const session = created.session;
+  assert.equal(session.isMemoryChat, true);
+  assert.equal(session.title, "Diyet ve Spor");
+  const summary = listChatSessionSummaries(store).find((entry) => entry.id === session.id);
+  assert.equal(summary?.isMemoryChat, true);
+});
+
+test("memory chat snapshot keeps all messages beyond normal cap", () => {
+  const store = makeStore();
+  const sessionManager = new SessionManager();
+  createMemoryChatSession(store, sessionManager, { title: "Uzun hafıza" });
+
+  const manyMessages = Array.from({ length: MAX_STORED_MESSAGES + 10 }, (_, index) => ({
+    role: index % 2 === 0 ? "user" : "assistant",
+    content: `msg-${index}`,
+  }));
+  sessionManager.setMessages([
+    { role: "memory-summary", content: "ozet" },
+    ...manyMessages,
+  ]);
+  persistActiveSession(store, sessionManager.getSnapshot());
+
+  const activeId = store.get("chatSessionsV1").activeSessionId;
+  const storedCount = store.get("chatSessionsV1").sessions[activeId].snapshot.messages.length;
+  assert.equal(storedCount, manyMessages.length + 1);
 });

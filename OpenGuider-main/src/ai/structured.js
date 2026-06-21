@@ -31,7 +31,14 @@ function formatStructuredUserError(error) {
   }
 
   if (/Model did not return a JSON object|JSON|Unexpected token|parse/i.test(message)) {
+    if (/guide-micro-instruct/i.test(message)) {
+      return "Ekran rehberliği yanıtı işlenemedi. Lütfen tekrar deneyin.";
+    }
     return "The AI returned an invalid planning response. Please try again.";
+  }
+
+  if (/guide-micro-instruct/i.test(message)) {
+    return "Ekran rehberliği şu an oluşturulamadı. Lütfen tekrar deneyin.";
   }
 
   return "The planning workflow failed before the next step could be generated. Please try again.";

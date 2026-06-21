@@ -57,8 +57,8 @@ function runSyntaxChecks() {
 }
 
 function runUnitTests() {
-  console.log("Running npm test...");
-  const result = spawnSync("npm", ["test"], {
+  console.log("Running npm run test:unit...");
+  const result = spawnSync("npm", ["run", "test:unit"], {
     cwd: projectRoot,
     encoding: "utf8",
     shell: process.platform === "win32",

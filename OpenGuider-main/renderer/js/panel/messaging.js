@@ -210,6 +210,120 @@ export function createMessagingController({
     }
   }
 
+  async function runMicroGuideIpc(channel, payload, goalText) {
+    state.setStreaming(true);
+    dom.sendBtn.classList.add("hidden");
+    const stopBtn = doc.getElementById("stop-btn");
+    if (stopBtn) stopBtn.classList.remove("hidden");
+    dom.sendBtn.disabled = true;
+    ui.renderAgentState("thinking");
+
+    currentAbortController = new AbortController();
+    requestTimeoutId = window.setTimeout(() => {
+      if (state.isStreaming()) {
+        log(`ai:${channel} timeout 120s triggered`);
+        cancelMessage();
+        ui.showToast("İstek zaman aşımına uğradı", true);
+      }
+    }, 120000);
+
+    let typingId = null;
+    try {
+      if (goalText) {
+        ui.appendUserMessage(goalText);
+        state.addConversationMessage({ role: "user", content: goalText });
+      }
+      typingId = ui.showTypingIndicator();
+      await api.invoke(channel, payload);
+    } catch (error) {
+      onAIError(error.message);
+    } finally {
+      if (requestTimeoutId) {
+        clearTimeout(requestTimeoutId);
+        requestTimeoutId = null;
+      }
+      if (typingId !== null) {
+        ui.removeTypingIndicator(typingId);
+      }
+      state.setStreaming(false);
+      dom.sendBtn.classList.remove("hidden");
+      if (stopBtn) stopBtn.classList.add("hidden");
+      dom.sendBtn.disabled = false;
+      ui.renderAgentState("idle");
+    }
+  }
+
+  async function startMicroGuideSession(goal) {
+    const trimmedGoal = String(goal || "").trim() || "Ekranımda yardım et";
+    dom.textInput.value = "";
+    dom.textInput.style.height = "auto";
+    ui.hideErrorBanner();
+
+    let screens;
+    try {
+      screens = await api.invoke("capture-screenshot", { forceFresh: true });
+      if (!screens?.length) {
+        ui.showToast("Ekran görüntüsü alınamadı.", true);
+        return;
+      }
+      ui.showToast(`📷 ${screens.length} ekran yakalandı — mikro rehber başlıyor`);
+    } catch (error) {
+      ui.showToast("Ekran görüntüsü alınamadı: " + error.message, true);
+      log("micro-guide capture error", error);
+      return;
+    }
+
+    await runMicroGuideIpc("start-micro-guide-session", { goal: trimmedGoal, images: screens }, trimmedGoal);
+  }
+
+  async function ackMicroGuide() {
+    if (state.isStreaming()) {
+      return;
+    }
+
+    let screens;
+    try {
+      screens = await api.invoke("capture-screenshot", { forceFresh: true });
+      if (!screens?.length) {
+        ui.showToast("Ekran görüntüsü alınamadı.", true);
+        return;
+      }
+      ui.showToast(`📷 Yeni ekran yakalandı — sonraki adım hazırlanıyor`);
+    } catch (error) {
+      ui.showToast("Ekran görüntüsü alınamadı: " + error.message, true);
+      log("micro-guide ack capture error", error);
+      return;
+    }
+
+    await runMicroGuideIpc("micro-guide-ack", { images: screens });
+  }
+
+  async function maybeStartMicroGuide(rawText) {
+    if (!rawText) {
+      return false;
+    }
+    try {
+      const intent = await api.invoke("detect-micro-guide-intent", { text: rawText });
+      if (!intent?.shouldSuggest) {
+        return false;
+      }
+      const confirmed = await ui.confirmDialog({
+        title: "Ekran rehberliği",
+        message: "Ekran rehberliği başlatılsın mı? Tek adımda yönlendirileceksiniz.",
+        confirmLabel: "Başlat",
+        cancelLabel: "Sohbete devam",
+      });
+      if (!confirmed) {
+        return false;
+      }
+      await startMicroGuideSession(rawText);
+      return true;
+    } catch (error) {
+      log("detect-micro-guide-intent error", error);
+      return false;
+    }
+  }
+
   async function sendMessage(overrideText, options = {}) {
     const rawText = typeof overrideText === "string"
       ? overrideText
@@ -220,6 +334,11 @@ export function createMessagingController({
     const text = [rawText, attachmentSuffix].filter(Boolean).join("\n\n").trim();
 
     if (!text || state.isStreaming()) {
+      return;
+    }
+
+    const startedMicroGuide = await maybeStartMicroGuide(rawText);
+    if (startedMicroGuide) {
       return;
     }
 
@@ -568,5 +687,7 @@ export function createMessagingController({
     editMessage,
     regenerateLastResponse,
     sendMessage,
+    startMicroGuideSession,
+    ackMicroGuide,
   };
 }

@@ -4,21 +4,41 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
+const INTEGRATION_ENABLED = process.env.SAURON_RUN_VSCODE_INTEGRATION === "1";
+const DEFAULT_TEST_TIMEOUT_MS = Number(process.env.SAURON_VSCODE_INTEGRATION_TIMEOUT_MS) || 15000;
+const DEFAULT_VERIFY_TIMEOUT_MS = Number(process.env.SAURON_VSCODE_VERIFY_TIMEOUT_MS) || 15000;
+
+function skipUnlessIntegrationEnabled(t) {
+  if (!INTEGRATION_ENABLED) {
+    t.skip("Set SAURON_RUN_VSCODE_INTEGRATION=1 to run live VS Code integration");
+    return true;
+  }
+  return false;
+}
+
 function readIntegrationWorkspace() {
-  const configPath = path.join(process.env.APPDATA || "", "openguider", "config.json");
-  try {
-    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-    const workspacePath = String(config.workspacePath || "").trim();
-    if (workspacePath && fs.existsSync(workspacePath)) {
-      return workspacePath;
+  const configPaths = [
+    path.join(process.env.APPDATA || "", "Sauron", "config.json"),
+    path.join(process.env.APPDATA || "", "openguider", "config.json"),
+  ];
+  for (const configPath of configPaths) {
+    try {
+      const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      const workspacePath = String(config.workspacePath || "").trim();
+      if (workspacePath && fs.existsSync(workspacePath)) {
+        return workspacePath;
+      }
+    } catch {
+      // try next config path
     }
-  } catch {
-    // fall through
   }
   return fs.mkdtempSync(path.join(os.tmpdir(), "og-vscode-integration-"));
 }
 
-test("waitForVSCodeWindow returns window_found when VS Code has a main window", async (t) => {
+test("waitForVSCodeWindow returns window_found when VS Code has a main window", { timeout: DEFAULT_TEST_TIMEOUT_MS }, async (t) => {
+  if (skipUnlessIntegrationEnabled(t)) {
+    return;
+  }
   if (process.platform !== "win32") {
     t.skip("Windows-only VS Code integration");
     return;
@@ -44,7 +64,10 @@ test("waitForVSCodeWindow returns window_found when VS Code has a main window", 
   assert.ok(result.pid);
 });
 
-test("openWorkspaceInVSCode verifies VS Code window on Windows", async (t) => {
+test("openWorkspaceInVSCode verifies VS Code window on Windows", { timeout: DEFAULT_TEST_TIMEOUT_MS }, async (t) => {
+  if (skipUnlessIntegrationEnabled(t)) {
+    return;
+  }
   if (process.platform !== "win32") {
     t.skip("Windows-only VS Code integration");
     return;
@@ -80,7 +103,7 @@ test("openWorkspaceInVSCode verifies VS Code window on Windows", async (t) => {
   const result = await openWorkspaceInVSCode(workspacePath, {
     newWindow: !before.hasWindow,
     force: true,
-    verifyTimeoutMs: 35000,
+    verifyTimeoutMs: DEFAULT_VERIFY_TIMEOUT_MS,
   });
 
   assert.equal(result.skipped, false);

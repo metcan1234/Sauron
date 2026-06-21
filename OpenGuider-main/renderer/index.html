@@ -73,6 +73,12 @@
     <button class="action-btn danger" id="btn-plan-cancel" data-i18n="planCancel" data-i18n-attr="title" type="button"><span class="action-icon">✕</span><span data-i18n="planCancel">İptal</span></button>
   </div>
 
+  <div class="panel-actions micro-guide-actions hidden" id="micro-guide-actions">
+    <button class="action-btn primary" id="btn-micro-guide-done" type="button" title="Adımı tamamladım"><span class="action-icon">✓</span><span>Yaptım</span></button>
+    <button class="action-btn" id="btn-micro-guide-continue" type="button" title="Tur limitinden sonra devam et"><span class="action-icon">⟳</span><span>Devam et</span></button>
+    <button class="action-btn danger" id="btn-micro-guide-cancel" type="button" title="Mikro rehberi kapat"><span class="action-icon">✕</span><span>İptal</span></button>
+  </div>
+
   <div class="workspace-status-banner hidden" id="workspace-status-banner">
     <div class="workspace-status-top">
       <div class="workspace-status-main">
@@ -113,12 +119,14 @@
     <div class="attachment-preview-strip hidden" id="attachment-preview-strip"></div>
     <div class="input-meta-row">
       <span class="mode-badge is-clickable" id="assistant-mode-badge" title="Mod değiştir: Asistan / Rehber">Asistan</span>
+      <span class="mode-badge micro-guide-badge hidden" id="micro-guide-badge" title="Aktif mikro-tur rehber">Rehber · Mikro-tur</span>
       <span class="screen-pending-badge hidden" id="screen-pending-badge" title="Gönderimde ekran görüntüsü eklenecek"></span>
     </div>
     <div class="input-row">
       <input type="file" id="attachment-file-input" class="hidden" multiple accept="image/*,.txt,.md,.json,.js,.ts,.py,.html,.css,.csv"/>
       <button class="attach-file-btn" id="btn-attach-file" type="button" title="Dosya / resim ekle">📎</button>
       <button class="capture-screen-btn" id="btn-capture-screen" type="button" data-i18n="captureScreen" data-i18n-attr="title" title="Ekran Al">📷</button>
+      <button class="capture-screen-btn micro-guide-btn" id="btn-micro-guide" type="button" title="Mikro rehber — ekranda tek adım yönlendirme">🎯</button>
       <textarea class="text-input" id="text-input" data-i18n-placeholder="askPlaceholder" placeholder="Bana bir şey sor…" rows="1"></textarea>
       <button class="ptt-btn" id="ptt-btn" data-i18n="holdToTalk" data-i18n-attr="title" title="Konuşmak için basılı tut">⏺
         <span class="waveform" id="waveform" style="display:none">
@@ -155,6 +163,7 @@
     </div>
     <input class="chat-drawer-search" id="chat-drawer-search" type="search" placeholder="Sohbetlerde ara..." autocomplete="off" />
     <button class="chat-drawer-new" id="chat-drawer-new" type="button">+ Yeni sohbet</button>
+    <button class="chat-drawer-memory" id="chat-drawer-memory" type="button">🧠 Kalıcı hafıza</button>
     <button class="chat-drawer-create-folder" id="chat-drawer-create-folder" type="button">📁 Yeni klasör</button>
     <button class="chat-drawer-ephemeral" id="chat-drawer-ephemeral" type="button">⏱ Geçici sohbet</button>
     <div class="chat-drawer-list" id="chat-drawer-list"></div>

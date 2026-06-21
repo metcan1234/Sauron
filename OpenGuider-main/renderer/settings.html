@@ -218,6 +218,7 @@
             <span class="hint" id="workspace-stack-status">Durum kontrol ediliyor…</span>
           </div>
           <span class="hint">⌘ Çalışma Kısmı basıldığında Bridge otomatik kurulur. Sorun olursa bu düğmeyi kullanın.</span>
+          <div id="cline-capability-summary" class="hint" style="margin-top:6px;">Cline capability durumu kontrol ediliyor…</div>
         </div>
         <div class="form-group">
           <label>Sistem tanısı</label>
@@ -226,7 +227,7 @@
             <span class="hint" id="doctor-summary">Henüz çalıştırılmadı</span>
           </div>
           <ul class="doctor-results" id="doctor-results"></ul>
-          <span class="hint">Node, VS Code CLI, Bridge, Cline, workspace ve .sauron/ yazılabilirliğini kontrol eder.</span>
+          <span class="hint">Node, VS Code CLI, Bridge, Cline, workspace, .sauron/ yazılabilirliği ve browser runtime durumunu kontrol eder.</span>
         </div>
         <div class="form-group">
           <label>Sohbet yedekleme</label>
@@ -531,6 +532,7 @@
                         <button class="record-shortcut-btn" id="btn-restart-agent" type="button">Restart Runtime</button>
                       </div>
                       <div id="agent-download-progress" class="plugin-progress hidden"></div>
+                      <span class="hint" id="browser-runtime-doctor-hint" style="margin-top:8px;display:block;">Runtime durumu kontrol ediliyor…</span>
                     </div>
                   </section>
 

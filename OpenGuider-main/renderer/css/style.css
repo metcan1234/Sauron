@@ -281,6 +281,14 @@ html, body {
   color: #f6a27a;
   border-color: rgba(198, 90, 58, 0.55);
 }
+.mode-badge.micro-guide-badge {
+  color: #fdba74;
+  border-color: rgba(249, 115, 22, 0.45);
+  background: rgba(249, 115, 22, 0.12);
+}
+.mode-badge.micro-guide-badge.hidden {
+  display: none;
+}
 .capture-screen-btn,
 .attach-file-btn {
   display: inline-flex;
@@ -1386,6 +1394,34 @@ html, body {
 
 .message.user { align-items: flex-end; }
 .message.assistant { align-items: flex-start; }
+.message.memory-summary {
+  align-items: center;
+  width: 100%;
+}
+
+.memory-summary-card {
+  width: min(92%, 640px);
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+  background: rgba(148, 163, 184, 0.08);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.memory-summary-title {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  color: rgba(148, 163, 184, 0.9);
+}
+
+.memory-summary-card p {
+  margin: 0;
+  white-space: pre-wrap;
+}
 
 .system-notice {
   width: 100%;
@@ -2521,6 +2557,24 @@ kbd {
 }
 
 .chat-drawer-new:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chat-drawer-memory {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: rgba(99, 102, 241, 0.08);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.chat-drawer-memory:hover {
   border-color: var(--accent);
   color: var(--accent);
 }

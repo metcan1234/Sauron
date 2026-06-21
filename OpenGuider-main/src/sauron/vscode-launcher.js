@@ -78,7 +78,11 @@ function readCodeWorkspaceContext(workspacePath) {
 function collectVsCodeLaunchDiagnostics(workspacePath, executable, launchArgs, options = {}) {
   const workspaceContext = readCodeWorkspaceContext(workspacePath);
   const spawnMethod = process.platform === "win32"
-    ? "powershell-start-process"
+    ? (
+      executable?.kind === "cmd" && !resolveCodeExeFromCmdPath(executable?.path)
+        ? "powershell-start-process"
+        : "code.exe-detached"
+    )
     : (executable?.kind === "exe" ? "code.exe-detached" : "code-cli-detached");
 
   return {
@@ -97,7 +101,15 @@ function collectVsCodeLaunchDiagnostics(workspacePath, executable, launchArgs, o
       && executable?.path
       && Array.isArray(launchArgs)
     )
-      ? buildPowerShellStartProcessCommand(executable.path, launchArgs)
+      ? (() => {
+        if (executable.kind === "cmd") {
+          const codeExe = resolveCodeExeFromCmdPath(executable.path);
+          if (codeExe) {
+            return buildPowerShellStartProcessCommand(codeExe, mapCliArgsToExeArgs(launchArgs));
+          }
+        }
+        return buildPowerShellStartProcessCommand(executable.path, launchArgs);
+      })()
       : null,
     ...workspaceContext,
   };
@@ -122,7 +134,44 @@ function logVsCodeLaunchDetails(detail) {
   return payload;
 }
 
+function mapCliArgsToExeArgs(args = []) {
+  const mapped = [];
+  for (const arg of args) {
+    if (arg === "-n") {
+      mapped.push("--new-window");
+      continue;
+    }
+    if (arg === "-r") {
+      mapped.push("--reuse-window");
+      continue;
+    }
+    mapped.push(arg);
+  }
+  return mapped;
+}
+
+function resolveCodeExeFromCmdPath(codeCmdPath) {
+  if (!codeCmdPath) {
+    return null;
+  }
+  const normalized = path.resolve(codeCmdPath);
+  const candidates = [
+    path.join(path.dirname(path.dirname(normalized)), "Code.exe"),
+    path.join(path.dirname(normalized), "Code.exe"),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 function spawnVSCodeCmdOnWindows(codeCmdPath, args) {
+  const codeExe = resolveCodeExeFromCmdPath(codeCmdPath);
+  if (codeExe) {
+    return spawnVSCodeGuiProcess(codeExe, mapCliArgsToExeArgs(args));
+  }
   return spawnViaPowerShellStartProcess(codeCmdPath, args);
 }
 
@@ -447,6 +496,7 @@ function spawnViaPowerShellStartProcess(filePath, args) {
       {
         windowsHide: true,
         timeout: 30000,
+        cwd: process.env.USERPROFILE || process.env.HOME || undefined,
         ...(spawnDiagnosticsEnabled ? { encoding: "utf8" } : {}),
       },
       (error, stdout, stderr) => {
@@ -502,7 +552,7 @@ async function spawnVSCodeProcess(executable, args, launchContext = null) {
     if (executable.kind === "cmd") {
       result = await spawnVSCodeCmdOnWindows(executable.path, args);
     } else {
-      result = await spawnViaPowerShellStartProcess(executable.path, args);
+      result = await spawnVSCodeGuiProcess(executable.path, args);
     }
   } else if (executable.kind === "exe") {
     result = await spawnVSCodeGuiProcess(executable.path, args);
@@ -1115,6 +1165,8 @@ module.exports = {
   focusWorkspaceInVSCode,
   focusVSCodeWorkspace: focusWorkspaceInVSCode,
   launchVSCode,
+  resolveCodeExeFromCmdPath,
+  mapCliArgsToExeArgs,
   spawnVSCodeProcess,
   resetLaunchDebounceForTests,
 };

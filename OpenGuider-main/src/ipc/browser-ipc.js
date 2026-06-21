@@ -36,6 +36,25 @@ function registerBrowserIpc({
     }
   });
 
+  ipcMain.handle("get-browser-runtime-info", () => {
+    try {
+      const { getInstalledRuntimeInfo } = require("../plugins/browser/sidecar");
+      const info = getInstalledRuntimeInfo();
+      return {
+        ok: true,
+        installed: Boolean(info?.pythonBin),
+        runtimeDir: info?.runtimeDir || null,
+        pythonBin: info?.pythonBin || null,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        installed: false,
+        error: error?.message || "Failed to read browser runtime info.",
+      };
+    }
+  });
+
   ipcMain.handle("download-browser-agent", async (event) => {
     debugLog("ipc:download-browser-agent");
     return new Promise((resolve) => {

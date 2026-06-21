@@ -17,7 +17,9 @@ This file helps both human contributors and agentic coding AIs work safely and c
 
 - Install deps: `npm install`
 - Run app: `npm run start`
-- Run tests: `npm test`
+- Run unit/UI tests: `npm run test:unit`
+- Run all tests (includes integration): `npm test`
+- Run live VS Code integration (opt-in): `SAURON_RUN_VSCODE_INTEGRATION=1 npm run test:integration`
 - Build artifacts:
   - `npm run dist:win`
   - `npm run dist:mac`
@@ -42,7 +44,8 @@ This file helps both human contributors and agentic coding AIs work safely and c
 
 ## Testing Expectations
 
-- At minimum, run `npm test` after meaningful code changes.
+- At minimum, run `npm run test:unit` after meaningful code changes.
+- Integration tests under `tests/integration/` are skipped unless `SAURON_RUN_VSCODE_INTEGRATION=1` is set.
 - When modifying provider behavior, ensure AI provider tests still pass.
 - If tests fail due to environment/dependency setup rather than your change, state that clearly in PR notes.
 

@@ -154,6 +154,10 @@ async function init() {
   document.getElementById("btn-save").addEventListener("click",   saveSettings);
   document.getElementById("btn-sync-cline")?.addEventListener("click", async () => {
     try {
+      const capReport = await window.sauron.invoke("get-cline-capability-report");
+      if (capReport?.variant && capReport.variant !== "fork") {
+        showToast("API anahtarı otomatik senkronu Cline fork gerektirir; Marketplace'te anahtarları Cline içinde elle girin.");
+      }
       const result = await window.sauron.invoke("sync-cline-credentials");
       if (!result?.ok) {
         showToast(result?.error || "Cline senkron isteği oluşturulamadı", true);
@@ -190,6 +194,7 @@ async function init() {
     } else if (data.event === "done") {
       progressEl.textContent = "Download complete!";
       progressEl.style.color = "#22c55e"; // Success green
+      void refreshBrowserRuntimeHint();
     } else if (data.event === "error") {
       progressEl.textContent = "Error: " + data.message;
       progressEl.style.color = "#ef4444"; // Error red
@@ -245,6 +250,44 @@ async function init() {
     }
   });
 
+  async function refreshClineCapabilitySummary() {
+    const summaryEl = document.getElementById("cline-capability-summary");
+    if (!summaryEl) {
+      return;
+    }
+    try {
+      const report = await window.sauron.invoke("get-cline-capability-report");
+      if (!report?.ok && report?.error) {
+        summaryEl.textContent = report.error;
+        return;
+      }
+      const summary = report?.report?.summary || "Cline durumu okunamadı";
+      const limited = Array.isArray(report?.report?.limited) && report.report.limited.length > 0
+        ? ` — ${report.report.limited.slice(0, 2).join("; ")}`
+        : "";
+      summaryEl.textContent = `${summary}${limited}`;
+    } catch {
+      summaryEl.textContent = "Cline capability durumu okunamadı";
+    }
+  }
+
+  async function refreshBrowserRuntimeHint() {
+    const hintEl = document.getElementById("browser-runtime-doctor-hint");
+    if (!hintEl) {
+      return;
+    }
+    try {
+      const info = await window.sauron.invoke("get-browser-runtime-info");
+      if (info?.installed) {
+        hintEl.textContent = "Browser runtime indirildi — Sistem tanısından ayrıntılı durumu görebilirsiniz.";
+        return;
+      }
+      hintEl.textContent = "Browser runtime indirilmemiş — Download Runtime ile kurun veya sistem Python 3.11+ kullanın.";
+    } catch {
+      hintEl.textContent = "Runtime durumu okunamadı";
+    }
+  }
+
   async function refreshWorkspaceStackStatus() {
     const statusEl = document.getElementById("workspace-stack-status");
     if (!statusEl) {
@@ -295,6 +338,8 @@ async function init() {
   });
 
   void refreshWorkspaceStackStatus();
+  void refreshClineCapabilitySummary();
+  void refreshBrowserRuntimeHint();
   void refreshClineSyncStatus();
 
   function renderDoctorResults(result) {
@@ -332,6 +377,8 @@ async function init() {
       const result = await window.sauron.invoke("run-sauron-doctor");
       renderDoctorResults(result);
       await refreshWorkspaceStackStatus();
+      await refreshClineCapabilitySummary();
+      await refreshBrowserRuntimeHint();
     } catch (error) {
       renderDoctorResults({ error: error?.message || "Tanı başarısız", checks: [] });
     } finally {

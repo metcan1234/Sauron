@@ -24,6 +24,8 @@ test("runSauronDoctor returns structured checks", () => {
   assert.ok(result.checks.some((entry) => entry.id === "node-version"));
   assert.ok(result.checks.some((entry) => entry.id === "workspace-path"));
   assert.ok(result.checks.some((entry) => entry.id === "sauron-dir"));
+  assert.ok(result.checks.some((entry) => entry.id === "cline-variant"));
+  assert.ok(result.clineReport);
   assert.equal(result.summary.pass + result.summary.warn + result.summary.fail, result.checks.length);
 
   fs.rmSync(workspace, { recursive: true, force: true });

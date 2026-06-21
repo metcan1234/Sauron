@@ -8,15 +8,20 @@ const fs = require("fs");
 const path = require("path");
 
 function readWorkspaceFromConfig() {
-  const configPath = path.join(process.env.APPDATA || "", "openguider", "config.json");
-  try {
-    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-    const workspacePath = String(config.workspacePath || "").trim();
-    if (workspacePath && fs.existsSync(workspacePath)) {
-      return workspacePath;
+  const configCandidates = [
+    path.join(process.env.APPDATA || "", "Sauron", "config.json"),
+    path.join(process.env.APPDATA || "", "openguider", "config.json"),
+  ];
+  for (const configPath of configCandidates) {
+    try {
+      const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      const workspacePath = String(config.workspacePath || "").trim();
+      if (workspacePath && fs.existsSync(workspacePath)) {
+        return workspacePath;
+      }
+    } catch {
+      // try next candidate
     }
-  } catch {
-    // fall through
   }
   return "C:\\Users\\Can\\OneDrive\\Desktop\\Sauron Core\\OpenGuider-main";
 }
