@@ -1,6 +1,27 @@
+const fs = require("fs");
 const path = require("path");
 
-async function setWindowsExecutableIcon(context) {
+function readAuthorName(pkg) {
+  if (!pkg?.author) {
+    return "";
+  }
+  if (typeof pkg.author === "string") {
+    return pkg.author;
+  }
+  return pkg.author.name || "";
+}
+
+function toVersionQuad(version) {
+  const parts = String(version || "0.0.0")
+    .split(".")
+    .map((part) => parseInt(part, 10) || 0);
+  while (parts.length < 4) {
+    parts.push(0);
+  }
+  return parts.slice(0, 4).join(".");
+}
+
+async function setWindowsExecutableMetadata(context) {
   if (context?.electronPlatformName !== "win32") {
     return;
   }
@@ -9,18 +30,36 @@ async function setWindowsExecutableIcon(context) {
   try {
     ({ rcedit } = require("rcedit"));
   } catch (_error) {
-    // Skip icon mutation when rcedit is unavailable.
+    // Skip metadata mutation when rcedit is unavailable.
     return;
   }
 
-  const executableName = `${context.packager.appInfo.productFilename}.exe`;
-  const executablePath = path.join(context.appOutDir, executableName);
-  const iconPath = path.join(context.packager.projectDir, "renderer", "assets", "logo.ico");
+  const projectDir = context.packager.projectDir;
+  const pkgPath = path.join(projectDir, "package.json");
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+  const authorName = readAuthorName(pkg);
+  const productName = context.packager.appInfo.productName || pkg.build?.productName || "Sauron";
+  const productFilename = context.packager.appInfo.productFilename || productName;
+  const executablePath = path.join(context.appOutDir, `${productFilename}.exe`);
+  const iconPath = path.join(projectDir, "renderer", "assets", "logo.ico");
+  const copyright = context.packager.appInfo.copyright || pkg.build?.copyright || `Copyright © ${authorName}`;
+  const versionQuad = toVersionQuad(pkg.version);
 
-  // Use rcedit directly after pack because signAndEditExecutable is disabled.
-  await rcedit(executablePath, { icon: iconPath });
+  await rcedit(executablePath, {
+    icon: iconPath,
+    "file-version": versionQuad,
+    "product-version": versionQuad,
+    "version-string": {
+      CompanyName: authorName,
+      ProductName: productName,
+      FileDescription: pkg.description || productName,
+      LegalCopyright: copyright,
+      OriginalFilename: `${productFilename}.exe`,
+      InternalName: productFilename,
+    },
+  });
 }
 
 module.exports = async (context) => {
-  await setWindowsExecutableIcon(context);
+  await setWindowsExecutableMetadata(context);
 };

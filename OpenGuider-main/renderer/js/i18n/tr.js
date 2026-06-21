@@ -68,6 +68,8 @@ export const tr = {
   voiceTab: "Ses",
   pluginsTab: "Eklentiler",
   shortcutsTab: "Kısayollar",
+  aboutTab: "Hakkında",
+  aboutTitle: "Hakkında",
   awareTab: "Farkındalık",
   workspaceTab: "Çalışma Kısmı",
   aiAgentsTab: "AI Ajanları",

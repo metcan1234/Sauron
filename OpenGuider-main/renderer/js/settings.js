@@ -375,6 +375,7 @@ async function init() {
   });
 
   bindSettingsTabs();
+  initAboutSection();
   bindPluginCards();
   bindShortcutRecordButtons();
   bindFinOpsControls();
@@ -598,6 +599,23 @@ function activateSettingsTab(tabId) {
   } else if (finopsRefreshTimer) {
     clearInterval(finopsRefreshTimer);
     finopsRefreshTimer = null;
+  }
+}
+
+function initAboutSection() {
+  const info = window.sauronAppInfo || {};
+  const nameEl = document.getElementById("aboutAppName");
+  const versionEl = document.getElementById("aboutAppVersion");
+  const publisherEl = document.getElementById("aboutPublisher");
+  if (nameEl) {
+    nameEl.textContent = info.name || "Sauron";
+  }
+  if (versionEl) {
+    versionEl.textContent = `Sürüm ${info.version || "—"}`;
+  }
+  if (publisherEl) {
+    const publisher = info.publisher || "Mehmet Can Bayatlı";
+    publisherEl.textContent = `Geliştirici: ${publisher}`;
   }
 }
 

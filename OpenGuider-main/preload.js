@@ -6,6 +6,9 @@ const {
   PRELOAD_SEND_CHANNELS,
 } = require(path.join(__dirname, "src", "ipc", "channel-registry"));
 
+const pkg = require("./package.json");
+const publisherName = typeof pkg.author === "string" ? pkg.author : pkg.author?.name || "";
+
 const api = {
   invoke: (ch, ...a) => ipcRenderer.invoke(ch, ...a),
   on: (ch, cb) => {
@@ -21,3 +24,8 @@ const api = {
 
 contextBridge.exposeInMainWorld("sauron", api);
 contextBridge.exposeInMainWorld("openguider", api);
+contextBridge.exposeInMainWorld("sauronAppInfo", {
+  name: pkg.build?.productName || "Sauron",
+  version: pkg.version,
+  publisher: publisherName,
+});

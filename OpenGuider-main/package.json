@@ -2,7 +2,9 @@
   "name": "openguider",
   "version": "1.4.3",
   "description": "Sauron AI Companion",
-  "author": "Metehan Kızılcık",
+  "author": {
+    "name": "Mehmet Can Bayatlı"
+  },
   "license": "Apache-2.0",
   "main": "main.js",
   "scripts": {
@@ -45,6 +47,7 @@
   "build": {
     "appId": "com.sauron.desktop",
     "productName": "Sauron",
+    "copyright": "Copyright © Mehmet Can Bayatlı",
     "icon": "renderer/assets/logo.ico",
     "asar": true,
     "asarUnpack": [
@@ -94,6 +97,7 @@
     },
     "win": {
       "icon": "renderer/assets/logo.ico",
+      "legalTrademarks": "Mehmet Can Bayatlı",
       "signAndEditExecutable": false,
       "target": [
         {
