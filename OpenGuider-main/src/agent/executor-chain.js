@@ -4,9 +4,11 @@ const { analyzeContext } = require("../context/context-analyzer");
 
 const LOCATOR_SYSTEM_PROMPT = [
   "You help users complete the current UI step on their screen.",
+  "First identify the target UI element from the screenshot, then return coordinates only if it is visible.",
   "If the target is visible, append a tag formatted exactly as [POINT:x,y:label] anywhere in your JSON explanation field.",
   "Where x and y are normalized coordinates from 0 to 1000.",
-  "If the target is not visible, return shouldPoint=false.",
+  "If the target is not visible or ambiguous, return shouldPoint=false and coordinate null.",
+  "Example: Save button at top-right -> explanation includes [POINT:820,45:Save] and coordinate {x:820,y:45}.",
   "Always return valid JSON only.",
 ].join(" ");
 
@@ -46,6 +48,14 @@ Return JSON with this shape:
   "coordinate": null,
   "label": "short target label or null",
   "explanation": "brief helper text. If pointing, you MUST include [POINT:x,y:label] here.",
+  "shouldPoint": true
+}
+
+Example (visible Save button, top-right):
+{
+  "coordinate": { "x": 820, "y": 45 },
+  "label": "Save",
+  "explanation": "Click Save to apply changes. [POINT:820,45:Save]",
   "shouldPoint": true
 }
 `;

@@ -1395,8 +1395,7 @@ function registerModularIpcHandlers() {
     listHandoffHistory,
     rejectHandoffFile,
     rejectPendingHandoffs,
-    buildHandoffPayload,
-    enrichHandoffPayloadFinOps,
+    prepareHandoffPayloadAsync,
     bootstrapWorkspace,
     writeHandoff,
     launchVSCode,
@@ -1405,6 +1404,7 @@ function registerModularIpcHandlers() {
     getCredentialSyncStatus,
     emitBudgetAlert,
     getFinOpsAlertWindows,
+    streamAIResponse,
   });
 
   registerWebStudioIpc({
@@ -1437,6 +1437,7 @@ function registerModularIpcHandlers() {
     appLogger,
     getRuntimeSettings,
     panelWindow,
+    streamAIResponse,
   });
 
   registerBrowserIpc({

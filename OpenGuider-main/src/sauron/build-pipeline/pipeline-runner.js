@@ -1,5 +1,5 @@
 const { bootstrapWorkspace } = require("../workspace-bootstrap");
-const { buildHandoffPayload, writeHandoff, generateHandoffId } = require("../handoff");
+const { prepareHandoffPayloadAsync, writeHandoff } = require("../handoff");
 const { planPipeline } = require("./pipeline-planner");
 const { getPipeline } = require("./pipeline-registry");
 const {
@@ -10,44 +10,61 @@ const {
   runVerification,
 } = require("./pipeline-state");
 
-function buildPhaseHandoffPayload({
+function buildPhaseHandoffOverrides({
+  pipelineState,
+  phaseDef,
+  parentHandoffId,
+  settings,
+}) {
+  const taskSummary = [
+    `Goal: ${phaseDef.goal}`,
+    "",
+    "Plan steps:",
+    `1. ${phaseDef.goal}`,
+    "",
+    `Acceptance: Complete phase ${phaseDef.phase} of pipeline ${pipelineState.templateId}`,
+  ].join("\n");
+
+  return {
+    goal: phaseDef.goal,
+    taskSummary,
+    projectType: pipelineState.projectType,
+    pipelineId: pipelineState.id,
+    pipelinePhase: phaseDef.phase,
+    pipelineTotalPhases: pipelineState.totalPhases,
+    parentHandoffId,
+    complexityHint: phaseDef.complexityHint,
+    verification: phaseDef.verification,
+    autoChain: settings.pipelineAutoChain !== false,
+    autoStart: true,
+    sessionId: pipelineState.id,
+  };
+}
+
+async function writePhaseHandoff({
   pipelineState,
   phaseDef,
   workspacePath,
   settings,
   parentHandoffId,
   sessionSnapshot = {},
+  streamAIResponse,
+  appLogger,
 }) {
-  const handoffId = generateHandoffId();
-  const taskSummary = [
-    `Goal: ${phaseDef.goal}`,
-    "",
-    `Plan steps:`,
-    `1. ${phaseDef.goal}`,
-    "",
-    `Acceptance: Complete phase ${phaseDef.phase} of pipeline ${pipelineState.templateId}`,
-  ].join("\n");
-
-  return buildHandoffPayload(
-    { ...sessionSnapshot, goalIntent: phaseDef.goal },
+  const finopsEnriched = await prepareHandoffPayloadAsync({
+    sessionSnapshot: { ...sessionSnapshot, goalIntent: phaseDef.goal },
     workspacePath,
-    handoffId,
     settings,
-    {
-      goal: phaseDef.goal,
-      taskSummary,
-      projectType: pipelineState.projectType,
-      pipelineId: pipelineState.id,
-      pipelinePhase: phaseDef.phase,
-      pipelineTotalPhases: pipelineState.totalPhases,
+    streamAIResponse,
+    appLogger,
+    overrides: buildPhaseHandoffOverrides({
+      pipelineState,
+      phaseDef,
       parentHandoffId,
-      complexityHint: phaseDef.complexityHint,
-      verification: phaseDef.verification,
-      autoChain: settings.pipelineAutoChain !== false,
-      autoStart: true,
-      sessionId: pipelineState.id,
-    },
-  );
+      settings,
+    }),
+  });
+  return writeHandoff(workspacePath, finopsEnriched.payload);
 }
 
 async function startBuildPipeline({
@@ -55,6 +72,8 @@ async function startBuildPipeline({
   workspacePath,
   settings = {},
   options = {},
+  streamAIResponse,
+  appLogger,
 }) {
   const resolvedPath = String(workspacePath || "").trim();
   if (!resolvedPath) {
@@ -75,13 +94,14 @@ async function startBuildPipeline({
 
   const template = getPipeline(pipelineId);
   const firstPhase = template.phases[0];
-  const payload = buildPhaseHandoffPayload({
+  const written = await writePhaseHandoff({
     pipelineState: planned.pipeline,
     phaseDef: firstPhase,
     workspacePath: resolvedPath,
     settings,
+    streamAIResponse,
+    appLogger,
   });
-  const written = writeHandoff(resolvedPath, payload);
 
   return {
     ok: true,
@@ -92,7 +112,8 @@ async function startBuildPipeline({
   };
 }
 
-async function advancePipelineAfterComplete(workspacePath, settings = {}) {
+async function advancePipelineAfterComplete(workspacePath, settings = {}, deps = {}) {
+  const { streamAIResponse, appLogger } = deps;
   const resolvedPath = String(workspacePath || "").trim();
   const pipelineState = readPipelineState(resolvedPath);
   if (!pipelineState || pipelineState.status !== "active") {
@@ -118,7 +139,7 @@ async function advancePipelineAfterComplete(workspacePath, settings = {}) {
   }
 
   if (!verificationResult.ok) {
-    const fixPayload = buildPhaseHandoffPayload({
+    const written = await writePhaseHandoff({
       pipelineState,
       phaseDef: {
         phase: currentPhase,
@@ -129,8 +150,9 @@ async function advancePipelineAfterComplete(workspacePath, settings = {}) {
       workspacePath: resolvedPath,
       settings,
       parentHandoffId: artifact.handoffId,
+      streamAIResponse,
+      appLogger,
     });
-    const written = writeHandoff(resolvedPath, fixPayload);
     clearTaskCompleteArtifact(resolvedPath);
     return {
       ok: true,
@@ -155,14 +177,15 @@ async function advancePipelineAfterComplete(workspacePath, settings = {}) {
   pipelineState.currentPhase = nextPhase;
   writePipelineState(resolvedPath, pipelineState);
 
-  const payload = buildPhaseHandoffPayload({
+  const written = await writePhaseHandoff({
     pipelineState,
     phaseDef: nextPhaseDef,
     workspacePath: resolvedPath,
     settings,
     parentHandoffId: artifact.handoffId,
+    streamAIResponse,
+    appLogger,
   });
-  const written = writeHandoff(resolvedPath, payload);
 
   return {
     ok: true,
@@ -188,5 +211,6 @@ module.exports = {
   startBuildPipeline,
   advancePipelineAfterComplete,
   getBuildPipelineStatus,
-  buildPhaseHandoffPayload,
+  writePhaseHandoff,
+  buildPhaseHandoffOverrides,
 };

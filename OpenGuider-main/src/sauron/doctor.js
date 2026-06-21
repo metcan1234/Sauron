@@ -9,6 +9,20 @@ const {
   getInstalledRuntimeInfo,
   resolveChildProcessAssetPath,
 } = require("../plugins/browser/sidecar");
+const { hasAgentCredential } = require("./finops/agent-matrix");
+
+const CORE_READINESS_LABELS = {
+  "vscode-cli": "VS Code CLI",
+  "bridge-extension": "Sauron Bridge",
+  "workspace-path": "Workspace klasörü",
+  "sauron-dir": ".sauron yazılabilirliği",
+  "ai-credentials": "AI provider anahtarı",
+  "bridge-vsix": "Bridge VSIX paketi",
+};
+
+const READINESS_WARNING_LABELS = {
+  "cline-extension": "Cline extension",
+};
 
 function pushCheck(checks, entry) {
   checks.push({
@@ -385,6 +399,67 @@ function appendBrowserAgentChecks(checks, settings = {}) {
   pushCheck(checks, checkBrowserAgentReady());
 }
 
+function checkAiCredentials(settings = {}) {
+  const agents = ["gemini", "deepseek", "openai", "ollama"];
+  const configured = agents.filter((agentId) => hasAgentCredential(settings, agentId));
+  if (configured.length > 0) {
+    return {
+      id: "ai-credentials",
+      status: "pass",
+      message: `AI provider yapılandırıldı (${configured.join(", ")})`,
+      fixHint: "",
+    };
+  }
+  return {
+    id: "ai-credentials",
+    status: "fail",
+    message: "En az bir AI provider anahtarı yapılandırılmamış",
+    fixHint: "Ayarlar → AI provider bölümünden API key girin.",
+  };
+}
+
+function computeReadinessReport(checks = []) {
+  const blockers = [];
+  const warnings = [];
+
+  for (const check of checks) {
+    if (check.tier === "optional") {
+      if (check.status === "warn" || check.status === "fail") {
+        warnings.push(check.message);
+      }
+      continue;
+    }
+
+    const coreLabel = CORE_READINESS_LABELS[check.id];
+    if (coreLabel) {
+      if (check.status !== "pass") {
+        blockers.push(coreLabel);
+      }
+      continue;
+    }
+
+    const warningLabel = READINESS_WARNING_LABELS[check.id];
+    if (warningLabel && check.status === "warn") {
+      warnings.push(warningLabel);
+      continue;
+    }
+
+    if (check.status === "fail") {
+      blockers.push(check.message);
+    } else if (check.status === "warn") {
+      warnings.push(check.message);
+    }
+  }
+
+  const status = blockers.length === 0 ? "ready" : "blocked";
+  return {
+    status,
+    headline: status === "ready" ? "Kullanıma Hazır" : "Eksikler var",
+    blockers,
+    warnings,
+  };
+}
+
 function runSauronDoctor(store, options = {}) {
   const checks = [];
   pushCheck(checks, checkNodeVersion());
@@ -455,13 +530,16 @@ function runSauronDoctor(store, options = {}) {
   });
 
   pushCheck(checks, checkWebStudioReady(store));
+  pushCheck(checks, checkAiCredentials(settings));
 
   const failCount = checks.filter((entry) => entry.status === "fail").length;
   const warnCount = checks.filter((entry) => entry.status === "warn").length;
+  const readiness = computeReadinessReport(checks);
 
   return {
     ok: failCount === 0,
     checks,
+    readiness,
     summary: {
       pass: checks.filter((entry) => entry.status === "pass").length,
       warn: warnCount,
@@ -494,4 +572,6 @@ module.exports = {
   getClineCapabilityReport,
   checkBrowserAgentReady,
   checkWebStudioReady,
+  checkAiCredentials,
+  computeReadinessReport,
 };

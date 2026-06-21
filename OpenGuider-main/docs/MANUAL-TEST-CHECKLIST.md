@@ -1,5 +1,16 @@
 # Manuel Test Checklist — v1.4.2
 
+## v1.1 Cline bağlam + olgunluk (her faz sonrası handoff)
+
+- [ ] Handoff JSON / `.sauron/handoff-*.json` içinde `Workspace snapshot:` bloğu var (~700 char altı)
+- [ ] Handoff özeti `Clarified task (for Cline):` + `Original context:` (LLM başarılıysa)
+- [ ] FinOps log: `handoff-task-clarify` düşük maliyet satırı (handoff başına ~1 çağrı)
+- [ ] Ayarlar → Sistem tanısı: üstte **Kullanıma Hazır** veya **Eksikler var** banner
+- [ ] Eksik workspace/API key simülasyonu → blocker listesi doğru
+- [ ] Yeni workspace: `.clinerules/sauron-workspace.md` Kod Kalitesi bölümü (mevcut dosyayı silip bootstrap ile yenile)
+- [ ] Planlı rehber locator: birkaç adımda isabet gözlemi (prompt few-shot)
+- [ ] **Handoff:** sohbet → ⌘ Çalışma Kısmı → VS Code → Cline görevi
+
 ## v1.0 Sağlamlaştırma (her faz sonrası)
 
 - [ ] Boş panelde **Ekranımda yardım et** ve **Kod yaz / Çalışma Kısmı** CTA görünür

@@ -63,6 +63,7 @@ const ECONOMY_VISION_OPERATIONS = new Set([
   "locator",
   "locator_strict",
   "evaluator",
+  "handoff-task-clarify",
 ]);
 
 function normalizeHint(hint) {

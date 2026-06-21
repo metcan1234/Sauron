@@ -23,6 +23,8 @@ const {
 const { loadBrief } = require("./web-studio/brief-schema");
 const { normalizeProjectType } = require("./clinerules-packs");
 const { detectWorkspaceLayout } = require("./workspace-detector");
+const { buildWorkspaceTreeHint } = require("./workspace-tree-snapshot");
+const { clarifyHandoffTask, extractHandoffClarifySource } = require("./handoff-task-clarify");
 
 const SAURON_RULES_FILENAME = "sauron-workspace.md";
 const HANDOFF_DIR = ".sauron";
@@ -47,6 +49,13 @@ const SAURON_RULES_CONTENT = `# Sauron Workspace — Cline Kuralları
 ## Genel
 11. Hangi modeli (Gemini/Ollama/GPT/DeepSeek) kullandığını görev başında belirt, böylece maliyet/performans takibi yapılabilsin.
 12. Workspace dışına (proje klasörü dışındaki dosyalara) yazma yapma.
+
+## Kod Kalitesi (Cursor tarzı)
+13. Değişiklik yapmadan önce ilgili dosyaları oku; gereksiz geniş tarama veya tüm klasörü listeleme yapma.
+14. Büyük refactor veya mimari değişiklikten önce kısa bir plan sun (Cline Plan modu veya madde listesi); onaysız sıçrama yapma.
+15. Projede test script varsa (ör. \`npm test\`) anlamlı kod değişikliğinden sonra çalıştır; kırıldıysa düzelt veya raporla.
+16. Gereksiz yeni dosya veya tek satırlık yardımcı oluşturma; mevcut modülü genişlet, tekrarlayan soyutlama ekleme.
+17. Handoff özeti ve kullanıcı mesajı bağlamı kaynaktır; onlarla çelişen varsayımlar yapma.
 `;
 
 function isTerminalHandoffName(name) {
@@ -181,6 +190,13 @@ function buildTaskSummary(snapshot, options = {}) {
 
   const parts = [];
 
+  if (options.workspacePath) {
+    const workspaceHint = buildWorkspaceTreeHint(options.workspacePath);
+    if (workspaceHint) {
+      parts.push(workspaceHint);
+    }
+  }
+
   if (options.webBrief) {
     parts.push(formatWebBriefSummary(options.webBrief));
   }
@@ -253,6 +269,7 @@ function buildHandoffPayload(sessionSnapshot, workspacePath, handoffId = generat
     includeTranscript: optimizer.routing.includeTranscript,
     handoffMaxChars: optimizer.routing.handoffMaxChars,
     webBrief,
+    workspacePath,
   });
   const complexityHint = overrides.complexityHint
     || (webBrief ? "high" : computeComplexityHint(taskSummary));
@@ -306,6 +323,72 @@ function buildHandoffPayload(sessionSnapshot, workspacePath, handoffId = generat
   }
 
   return payload;
+}
+
+function applyClarificationToTaskSummary(taskSummary, clarification) {
+  const base = String(taskSummary || "").trim();
+  const summary = String(clarification || "").trim();
+  if (!summary) {
+    return base;
+  }
+  if (!base) {
+    return `Clarified task (for Cline):\n${summary}`;
+  }
+  return `Clarified task (for Cline):\n${summary}\n\nOriginal context:\n${base}`;
+}
+
+async function prepareHandoffPayloadAsync({
+  sessionSnapshot,
+  workspacePath,
+  settings = {},
+  streamAIResponse,
+  appLogger,
+  handoffId,
+  overrides = {},
+  signal,
+}) {
+  const clarification = await clarifyHandoffTask({
+    rawText: extractHandoffClarifySource(sessionSnapshot),
+    settings,
+    streamAIResponse,
+    signal,
+    appLogger,
+  });
+
+  const payload = buildHandoffPayload(
+    sessionSnapshot,
+    workspacePath,
+    handoffId,
+    settings,
+    overrides,
+  );
+
+  if (overrides.taskSummary && workspacePath) {
+    const hint = buildWorkspaceTreeHint(workspacePath);
+    if (hint && !String(payload.taskSummary).includes("Workspace snapshot:")) {
+      payload.taskSummary = `${hint}\n\n${payload.taskSummary}`;
+    }
+  }
+
+  if (clarification) {
+    payload.taskSummary = applyClarificationToTaskSummary(payload.taskSummary, clarification);
+  }
+
+  const finopsEnriched = await enrichHandoffPayloadFinOps(payload, settings, {
+    projectType: payload.projectType,
+  });
+
+  if (workspacePath) {
+    const layout = detectWorkspaceLayout(workspacePath);
+    const hint = buildWorkspaceTreeHint(workspacePath);
+    appLogger?.info?.("handoff-workspace-context", {
+      charCount: hint.length,
+      layout: layout.layout,
+      clarified: Boolean(clarification),
+    });
+  }
+
+  return finopsEnriched;
 }
 
 async function enrichHandoffPayloadFinOps(payload, settings = {}, options = {}) {
@@ -539,6 +622,8 @@ module.exports = {
   generateHandoffId,
   isPendingHandoffFileName,
   buildHandoffPayload,
+  prepareHandoffPayloadAsync,
+  applyClarificationToTaskSummary,
   enrichHandoffPayloadFinOps,
   buildTaskSummary,
   truncateTaskSummary,

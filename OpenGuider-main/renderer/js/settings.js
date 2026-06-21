@@ -344,17 +344,37 @@ async function init() {
 
   function renderDoctorResults(result) {
     const summaryEl = document.getElementById("doctor-summary");
+    const bannerEl = document.getElementById("doctor-readiness-banner");
     const listEl = document.getElementById("doctor-results");
     if (!summaryEl || !listEl) {
       return;
     }
     if (!result?.checks?.length) {
       summaryEl.textContent = result?.error || "Tanı başarısız";
+      if (bannerEl) {
+        bannerEl.classList.add("hidden");
+        bannerEl.innerHTML = "";
+      }
       listEl.innerHTML = "";
       return;
     }
     const { pass, warn, fail } = result.summary || {};
     summaryEl.textContent = `${pass || 0} geçti · ${warn || 0} uyarı · ${fail || 0} hata`;
+
+    if (bannerEl && result.readiness) {
+      const ready = result.readiness.status === "ready";
+      bannerEl.classList.remove("hidden");
+      bannerEl.classList.toggle("is-ready", ready);
+      bannerEl.classList.toggle("is-blocked", !ready);
+      const blockerText = (result.readiness.blockers || []).length
+        ? `<p class="doctor-readiness-detail"><strong>Eksik:</strong> ${escapeHtml(result.readiness.blockers.join(", "))}</p>`
+        : "";
+      const warningText = (result.readiness.warnings || []).length
+        ? `<p class="doctor-readiness-detail"><strong>Uyarı:</strong> ${escapeHtml(result.readiness.warnings.join(", "))}</p>`
+        : "";
+      bannerEl.innerHTML = `<strong>${escapeHtml(result.readiness.headline || (ready ? "Kullanıma Hazır" : "Eksikler var"))}</strong>${blockerText}${warningText}`;
+    }
+
     listEl.innerHTML = result.checks.map((check) => {
       const statusClass = check.status === "pass" ? "pass" : (check.status === "warn" ? "warn" : "fail");
       const optionalTag = check.tier === "optional" ? " <em>(opsiyonel)</em>" : "";

@@ -48,6 +48,16 @@ Run **Ayarlar → Workspace → Sistem tanısı** (`run-sauron-doctor`) to verif
 
 Renderer delegates routing to main via `resolve-message-route` IPC (see `src/routing/message-route.js`).
 
+## Handoff context (v1.1)
+
+Before writing `.sauron/handoff-*.json`, Sauron enriches the Cline task with:
+
+1. **Workspace snapshot** — shallow 1–2 level tree, package name/scripts, layout hint (capped ~700 chars; no file contents).
+2. **Clarified task** — optional single economy-tier LLM pass (`handoff-task-clarify`) that adds an action-oriented summary beside the original chat context; failures are skipped silently.
+3. **Cline rules** — `.clinerules/sauron-workspace.md` seeded on bootstrap (token discipline + Cursor-style quality gates).
+
+Doctor **readiness** banner summarizes whether core setup (VS Code CLI, Bridge, workspace, API key) is complete vs optional warnings (Cline, Browser, Web Studio).
+
 ## Error resilience
 
 Orchestrator post-processing (TTS, pointer) is wrapped in `safeHandleOrchestratorResult` so LLM success is not lost when post-process fails.

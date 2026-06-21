@@ -21,6 +21,7 @@ function registerBuildPipelineIpc({
   appLogger,
   getRuntimeSettings,
   panelWindow,
+  streamAIResponse,
 }) {
   function resolveWorkspacePath(overridePath) {
     return String(overridePath || store.get("workspacePath") || "").trim();
@@ -46,7 +47,7 @@ function registerBuildPipelineIpc({
       return { ok: false, error: "Workspace path is not configured." };
     }
     try {
-      const settings = getRuntimeSettings();
+      const settings = await getRuntimeSettings();
       const clineProbe = probeClineCapabilities();
       const autoChainEnabled = settings.pipelineAutoChain !== false;
       const forkLimitations = autoChainEnabled && requiresForkForAutoChain(clineProbe)
@@ -57,6 +58,8 @@ function registerBuildPipelineIpc({
         workspacePath: resolved,
         settings,
         options: options || {},
+        streamAIResponse,
+        appLogger,
       });
       if (!result.ok) {
         return { ...result, forkLimitations };
@@ -106,8 +109,11 @@ function registerBuildPipelineIpc({
       return { ok: false, error: "Workspace path is not configured." };
     }
     try {
-      const settings = getRuntimeSettings();
-      const result = await advancePipelineAfterComplete(resolved, settings);
+      const settings = await getRuntimeSettings();
+      const result = await advancePipelineAfterComplete(resolved, settings, {
+        streamAIResponse,
+        appLogger,
+      });
       if (panelWindow && !panelWindow.isDestroyed()) {
         panelWindow.webContents.send("pipeline-updated", getBuildPipelineStatus(resolved));
       }

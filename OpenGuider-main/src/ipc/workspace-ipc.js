@@ -42,11 +42,13 @@ function registerWorkspaceIpc({
   listHandoffHistory,
   rejectHandoffFile,
   buildHandoffPayload,
+  prepareHandoffPayloadAsync,
   enrichHandoffPayloadFinOps,
   bootstrapWorkspace,
   writeHandoff,
   launchVSCode,
   runSauronDoctor,
+  streamAIResponse,
   writeCredentialRequest,
   getCredentialSyncStatus,
   emitBudgetAlert,
@@ -99,10 +101,11 @@ function registerWorkspaceIpc({
     }
   });
 
-  ipcMain.handle("run-sauron-doctor", () => {
+  ipcMain.handle("run-sauron-doctor", async () => {
     debugLog("ipc:run-sauron-doctor");
     try {
-      return { ok: true, ...runSauronDoctor(store) };
+      const runtimeSettings = await getRuntimeSettings();
+      return { ok: true, ...runSauronDoctor(store, { settings: runtimeSettings }) };
     } catch (error) {
       return {
         ok: false,
@@ -291,8 +294,13 @@ function registerWorkspaceIpc({
         ...snapshot,
         chatSessionTitle: getActiveChatSessionTitle(store),
       };
-      const payload = buildHandoffPayload(enrichedSnapshot, workspacePath, undefined, runtimeSettings);
-      const finopsEnriched = await enrichHandoffPayloadFinOps(payload, runtimeSettings);
+      const finopsEnriched = await prepareHandoffPayloadAsync({
+        sessionSnapshot: enrichedSnapshot,
+        workspacePath,
+        settings: runtimeSettings,
+        streamAIResponse,
+        appLogger,
+      });
       const walletAlerts = finopsEnriched.walletAlerts || [];
       if (walletAlerts.length && typeof emitBudgetAlert === "function") {
         for (const alert of walletAlerts) {

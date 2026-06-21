@@ -114,6 +114,19 @@ test("buildTaskSummary respects handoffMaxChars while preserving goal", () => {
   assert.ok(summary.length <= 200);
 });
 
+test("buildHandoffPayload includes workspace snapshot when workspace path exists", () => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "sauron-handoff-ws-"));
+  try {
+    fs.mkdirSync(path.join(workspace, "src"), { recursive: true });
+    fs.writeFileSync(path.join(workspace, "package.json"), JSON.stringify({ name: "handoff-demo" }), "utf8");
+    const payload = buildHandoffPayload({ goalIntent: "fix auth" }, workspace);
+    assert.match(payload.taskSummary, /Workspace snapshot:/);
+    assert.match(payload.taskSummary, /handoff-demo/);
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
 test("buildHandoffPayload assigns complexityHint for complex tasks", () => {
   const payload = buildHandoffPayload(
     {
