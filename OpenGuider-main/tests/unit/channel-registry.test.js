@@ -11,6 +11,13 @@ test("pipeline-updated is registered for preload listeners", () => {
   assert.equal(PRELOAD_ON_CHANNELS.includes("pipeline-updated"), true);
 });
 
+test("code agent events are registered for preload listeners", () => {
+  assert.equal(PRELOAD_ON_CHANNELS.includes("code-agent-step-updated"), true);
+  assert.equal(PRELOAD_ON_CHANNELS.includes("code-agent-diff-pending"), true);
+  assert.equal(PRELOAD_ON_CHANNELS.includes("code-agent-complete"), true);
+  assert.equal(PRELOAD_ON_CHANNELS.includes("code-agent-error"), true);
+});
+
 test("preload.js uses channel registry allowlists", () => {
   const preloadSource = fs.readFileSync(
     require("path").join(__dirname, "..", "..", "preload.js"),

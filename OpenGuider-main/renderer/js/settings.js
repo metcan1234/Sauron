@@ -125,8 +125,10 @@ async function init() {
   document.getElementById("browserHeadless").checked = settings.browserHeadless === true;
   const webStudioEnabledEl = document.getElementById("webStudioEnabled");
   const selfBuildEnabledEl = document.getElementById("selfBuildEnabled");
+  const codeAgentNativeEnabledEl = document.getElementById("codeAgentNativeEnabled");
   if (webStudioEnabledEl) webStudioEnabledEl.checked = settings.webStudioEnabled !== false;
   if (selfBuildEnabledEl) selfBuildEnabledEl.checked = settings.selfBuildEnabled !== false;
+  if (codeAgentNativeEnabledEl) codeAgentNativeEnabledEl.checked = settings.codeAgentNativeEnabled === true;
   document.getElementById("awareAssistanceEnabled").checked = settings.awareAssistanceEnabled === true;
 
   setSelectValue("sttProvider", normalizeSttProvider(settings.sttProvider));
@@ -758,6 +760,10 @@ function initFinOpsSettings() {
   const tierEl = document.getElementById("finopsCoreModelTier");
   if (tierEl) tierEl.value = settings.finopsCoreModelTier || "economy";
   document.getElementById("finopsHandoffMaxChars").value = String(settings.finopsHandoffMaxChars ?? 4000);
+  const finopsCodeContextMaxCharsEl = document.getElementById("finopsCodeContextMaxChars");
+  if (finopsCodeContextMaxCharsEl) {
+    finopsCodeContextMaxCharsEl.value = String(settings.finopsCodeContextMaxChars ?? 4000);
+  }
   document.getElementById("finopsHandoffIncludeTranscript").checked = settings.finopsHandoffIncludeTranscript === true;
   document.getElementById("finopsDailyBudgetTl").value = String(settings.finopsDailyBudgetTl ?? 0);
   if (!settings.finopsAgentWallets) {
@@ -1224,6 +1230,7 @@ async function saveSettings() {
     browserHeadless:         document.getElementById("browserHeadless").checked,
     webStudioEnabled:        document.getElementById("webStudioEnabled")?.checked !== false,
     selfBuildEnabled:        document.getElementById("selfBuildEnabled")?.checked !== false,
+    codeAgentNativeEnabled:  document.getElementById("codeAgentNativeEnabled")?.checked === true,
     awareAssistanceEnabled:  document.getElementById("awareAssistanceEnabled").checked,
     includeScreenshotByDefault: false,
     workspacePath:           document.getElementById("workspacePath").value.trim(),
@@ -1238,6 +1245,7 @@ async function saveSettings() {
     finopsCostOptimizerMode: document.getElementById("finopsCostOptimizerMode")?.value || "balanced",
     finopsCoreModelTier: document.getElementById("finopsCoreModelTier")?.value || "economy",
     finopsHandoffMaxChars: Number(document.getElementById("finopsHandoffMaxChars")?.value) || 4000,
+    finopsCodeContextMaxChars: Number(document.getElementById("finopsCodeContextMaxChars")?.value) || 4000,
     finopsHandoffIncludeTranscript: document.getElementById("finopsHandoffIncludeTranscript")?.checked === true,
     finopsDailyBudgetTl: Number(document.getElementById("finopsDailyBudgetTl")?.value) || 0,
     finopsAgentWallets: collectAgentWallets(),

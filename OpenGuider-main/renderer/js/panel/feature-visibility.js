@@ -6,8 +6,11 @@ export function applyOptionalFeatureVisibility(doc, settings = {}) {
   const browserOn = settings.browserAgentEnabled !== false;
   const webStudioOn = settings.webStudioEnabled !== false;
   const selfBuildOn = settings.selfBuildEnabled !== false;
+  const codeAgentOn = isCodeAgentEnabled(settings);
 
   doc.getElementById("btn-web-preview")?.classList.toggle("hidden", !webStudioOn);
+  doc.getElementById("btn-code-studio")?.classList.toggle("hidden", !codeAgentOn);
+  doc.getElementById("empty-cta-code-agent")?.classList.toggle("hidden", !codeAgentOn);
   doc.getElementById("web-studio-overlay")?.classList.toggle("feature-disabled", !webStudioOn);
   doc.getElementById("self-build-overlay")?.classList.toggle("feature-disabled", !selfBuildOn);
 
@@ -22,6 +25,7 @@ export function applyOptionalFeatureVisibility(doc, settings = {}) {
     if (webStudioOn) parts.push("Web Studio");
     if (browserOn) parts.push("Browser agent");
     if (selfBuildOn) parts.push("Self-Build");
+    if (codeAgentOn) parts.push("Kod Agent");
     if (parts.length === 0) {
       advancedEl.classList.add("hidden");
     } else {
@@ -39,6 +43,6 @@ export function isSelfBuildEnabled(settings = {}) {
   return settings.selfBuildEnabled !== false;
 }
 
-export function isBrowserAgentEnabled(settings = {}) {
-  return settings.browserAgentEnabled !== false;
+export function isCodeAgentEnabled(settings = {}) {
+  return settings.codeAgentNativeEnabled === true;
 }

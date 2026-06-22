@@ -33,6 +33,24 @@ test("resolveMessageRoute picks plan_guide in guide mode without micro intent", 
   assert.equal(result.route, MESSAGE_ROUTES.PLAN_GUIDE);
 });
 
+test("resolveMessageRoute returns code_agent_busy when code session active", () => {
+  const result = resolveMessageRoute({
+    codeAgentActive: true,
+    text: "fix the bug",
+  });
+  assert.equal(result.route, MESSAGE_ROUTES.CODE_AGENT_BUSY);
+});
+
+test("resolveMessageRoute picks code_agent when native enabled and coding intent", () => {
+  const result = resolveMessageRoute({
+    codeAgentNativeEnabled: true,
+    workspacePath: "/tmp/project",
+    codeIntent: { shouldSuggest: true, reason: "coding_keywords" },
+    text: "add login page to the api",
+  });
+  assert.equal(result.route, MESSAGE_ROUTES.CODE_AGENT);
+});
+
 test("resolveMessageRoute picks assistant_chat for normal messages", () => {
   const result = resolveMessageRoute({
     assistantMode: "assistant",

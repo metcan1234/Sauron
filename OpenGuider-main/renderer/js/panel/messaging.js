@@ -280,6 +280,30 @@ export function createMessagingController({
     await runMicroGuideIpc("start-micro-guide-session", { goal: trimmedGoal, images: screens }, trimmedGoal);
   }
 
+  async function startCodeAgentSession(goal) {
+    const trimmedGoal = String(goal || "").trim();
+    if (!trimmedGoal) {
+      ui.showToast("Görev metni gerekli.", true);
+      return;
+    }
+    dom.textInput.value = "";
+    dom.textInput.style.height = "auto";
+    ui.hideErrorBanner();
+    ui.renderAgentState("working");
+    doc.getElementById("code-agent-badge")?.classList.remove("hidden");
+
+    const result = await api.invoke("start-code-agent-session", { goal: trimmedGoal });
+    doc.getElementById("code-agent-badge")?.classList.add("hidden");
+    ui.renderAgentState("idle");
+
+    if (!result?.ok) {
+      ui.showToast(result?.error || "Kod agent başarısız", true);
+      return;
+    }
+    ui.appendAssistantMessage(result.session?.summary || "Kod agent görevi tamamlandı.");
+    ui.scrollToBottom();
+  }
+
   async function ackMicroGuide() {
     if (state.isStreaming()) {
       return;
@@ -304,15 +328,48 @@ export function createMessagingController({
 
   async function routeOutgoingMessage(rawText, text, options) {
     const intent = await api.invoke("detect-micro-guide-intent", { text: rawText });
+    const codeIntent = await api.invoke("detect-code-intent", { text: rawText });
+    const settings = state.getSettings() || {};
+    let codeAgentActive = false;
+    try {
+      const status = await api.invoke("get-code-agent-status", {});
+      codeAgentActive = Boolean(status?.active);
+    } catch {
+      codeAgentActive = false;
+    }
     const routeResult = await api.invoke("resolve-message-route", {
       assistantMode: state.getSetting("assistantMode") || "assistant",
       microGuideActive: Boolean(state.getSessionSnapshot()?.microGuideSession?.active),
       microIntent: intent,
+      codeAgentActive,
+      codeIntent,
+      codeAgentNativeEnabled: settings.codeAgentNativeEnabled === true,
+      workspacePath: settings.workspacePath || "",
       text: rawText,
     });
 
     if (routeResult?.route === "micro_guide_busy") {
       ui.showToast("Mikro rehber aktif — Yaptım veya İptal kullanın.", false);
+      return true;
+    }
+
+    if (routeResult?.route === "code_agent_busy") {
+      ui.showToast("Kod agent aktif — tamamlanmasını bekleyin veya iptal edin.", false);
+      return true;
+    }
+
+    if (routeResult?.route === "code_agent") {
+      const confirmed = await ui.confirmDialog({
+        title: "Yerel Kod Agent",
+        message: "Bu görev yerel kod agent ile workspace'te çalıştırılsın mı? (Cline gerekmez)",
+        confirmLabel: "Başlat",
+        cancelLabel: "Sohbete devam",
+      });
+      if (!confirmed) {
+        await sendAssistantMessage(text, options);
+        return true;
+      }
+      await startCodeAgentSession(rawText);
       return true;
     }
 
@@ -712,6 +769,7 @@ export function createMessagingController({
     regenerateLastResponse,
     sendMessage,
     startMicroGuideSession,
+    startCodeAgentSession,
     ackMicroGuide,
   };
 }

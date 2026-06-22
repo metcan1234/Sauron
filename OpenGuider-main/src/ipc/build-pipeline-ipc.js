@@ -60,6 +60,7 @@ function registerBuildPipelineIpc({
         options: options || {},
         streamAIResponse,
         appLogger,
+        panelWindow,
       });
       if (!result.ok) {
         return { ...result, forkLimitations };
@@ -113,6 +114,7 @@ function registerBuildPipelineIpc({
       const result = await advancePipelineAfterComplete(resolved, settings, {
         streamAIResponse,
         appLogger,
+        panelWindow,
       });
       if (panelWindow && !panelWindow.isDestroyed()) {
         panelWindow.webContents.send("pipeline-updated", getBuildPipelineStatus(resolved));

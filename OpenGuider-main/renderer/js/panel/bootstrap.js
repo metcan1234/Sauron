@@ -841,6 +841,19 @@ export function createPanelController({
     doc.getElementById("empty-cta-workspace")?.addEventListener("click", () => {
       void openWorkspaceHandoff();
     });
+    doc.getElementById("empty-cta-code-agent")?.addEventListener("click", async () => {
+      const goal = await ui.promptDialog({
+        title: "Kod agent",
+        message: "Workspace'te ne yapılmasını istersiniz?",
+        defaultValue: "Projede küçük bir iyileştirme yap",
+      });
+      if (goal) {
+        void messaging.startCodeAgentSession(goal);
+      }
+    });
+    doc.getElementById("btn-code-studio")?.addEventListener("click", () => {
+      void api.invoke("open-code-studio");
+    });
 
     const stopBtn = doc.getElementById("stop-btn");
     if (stopBtn) {
@@ -1116,6 +1129,38 @@ export function createPanelController({
 
     api.on("pipeline-updated", (payload) => {
       ui.renderBuildPipeline(payload);
+    });
+
+    api.on("code-agent-diff-pending", async (payload) => {
+      const preview = String(payload?.diff || "").slice(0, 1200);
+      const confirmed = await ui.confirmDialog({
+        title: `Dosya değişikligi: ${payload?.path || ""}`,
+        message: preview || "Degisiklik onayini bekliyor.",
+        confirmLabel: "Onayla",
+        cancelLabel: "Reddet",
+      });
+      await api.invoke(confirmed ? "code-agent-approve-change" : "code-agent-reject-change", {
+        sessionId: payload?.sessionId,
+      });
+    });
+
+    api.on("code-agent-step-updated", (payload) => {
+      const logEl = doc.getElementById("code-agent-log");
+      if (logEl) {
+        logEl.classList.remove("hidden");
+        const line = payload?.tool || payload?.phase || "adim";
+        logEl.textContent = `${line}: ${payload?.message || ""}`.trim();
+      }
+    });
+
+    api.on("code-agent-complete", (payload) => {
+      doc.getElementById("code-agent-badge")?.classList.add("hidden");
+      ui.showToast(payload?.summary || "Kod agent tamamlandi");
+    });
+
+    api.on("code-agent-error", (payload) => {
+      doc.getElementById("code-agent-badge")?.classList.add("hidden");
+      ui.showToast(payload?.error || "Kod agent hatasi", true);
     });
 
     api.on("browser-agent-status-changed", (status) => {

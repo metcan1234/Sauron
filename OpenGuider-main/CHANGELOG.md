@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.0 — 2026-06-21
+
+### Added
+- **Yerel Kod Agent (Code Native):** workspace sandbox, dosya araçları, orchestrator, diff onayı, FinOps operation'ları
+- Ayarlar → Eklentiler: `codeAgentNativeEnabled` (varsayılan kapalı)
+- Code Studio penceresi, codebase index/retrieval, pipeline native dual-path
+- IPC: `start-code-agent-session`, `open-code-studio`, `index-workspace-code`
+
 ## 1.4.3 — 2026-06-20
 
 ### Fixed

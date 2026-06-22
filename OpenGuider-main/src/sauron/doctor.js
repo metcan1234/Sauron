@@ -525,6 +525,69 @@ function computeReadinessReport(checks = []) {
   };
 }
 
+function appendCodeAgentChecks(checks, store, settings = {}) {
+  if (settings.codeAgentNativeEnabled !== true) {
+    pushCheck(checks, {
+      id: "code-agent-ready",
+      status: "pass",
+      message: "Yerel Kod Agent devre dışı (atlandı)",
+      fixHint: "",
+      tier: "optional",
+    });
+    return;
+  }
+  const workspacePath = String(store?.get?.("workspacePath") || "").trim();
+  if (!workspacePath) {
+    pushCheck(checks, {
+      id: "code-agent-ready",
+      status: "fail",
+      message: "Kod Agent için workspace seçilmemiş",
+      fixHint: "Ayarlar → Çalışma Kısmı → klasör seçin.",
+      tier: "optional",
+    });
+    return;
+  }
+  pushCheck(checks, checkSauronDir(workspacePath));
+  try {
+    const { getIndexStatus } = require("../code-agent/codebase-indexer");
+    const indexStatus = getIndexStatus(workspacePath);
+    if (!indexStatus.built) {
+      pushCheck(checks, {
+        id: "code-index-stale",
+        status: "warn",
+        message: "Kod indeksi henüz oluşturulmamış",
+        fixHint: "Code Studio veya kod görevi başlatınca otomatik oluşur.",
+        tier: "optional",
+      });
+    } else if (indexStatus.stale) {
+      pushCheck(checks, {
+        id: "code-index-stale",
+        status: "warn",
+        message: "Kod indeksi eski (>24s)",
+        fixHint: "Workspace'te yeniden index çalıştırın.",
+        tier: "optional",
+      });
+    } else {
+      pushCheck(checks, {
+        id: "code-index-stale",
+        status: "pass",
+        message: `Kod indeksi güncel (${indexStatus.fileCount} dosya)`,
+        fixHint: "",
+        tier: "optional",
+      });
+    }
+  } catch {
+    // optional
+  }
+  pushCheck(checks, {
+    id: "code-agent-ready",
+    status: "pass",
+    message: "Yerel Kod Agent hazır",
+    fixHint: "",
+    tier: "optional",
+  });
+}
+
 function runSauronDoctor(store, options = {}) {
   const checks = [];
   pushCheck(checks, checkNodeVersion());
@@ -589,6 +652,7 @@ function runSauronDoctor(store, options = {}) {
     browserAgentEnabled: store?.get?.("browserAgentEnabled") !== false,
     webStudioEnabled: store?.get?.("webStudioEnabled") !== false,
     selfBuildEnabled: store?.get?.("selfBuildEnabled") !== false,
+    codeAgentNativeEnabled: store?.get?.("codeAgentNativeEnabled") === true,
     ...(options.settings || {}),
   };
 
@@ -601,6 +665,7 @@ function runSauronDoctor(store, options = {}) {
 
   appendBrowserAgentChecks(checks, runtimeSettings);
   appendWebStudioCheck(checks, store, runtimeSettings);
+  appendCodeAgentChecks(checks, store, runtimeSettings);
   pushCheck(checks, checkAiCredentials(runtimeSettings));
 
   const failCount = checks.filter((entry) => entry.status === "fail").length;

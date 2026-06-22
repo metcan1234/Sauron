@@ -117,6 +117,7 @@ const { registerBrowserIpc } = require("./src/ipc/browser-ipc");
 const { registerWebStudioIpc } = require("./src/ipc/web-studio-ipc");
 const { registerMicroGuideIpc } = require("./src/ipc/micro-guide-ipc");
 const { registerBuildPipelineIpc } = require("./src/ipc/build-pipeline-ipc");
+const { registerCodeAgentIpc } = require("./src/ipc/code-agent-ipc");
 const { createWindowManager } = require("./src/main/window-manager");
 const { createTrayMenu } = require("./src/main/tray-menu");
 const { raisePanelAboveOverlay, resetPanelAlwaysOnTop } = require("./src/main/panel-window-focus");
@@ -240,6 +241,10 @@ function createPanelWindow() {
 
 function createSettingsWindow() {
   ensureWindowManager().createSettingsWindow();
+}
+
+function createCodeStudioWindow() {
+  ensureWindowManager().createCodeStudioWindow();
 }
 
 function createCursorOverlay() {
@@ -1441,6 +1446,16 @@ function registerModularIpcHandlers() {
     streamAIResponse,
   });
 
+  registerCodeAgentIpc({
+    ipcMain,
+    debugLog,
+    appLogger,
+    getRuntimeSettings,
+    panelWindow,
+    store,
+    currentAIControllerRef,
+  });
+
   registerBrowserIpc({
     ipcMain,
     debugLog,
@@ -1610,6 +1625,10 @@ function setupIPC() {
   ipcMain.handle("open-settings",  () => {
     debugLog("ipc:open-settings");
     return createSettingsWindow();
+  });
+  ipcMain.handle("open-code-studio", () => {
+    debugLog("ipc:open-code-studio");
+    return createCodeStudioWindow();
   });
   ipcMain.handle("close-settings", () => {
     debugLog("ipc:close-settings");

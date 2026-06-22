@@ -74,6 +74,7 @@ async function startBuildPipeline({
   options = {},
   streamAIResponse,
   appLogger,
+  panelWindow,
 }) {
   const resolvedPath = String(workspacePath || "").trim();
   if (!resolvedPath) {
@@ -94,6 +95,24 @@ async function startBuildPipeline({
 
   const template = getPipeline(pipelineId);
   const firstPhase = template.phases[0];
+
+  if (settings.codeAgentNativeEnabled === true) {
+    const { runPhaseNativeCodeAgent } = require("../../code-agent/code-orchestrator");
+    const codeResult = await runPhaseNativeCodeAgent({
+      workspacePath: resolvedPath,
+      phaseGoal: firstPhase.goal,
+      settings,
+      deps: { panelWindow },
+    });
+    return {
+      ok: codeResult.ok,
+      pipeline: planned.pipeline,
+      native: true,
+      codeAgentResult: codeResult,
+      error: codeResult.error,
+    };
+  }
+
   const written = await writePhaseHandoff({
     pipelineState: planned.pipeline,
     phaseDef: firstPhase,
@@ -113,11 +132,53 @@ async function startBuildPipeline({
 }
 
 async function advancePipelineAfterComplete(workspacePath, settings = {}, deps = {}) {
-  const { streamAIResponse, appLogger } = deps;
+  const { streamAIResponse, appLogger, panelWindow } = deps;
   const resolvedPath = String(workspacePath || "").trim();
   const pipelineState = readPipelineState(resolvedPath);
   if (!pipelineState || pipelineState.status !== "active") {
     return { ok: false, error: "No active pipeline." };
+  }
+
+  if (settings.codeAgentNativeEnabled === true) {
+    const currentPhase = Number(pipelineState.currentPhase) || 1;
+    const template = getPipeline(pipelineState.templateId);
+    const phaseDef = template?.phases?.find((p) => p.phase === currentPhase);
+
+    let verificationResult = { ok: true, skipped: true };
+    if (phaseDef?.verification) {
+      verificationResult = await runVerification(resolvedPath, phaseDef.verification);
+    }
+    if (!verificationResult.ok) {
+      const { runPhaseNativeCodeAgent } = require("../../code-agent/code-orchestrator");
+      const fixResult = await runPhaseNativeCodeAgent({
+        workspacePath: resolvedPath,
+        phaseGoal: `Fix verification failure for phase ${currentPhase}: ${verificationResult.error || verificationResult.stderr}`,
+        settings,
+        deps: { panelWindow },
+      });
+      return { ok: fixResult.ok, action: "native-fix", verification: verificationResult, codeAgentResult: fixResult };
+    }
+
+    if (currentPhase >= pipelineState.totalPhases) {
+      pipelineState.status = "completed";
+      pipelineState.completedAt = new Date().toISOString();
+      writePipelineState(resolvedPath, pipelineState);
+      return { ok: true, action: "completed", pipeline: pipelineState, native: true };
+    }
+
+    const nextPhase = currentPhase + 1;
+    const nextPhaseDef = template.phases.find((p) => p.phase === nextPhase);
+    pipelineState.currentPhase = nextPhase;
+    writePipelineState(resolvedPath, pipelineState);
+
+    const { runPhaseNativeCodeAgent } = require("../../code-agent/code-orchestrator");
+    const codeResult = await runPhaseNativeCodeAgent({
+      workspacePath: resolvedPath,
+      phaseGoal: nextPhaseDef.goal,
+      settings,
+      deps: { panelWindow },
+    });
+    return { ok: codeResult.ok, action: "native-next-phase", pipeline: pipelineState, codeAgentResult: codeResult };
   }
 
   const artifact = readTaskCompleteArtifact(resolvedPath);

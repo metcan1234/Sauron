@@ -64,6 +64,10 @@ const ECONOMY_VISION_OPERATIONS = new Set([
   "locator_strict",
   "evaluator",
   "handoff-task-clarify",
+  "code-grep-context",
+  "code-read-summarize",
+  "code-agent-summarize",
+  "code-agent-plan",
 ]);
 
 function normalizeHint(hint) {

@@ -106,6 +106,9 @@ const schema = {
   agentMatrixVersion: { type: "number", default: 1 },
   chatBackupEnabled: { type: "boolean", default: false },
   chatBackupPath: { type: "string", default: "" },
+  codeAgentNativeEnabled: { type: "boolean", default: false },
+  codeAgentMaxIterations: { type: "number", default: 15 },
+  finopsCodeContextMaxChars: { type: "number", default: 4000 },
 };
 function createStore() { return new Store({ schema, clearInvalidConfig: true }); }
 module.exports = { createStore, schema };

@@ -1,4 +1,15 @@
-# Manuel Test Checklist — v1.4.2
+# Manuel Test Checklist — v1.5.0
+
+## v1.5 Yerel Kod Agent (native)
+
+- [ ] Ayarlar → Eklentiler → **Yerel Kod Agent** kapalıyken panel CTA ve Code Studio gizli
+- [ ] Açıkken: empty-state **Projede kod yaz**, header `</>` Code Studio
+- [ ] Workspace seçili + kod niyetli mesaj → Yerel Kod Agent onayı → oturum başlar
+- [ ] Diff onay kartı → Onayla / Reddet çalışır
+- [ ] FinOps panelde `code-agent-*` operation satırları
+- [ ] Handoff (⌘) hâlâ çalışır (legacy)
+- [ ] Self-Build + native açık → Cline fork uyarısı yok
+- [ ] Doctor: native kapalıyken code-agent-ready skipped
 
 ## v1.2 Solo kullanım (her faz sonrası handoff)
 

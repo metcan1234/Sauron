@@ -74,7 +74,8 @@ export function createSelfBuildStudioController({ api, ui, doc }) {
     }
     try {
       const capReport = await api.invoke("get-cline-capability-report");
-      if (capReport?.variant && capReport.variant !== "fork") {
+      const settings = await api.invoke("get-settings");
+      if (capReport?.variant && capReport.variant !== "fork" && settings?.codeAgentNativeEnabled !== true) {
         const proceed = window.confirm(
           "Pipeline otomatik faz zinciri Cline fork gerektirir; Marketplace'te fazlar manuel ilerler. Devam edilsin mi?",
         );

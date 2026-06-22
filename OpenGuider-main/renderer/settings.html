@@ -355,6 +355,12 @@
         </div>
 
         <div class="form-group">
+          <label>Kod agent context max karakter</label>
+          <input class="form-input" id="finopsCodeContextMaxChars" type="number" min="100" step="100" placeholder="4000"/>
+          <span class="hint">Yerel kod agent'a gönderilen dosya/snippet üst sınırı.</span>
+        </div>
+
+        <div class="form-group">
           <label class="checkbox-label">
             <input type="checkbox" id="finopsHandoffIncludeTranscript"/>
             Handoff'ta son sohbet transcript'ini dahil et
@@ -508,6 +514,15 @@
               <span class="toggle-copy">
                 <strong>Self-Build Pipeline</strong>
                 <span>Çok fazlı üretim hattı ve build pipeline paneli.</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="codeAgentNativeEnabled" class="plugin-checkbox"/>
+              <span class="toggle-copy">
+                <strong>Yerel Kod Agent (Cline'sız)</strong>
+                <span>Workspace içinde dosya düzenleme, terminal ve test döngüsü.</span>
               </span>
             </label>
           </div>

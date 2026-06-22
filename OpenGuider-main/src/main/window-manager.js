@@ -199,6 +199,32 @@ function createWindowManager({
     setRefs({ settingsWindow });
   }
 
+  function createCodeStudioWindow() {
+    const refs = getRefs();
+    if (refs.codeStudioWindow && !refs.codeStudioWindow.isDestroyed()) {
+      refs.codeStudioWindow.focus();
+      return;
+    }
+
+    const codeStudioWindow = new BrowserWindow({
+      width: 960,
+      height: 640,
+      frame: true,
+      resizable: true,
+      skipTaskbar: false,
+      alwaysOnTop: false,
+      parent: refs.panelWindow,
+      webPreferences: PRELOAD_WEB_PREFERENCES,
+    });
+    codeStudioWindow.setTitle("Sauron Code Studio");
+    codeStudioWindow.loadFile(path.join(rendererDir, "code-studio.html"));
+    attachWindowCrashHandlers(codeStudioWindow, "code-studio");
+    codeStudioWindow.on("closed", () => {
+      setRefs({ codeStudioWindow: null });
+    });
+    setRefs({ codeStudioWindow });
+  }
+
   function createCursorOverlay() {
     const virtualBounds = getVirtualDisplayBounds();
     const cursorOverlayWindow = new BrowserWindow({
@@ -334,6 +360,7 @@ function createWindowManager({
     attachWindowCrashHandlers,
     createPanelWindow,
     createSettingsWindow,
+    createCodeStudioWindow,
     createWidgetWindow,
     createCursorOverlay,
     ensureCursorOverlay,

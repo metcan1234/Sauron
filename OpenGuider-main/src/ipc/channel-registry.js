@@ -27,6 +27,10 @@ const PRELOAD_ON_CHANNELS = [
   "finops-budget-alert",
   "pipeline-updated",
   "panel-opened",
+  "code-agent-step-updated",
+  "code-agent-diff-pending",
+  "code-agent-complete",
+  "code-agent-error",
 ];
 
 const PRELOAD_SEND_CHANNELS = [
@@ -40,6 +44,7 @@ const PRELOAD_SEND_CHANNELS = [
   "execution:trust-override",
   "execution:retry-step",
   "widget-open-openguider",
+  "code-agent:change-decision",
 ];
 
 module.exports = {
