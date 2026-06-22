@@ -183,19 +183,25 @@ function registerAiIpc({
     let effectiveHistory;
     let chatOperation = "chat";
 
+    const settings = await getRuntimeSettings();
+    const panelContextLimit = (() => {
+      const { resolvePanelContextMessages } = require("../sauron/finops/cost-optimizer-config");
+      return resolvePanelContextMessages(settings);
+    })();
+
     if (isMemoryChat) {
       try {
         const allMessages = sessionManager?.getSnapshot()?.messages || [];
-        effectiveHistory = buildMemoryChatHistory(allMessages, { maxRecent: MAX_AI_CONTEXT_MESSAGES });
+        effectiveHistory = buildMemoryChatHistory(allMessages, { maxRecent: panelContextLimit });
         chatOperation = "memory-chat";
       } catch (historyError) {
         appLogger.warn("memory-chat-history-fallback", { error: historyError });
-        effectiveHistory = (sessionManager?.getSnapshot()?.messages || []).slice(-MAX_AI_CONTEXT_MESSAGES);
+        effectiveHistory = (sessionManager?.getSnapshot()?.messages || []).slice(-panelContextLimit);
       }
     } else {
       effectiveHistory = Array.isArray(history) && history.length > 0
-        ? history.slice(-MAX_AI_CONTEXT_MESSAGES)
-        : (sessionManager?.getSnapshot()?.messages || []).slice(-MAX_AI_CONTEXT_MESSAGES);
+        ? history.slice(-panelContextLimit)
+        : (sessionManager?.getSnapshot()?.messages || []).slice(-panelContextLimit);
     }
 
     if (regenerate) {
@@ -211,7 +217,6 @@ function registerAiIpc({
 
     broadcastAgentState("thinking");
     updateWidgetState("thinking");
-    const settings = await getRuntimeSettings();
     const requestSettings = { ...settings };
     if (fastMode !== false) {
       const userPrompt = settings.systemPromptOverride || "";

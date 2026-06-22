@@ -49,7 +49,7 @@ const CORE_COMPLEXITY_MAP = {
 };
 
 const CLINE_COMPLEXITY_MAP = {
-  low: "deepseek",
+  low: "gemini",
   medium: "deepseek",
   high: "openai",
 };
@@ -64,6 +64,7 @@ const ECONOMY_VISION_OPERATIONS = new Set([
   "locator_strict",
   "evaluator",
   "handoff-task-clarify",
+  "handoff-summary",
   "code-grep-context",
   "code-read-summarize",
   "code-agent-summarize",
@@ -204,7 +205,9 @@ function resolveAgentForCore(operation = "chat", complexityHint = "low", setting
   const hint = normalizeHint(complexityHint);
   let agentId = CORE_COMPLEXITY_MAP[hint] || "gemini";
 
-  if (hint === "high" && (operation === "context-analyzer" || operation === "chat")) {
+  if (optimizer.mode === "economy" && hint === "high") {
+    agentId = "gemini";
+  } else if (hint === "high" && (operation === "context-analyzer" || operation === "chat")) {
     agentId = "gemini";
   }
 
@@ -215,6 +218,32 @@ function resolveAgentForCore(operation = "chat", complexityHint = "low", setting
     walletFallbackFrom: routed.skippedExhausted[0] || null,
     allCloudExhausted: routed.allCloudExhausted,
   };
+}
+
+function resolveCheapestRoutableClineAgent(settings = {}, agentWallets = null) {
+  const order = ["ollama", "gemini", "deepseek", "openai"];
+  for (const agentId of order) {
+    if (isAgentRoutable(settings, agentId, agentWallets)) {
+      return agentId;
+    }
+  }
+  return "gemini";
+}
+
+function applyGovernorTierToCline(hint, preferredId, governorTier) {
+  if (governorTier === "hard") {
+    return { preferredId: null, reason: "governor-hard-cheapest" };
+  }
+  if (governorTier !== "soft") {
+    return { preferredId, reason: null };
+  }
+  if (hint === "high") {
+    return { preferredId: "deepseek", reason: "governor-soft-high-to-deepseek" };
+  }
+  if (hint === "medium") {
+    return { preferredId: "gemini", reason: "governor-soft-medium-to-gemini" };
+  }
+  return { preferredId, reason: null };
 }
 
 function resolveAgentForCline(complexityHint = "low", settings = {}, options = {}) {
@@ -231,11 +260,39 @@ function resolveAgentForCline(complexityHint = "low", settings = {}, options = {
 
   const hint = normalizeHint(complexityHint);
   const budgetGovernorActive = options.budgetGovernorActive === true || options.downgradeOneTier === true;
+  const governorTier = options.governorTier
+    || (budgetGovernorActive ? "soft" : "none");
 
   let preferredId = CLINE_COMPLEXITY_MAP[hint] || "deepseek";
   let reason = `complexity-${hint}`;
 
-  if (budgetGovernorActive && hint === "high") {
+  if (hint === "low" && settings.finopsClineOllamaForLow === true && hasAgentCredential(settings, "ollama")) {
+    preferredId = "ollama";
+    reason = "cline-ollama-low";
+  }
+
+  if (hint === "high") {
+    if (optimizer.mode === "economy") {
+      preferredId = "deepseek";
+      reason = "economy-mode-high-to-deepseek";
+    } else if (optimizer.mode === "performance") {
+      preferredId = "openai";
+      reason = "performance-mode-high-to-openai";
+    }
+  }
+
+  const governorAdjust = applyGovernorTierToCline(hint, preferredId, governorTier);
+  if (governorAdjust.reason) {
+    reason = governorAdjust.reason;
+  }
+  if (governorTier === "hard") {
+    preferredId = resolveCheapestRoutableClineAgent(settings, agentWallets);
+    reason = "governor-hard-cheapest";
+  } else if (governorAdjust.preferredId) {
+    preferredId = governorAdjust.preferredId;
+  }
+
+  if (budgetGovernorActive && hint === "high" && governorTier === "none") {
     preferredId = "deepseek";
     reason = "budget-governor-high-to-deepseek";
   }
@@ -245,16 +302,40 @@ function resolveAgentForCline(complexityHint = "low", settings = {}, options = {
     reason = "complexity-high-fallback-deepseek";
   }
 
+  if (preferredId === "ollama") {
+    if (isAgentRoutable(settings, "ollama", agentWallets)) {
+      return {
+        ...buildClineSelection(AGENT_DEFINITIONS.ollama, reason),
+        walletFallbackFrom: null,
+        allCloudExhausted: false,
+      };
+    }
+    preferredId = CLINE_COMPLEXITY_MAP[hint] || "gemini";
+    reason = "cline-ollama-unavailable-fallback";
+  }
+
   const routed = resolveRoutedAgent(settings, preferredId, CLINE_CLOUD_FALLBACK_ORDER, agentWallets);
+
+  const explicitReasons = new Set([
+    "complexity-high-fallback-deepseek",
+    "budget-governor-high-to-deepseek",
+    "economy-mode-high-to-deepseek",
+    "performance-mode-high-to-openai",
+    "cline-ollama-low",
+    "governor-soft-high-to-deepseek",
+    "governor-soft-medium-to-gemini",
+    "governor-hard-cheapest",
+    "cline-ollama-unavailable-fallback",
+  ]);
 
   if (routed.reason.startsWith("wallet-exhausted")) {
     reason = routed.reason;
-  } else if (reason === "complexity-high-fallback-deepseek" || reason === "budget-governor-high-to-deepseek") {
-    // keep explicit fallback reason
-  } else if (routed.reason !== `complexity-route-${routed.agent.id}`) {
-    reason = routed.reason;
-  } else {
-    reason = `complexity-${hint}`;
+  } else if (!explicitReasons.has(reason)) {
+    if (routed.reason !== `complexity-route-${routed.agent.id}`) {
+      reason = routed.reason;
+    } else {
+      reason = `complexity-${hint}`;
+    }
   }
 
   return {

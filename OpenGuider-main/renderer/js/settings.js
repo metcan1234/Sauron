@@ -766,6 +766,14 @@ function initFinOpsSettings() {
   }
   document.getElementById("finopsHandoffIncludeTranscript").checked = settings.finopsHandoffIncludeTranscript === true;
   document.getElementById("finopsDailyBudgetTl").value = String(settings.finopsDailyBudgetTl ?? 0);
+  const deltaHandoffEl = document.getElementById("finopsDeltaHandoffEnabled");
+  if (deltaHandoffEl) deltaHandoffEl.checked = settings.finopsDeltaHandoffEnabled !== false;
+  const clarifySkipEl = document.getElementById("finopsClarifySkipEnabled");
+  if (clarifySkipEl) clarifySkipEl.checked = settings.finopsClarifySkipEnabled !== false;
+  const ollamaLowEl = document.getElementById("finopsClineOllamaForLow");
+  if (ollamaLowEl) ollamaLowEl.checked = settings.finopsClineOllamaForLow === true;
+  const panelContextEl = document.getElementById("finopsPanelContextMessages");
+  if (panelContextEl) panelContextEl.value = String(settings.finopsPanelContextMessages ?? 20);
   if (!settings.finopsAgentWallets) {
     settings.finopsAgentWallets = defaultAgentWallets();
   }
@@ -904,6 +912,65 @@ function bindFinOpsControls() {
   document.getElementById("btn-refresh-finops")?.addEventListener("click", () => {
     void refreshFinOpsSummary();
   });
+  document.getElementById("btn-finops-solo-preset")?.addEventListener("click", () => {
+    applySoloUltraEconomyPreset();
+  });
+  document.getElementById("btn-finops-preset-restore")?.addEventListener("click", () => {
+    restoreFinOpsPresetBackup();
+  });
+}
+
+const FINOPS_PRESET_KEYS = [
+  "finopsCostOptimizerMode",
+  "finopsHandoffMaxChars",
+  "finopsClineOllamaForLow",
+  "finopsPanelContextMessages",
+  "finopsMemoryCompressThreshold",
+  "finopsMemoryCompressBatch",
+  "finopsDeltaHandoffEnabled",
+  "finopsClarifySkipEnabled",
+];
+
+function collectFinOpsPresetSnapshot() {
+  const snapshot = {};
+  for (const key of FINOPS_PRESET_KEYS) {
+    if (settings[key] !== undefined) {
+      snapshot[key] = settings[key];
+    }
+  }
+  return snapshot;
+}
+
+function applySoloUltraEconomyPreset() {
+  if (!settings.finopsPresetBackup || !Object.keys(settings.finopsPresetBackup).length) {
+    settings.finopsPresetBackup = collectFinOpsPresetSnapshot();
+  }
+  settings.finopsCostOptimizerMode = "economy";
+  settings.finopsHandoffMaxChars = 2500;
+  settings.finopsClineOllamaForLow = true;
+  settings.finopsPanelContextMessages = 10;
+  settings.finopsMemoryCompressThreshold = 28;
+  settings.finopsMemoryCompressBatch = 15;
+  settings.finopsDeltaHandoffEnabled = true;
+  settings.finopsClarifySkipEnabled = true;
+  initFinOpsSettings();
+  showToast("Solo Ultra Economy preset uygulandı — Kaydet ile kalıcı yapın");
+}
+
+function restoreFinOpsPresetBackup() {
+  const backup = settings.finopsPresetBackup || {};
+  if (!Object.keys(backup).length) {
+    showToast("Geri alınacak preset yedeği yok", true);
+    return;
+  }
+  for (const key of FINOPS_PRESET_KEYS) {
+    if (backup[key] !== undefined) {
+      settings[key] = backup[key];
+    }
+  }
+  settings.finopsPresetBackup = {};
+  initFinOpsSettings();
+  showToast("FinOps preset geri alındı — Kaydet ile kalıcı yapın");
 }
 
 async function refreshFinOpsSummary() {
@@ -1248,6 +1315,13 @@ async function saveSettings() {
     finopsCodeContextMaxChars: Number(document.getElementById("finopsCodeContextMaxChars")?.value) || 4000,
     finopsHandoffIncludeTranscript: document.getElementById("finopsHandoffIncludeTranscript")?.checked === true,
     finopsDailyBudgetTl: Number(document.getElementById("finopsDailyBudgetTl")?.value) || 0,
+    finopsDeltaHandoffEnabled: document.getElementById("finopsDeltaHandoffEnabled")?.checked !== false,
+    finopsClarifySkipEnabled: document.getElementById("finopsClarifySkipEnabled")?.checked !== false,
+    finopsClineOllamaForLow: document.getElementById("finopsClineOllamaForLow")?.checked === true,
+    finopsPanelContextMessages: Number(document.getElementById("finopsPanelContextMessages")?.value) || 20,
+    finopsMemoryCompressThreshold: Number(settings.finopsMemoryCompressThreshold) || 40,
+    finopsMemoryCompressBatch: Number(settings.finopsMemoryCompressBatch) || 20,
+    finopsPresetBackup: settings.finopsPresetBackup || {},
     finopsAgentWallets: collectAgentWallets(),
     systemPromptOverride: document.getElementById("systemPromptOverride")?.value.trim() || "",
     userMemoryFacts: String(document.getElementById("userMemoryFacts")?.value || "")

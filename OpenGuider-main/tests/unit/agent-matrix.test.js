@@ -41,8 +41,8 @@ test("resolveAgentForCore picks deepseek for high complexity", () => {
 
 test("resolveAgentForCline maps complexity to agents", () => {
   const low = resolveAgentForCline("low", baseSettings);
-  assert.equal(low.providerId, "deepseek");
-  assert.equal(low.modelId, "deepseek-chat");
+  assert.equal(low.providerId, "gemini");
+  assert.equal(low.modelId, "gemini-2.5-flash");
 
   const medium = resolveAgentForCline("medium", baseSettings);
   assert.equal(medium.providerId, "deepseek");
@@ -56,7 +56,7 @@ test("resolveAgentForCline maps complexity to agents", () => {
 test("resolveAgentForCline governor routes high to deepseek", () => {
   const selection = resolveAgentForCline("high", baseSettings, { budgetGovernorActive: true });
   assert.equal(selection.providerId, "deepseek");
-  assert.equal(selection.reason, "budget-governor-high-to-deepseek");
+  assert.equal(selection.reason, "governor-soft-high-to-deepseek");
 });
 
 test("resolveAgentForCline falls back to deepseek without openai key", () => {
@@ -67,7 +67,7 @@ test("resolveAgentForCline falls back to deepseek without openai key", () => {
 });
 
 test("resolveAgentForCline skips exhausted deepseek wallet", () => {
-  const selection = resolveAgentForCline("low", baseSettings, {
+  const selection = resolveAgentForCline("medium", baseSettings, {
     agentWallets: deepseekExhaustedWallets,
   });
   assert.equal(selection.providerId, "gemini");
@@ -106,5 +106,6 @@ test("buildAgentMatrixForWorkspace marks configured agents", () => {
   assert.equal(matrix.agents.find((a) => a.id === "gemini")?.configured, true);
   assert.equal(hasAgentCredential({ ollamaUrl: "http://localhost:11434", ollamaModelCustom: "qwen2.5-coder:7b" }, "ollama"), true);
   assert.equal(hasAgentCredential({ ollamaUrl: "http://localhost:11434" }, "ollama"), false);
+  assert.equal(matrix.routing.cline.low, "gemini");
   assert.equal(matrix.routing.cline.medium, "deepseek");
 });

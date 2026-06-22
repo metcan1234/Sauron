@@ -156,7 +156,7 @@ test("seedSauronRules does not overwrite when rules version is current", () => {
     const rulesDir = path.join(workspace, ".clinerules");
     fs.mkdirSync(rulesDir, { recursive: true });
     const rulesPath = path.join(rulesDir, "sauron-workspace.md");
-    const currentContent = `<!-- sauron-rules-version: 1.2 -->\ncustom rules body`;
+    const currentContent = `<!-- sauron-rules-version: 1.3 -->\ncustom rules body`;
     fs.writeFileSync(rulesPath, currentContent, "utf8");
     const mtimeBefore = fs.statSync(rulesPath).mtimeMs;
 
@@ -181,7 +181,7 @@ test("seedSauronRules refreshes stale rules file", () => {
     const result = seedSauronRules(workspace);
     assert.equal(result.seeded, false);
     assert.equal(result.updated, true);
-    assert.match(fs.readFileSync(rulesPath, "utf8"), /sauron-rules-version: 1\.2/);
+    assert.match(fs.readFileSync(rulesPath, "utf8"), /sauron-rules-version: 1\.3/);
     assert.match(fs.readFileSync(rulesPath, "utf8"), /Kod Kalitesi/);
   } finally {
     fs.rmSync(workspace, { recursive: true, force: true });

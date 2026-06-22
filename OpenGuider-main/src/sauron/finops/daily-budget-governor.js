@@ -48,17 +48,34 @@ function resolveDailyBudgetTl(settings = {}, projectType) {
 }
 
 async function shouldActivateBudgetGovernor(settings = {}, options = {}) {
+  const tier = await resolveGovernorTier(settings, options);
+  return tier.level !== "none";
+}
+
+async function resolveGovernorTier(settings = {}, options = {}) {
   const dailyBudget = resolveDailyBudgetTl(settings, options.projectType);
   if (dailyBudget <= 0) {
-    return false;
+    return { level: "none", spendRatio: 0 };
   }
 
   const spent = await computeDailySpendTl(settings);
+  const spendRatio = spent / dailyBudget;
+
+  if (spendRatio >= 1) {
+    return { level: "hard", spendRatio };
+  }
+  if (spendRatio >= 0.8) {
+    return { level: "soft", spendRatio };
+  }
+
   const now = new Date();
   const dayProgress = (now.getHours() * 60 + now.getMinutes()) / (24 * 60);
   const expectedSpend = dailyBudget * Math.max(0.25, dayProgress);
+  if (spent >= expectedSpend) {
+    return { level: "soft", spendRatio };
+  }
 
-  return spent >= expectedSpend;
+  return { level: "none", spendRatio };
 }
 
 function buildGovernorAlertPayload() {
@@ -74,6 +91,7 @@ module.exports = {
   startOfTodayIso,
   computeDailySpendTl,
   resolveDailyBudgetTl,
+  resolveGovernorTier,
   shouldActivateBudgetGovernor,
   buildGovernorAlertPayload,
 };

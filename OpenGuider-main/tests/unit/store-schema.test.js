@@ -28,3 +28,13 @@ test("store schema includes cost optimizer defaults", () => {
   assert.equal(schema.finopsDailyBudgetTl.default, 0);
   assert.deepEqual(schema.finopsOptimizerModels.default, {});
 });
+
+test("store schema includes finops ultra defaults", () => {
+  assert.equal(schema.finopsDeltaHandoffEnabled.default, true);
+  assert.equal(schema.finopsClarifySkipEnabled.default, true);
+  assert.equal(schema.finopsClineOllamaForLow.default, false);
+  assert.equal(schema.finopsPanelContextMessages.default, 20);
+  assert.equal(schema.finopsMemoryCompressThreshold.default, 40);
+  assert.equal(schema.finopsMemoryCompressBatch.default, 20);
+  assert.deepEqual(schema.finopsPresetBackup.default, {});
+});

@@ -1,4 +1,16 @@
-# Manuel Test Checklist — v1.5.0
+# Manuel Test Checklist — v1.6.0
+
+## v1.6 FinOps Ultra
+
+- [ ] Ayarlar → FinOps → Delta handoff / Clarify skip varsayılan açık
+- [ ] **Solo Ultra Economy Uygula** → mode economy, handoff 2500, panel context 10 → Kaydet
+- [ ] **Preset Geri Al** önceki ayarları geri getirir
+- [ ] İlk handoff tam workspace snapshot; ikinci benzer görevde `Workspace delta:` veya küçük tree
+- [ ] Kısa mesaj (`fix typo`) handoff'ta clarify LLM çağrısı atlanır (log: `skipped: true`)
+- [ ] Handoff `suggestedClineAgent` low → gemini flash (Cline VS Code'da model değiştirilebilir)
+- [ ] Economy mod + high görev → deepseek önerisi
+- [ ] Doctor: `finops-handoff-cache` pass, `finops-rules-version` v1.3+
+- [ ] Optimizer kapalıyken delta/clarify skip pasif
 
 ## v1.5 Yerel Kod Agent (native)
 

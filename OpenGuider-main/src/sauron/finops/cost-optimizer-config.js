@@ -1,3 +1,12 @@
+const LOW_COMPLEXITY_KEYWORDS = [
+  "fix",
+  "typo",
+  "rename",
+  "import",
+  "lint",
+  "format",
+];
+
 const HIGH_COMPLEXITY_KEYWORDS = [
   "architecture",
   "security",
@@ -159,6 +168,7 @@ function computeComplexityHint(text) {
   }
 
   const wordCount = normalized.split(/\s+/).filter(Boolean).length;
+  const lowHits = countKeywordHits(normalized, LOW_COMPLEXITY_KEYWORDS);
   const highHits = countKeywordHits(normalized, HIGH_COMPLEXITY_KEYWORDS);
   const mediumHits = countKeywordHits(normalized, MEDIUM_COMPLEXITY_KEYWORDS);
 
@@ -167,6 +177,12 @@ function computeComplexityHint(text) {
   }
   if (mediumHits >= 1 || wordCount >= 500) {
     return "medium";
+  }
+  if (wordCount < 80 && highHits === 0 && lowHits >= 1) {
+    return "low";
+  }
+  if (wordCount < 80 && highHits === 0) {
+    return "low";
   }
   return "low";
 }
@@ -177,8 +193,39 @@ function resolveProjectBudget(projectType, optimizer) {
   return budgets[key] || budgets.generic || { dailyBudgetTl: 0, defaultTier: "economy" };
 }
 
+function resolvePanelContextMessages(settings = {}) {
+  const numeric = Number(settings.finopsPanelContextMessages);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return Math.min(50, Math.floor(numeric));
+  }
+  return 20;
+}
+
+function resolveMemoryCompressThreshold(settings = {}, fallback = 40) {
+  if (settings.finopsMemoryCompressThreshold === undefined || settings.finopsMemoryCompressThreshold === null) {
+    return fallback;
+  }
+  const numeric = Number(settings.finopsMemoryCompressThreshold);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return Math.floor(numeric);
+  }
+  return fallback;
+}
+
+function resolveMemoryCompressBatch(settings = {}, fallback = 20) {
+  if (settings.finopsMemoryCompressBatch === undefined || settings.finopsMemoryCompressBatch === null) {
+    return fallback;
+  }
+  const numeric = Number(settings.finopsMemoryCompressBatch);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return Math.floor(numeric);
+  }
+  return fallback;
+}
+
 module.exports = {
   DEFAULT_TIER_MODELS,
+  LOW_COMPLEXITY_KEYWORDS,
   HIGH_COMPLEXITY_KEYWORDS,
   MEDIUM_COMPLEXITY_KEYWORDS,
   DEFAULT_COMPLEXITY_KEYWORDS,
@@ -190,4 +237,7 @@ module.exports = {
   resolveCoreModelOverlay,
   resolveProjectBudget,
   computeComplexityHint,
+  resolvePanelContextMessages,
+  resolveMemoryCompressThreshold,
+  resolveMemoryCompressBatch,
 };

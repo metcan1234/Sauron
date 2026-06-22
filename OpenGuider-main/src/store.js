@@ -109,6 +109,13 @@ const schema = {
   codeAgentNativeEnabled: { type: "boolean", default: false },
   codeAgentMaxIterations: { type: "number", default: 15 },
   finopsCodeContextMaxChars: { type: "number", default: 4000 },
+  finopsDeltaHandoffEnabled: { type: "boolean", default: true },
+  finopsClarifySkipEnabled: { type: "boolean", default: true },
+  finopsClineOllamaForLow: { type: "boolean", default: false },
+  finopsPanelContextMessages: { type: "number", default: 20 },
+  finopsMemoryCompressThreshold: { type: "number", default: 40 },
+  finopsMemoryCompressBatch: { type: "number", default: 20 },
+  finopsPresetBackup: { type: "object", default: {} },
 };
 function createStore() { return new Store({ schema, clearInvalidConfig: true }); }
 module.exports = { createStore, schema };

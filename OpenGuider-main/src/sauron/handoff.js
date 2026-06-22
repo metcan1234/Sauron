@@ -7,7 +7,7 @@ const {
 } = require("./finops/cost-optimizer-config");
 const { resolveAgentForCline } = require("./finops/agent-matrix");
 const {
-  shouldActivateBudgetGovernor,
+  resolveGovernorTier,
   buildGovernorAlertPayload,
 } = require("./finops/daily-budget-governor");
 const {
@@ -24,10 +24,15 @@ const { loadBrief } = require("./web-studio/brief-schema");
 const { normalizeProjectType } = require("./clinerules-packs");
 const { detectWorkspaceLayout } = require("./workspace-detector");
 const { buildWorkspaceTreeHint } = require("./workspace-tree-snapshot");
+const {
+  resolveWorkspaceHint,
+  updateHandoffContextCache,
+  readHandoffContextCache,
+} = require("./handoff-context-cache");
 const { clarifyHandoffTask, extractHandoffClarifySource } = require("./handoff-task-clarify");
 
 const SAURON_RULES_FILENAME = "sauron-workspace.md";
-const SAURON_RULES_VERSION = "1.2";
+const SAURON_RULES_VERSION = "1.3";
 const HANDOFF_DIR = ".sauron";
 const LEGACY_HANDOFF_FILE = "handoff.json";
 
@@ -40,6 +45,13 @@ const SAURON_RULES_CONTENT = `<!-- sauron-rules-version: ${SAURON_RULES_VERSION}
 3. Aynı bağlamı (dosya içeriği, önceki cevaplar) tekrar tekrar modele gönderme; oturum içi hafızayı kullan.
 4. Ucuz/yerel model (Ollama) yeterli olan basit işlerde (formatlama, küçük refactor, dosya arama) GPT/Gemini gibi pahalı modellere geçme; görev karmaşıklığına göre model seç.
 5. Bir günlük/oturumluk yaklaşık bir bütçe sınırın varsa, sınıra yaklaşınca kullanıcıyı uyar ve ucuz modele düşmeyi öner.
+
+## Token Verimliliği (Yetenek Kaybı Yok)
+- Dosyayı okumadan önce grep / list_files ile hedefi daralt; tam dosya okuma son çare.
+- Aynı dosyayı aynı oturumda ikinci kez tam okuma — diff veya satır aralığı kullan.
+- 3+ dosya değişecekse önce kısa plan, sonra dosya dosya uygula (tek seferde dev prompt yok).
+- Test/lint komutunu sadece anlamlı değişiklikten sonra çalıştır.
+- "devam et" dediğinde önceki bağlamı özetle, tüm transcript'i tekrar gönderme.
 
 ## Onay Kapıları (Approval Gates)
 6. Dosya yazma/silme işleminden önce mutlaka diff göster ve onay iste — "yolo" / oto-onay modu sadece kullanıcı açıkça etkinleştirirse kullanılsın.
@@ -64,8 +76,13 @@ function isTerminalHandoffName(name) {
   return name.endsWith(".consumed") || name.endsWith(".rejected");
 }
 
+const HANDOFF_CONTEXT_CACHE_FILE = "handoff-context-cache.json";
+
 function isPendingHandoffFileName(name) {
   if (isTerminalHandoffName(name)) {
+    return false;
+  }
+  if (name === HANDOFF_CONTEXT_CACHE_FILE) {
     return false;
   }
   if (name === LEGACY_HANDOFF_FILE) {
@@ -192,7 +209,9 @@ function buildTaskSummary(snapshot, options = {}) {
 
   const parts = [];
 
-  if (options.workspacePath) {
+  if (options.workspaceHint) {
+    parts.push(options.workspaceHint);
+  } else if (options.workspacePath) {
     const workspaceHint = buildWorkspaceTreeHint(options.workspacePath);
     if (workspaceHint) {
       parts.push(workspaceHint);
@@ -240,10 +259,15 @@ function buildTaskSummary(snapshot, options = {}) {
 
   if (includeTranscript) {
     const messages = Array.isArray(snapshot?.messages) ? snapshot.messages : [];
-    const recent = messages.slice(-10).filter((m) => m?.content);
+    const recent = messages.slice(-3).filter((m) => m?.content);
     if (recent.length > 0) {
       const transcript = recent
-        .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${String(m.content).trim()}`)
+        .map((m) => {
+          const role = m.role === "user" ? "User" : "Assistant";
+          const content = String(m.content).trim();
+          const clipped = content.length > 400 ? `${content.slice(0, 399)}…` : content;
+          return `${role}: ${clipped}`;
+        })
         .join("\n");
       parts.push(`Recent conversation:\n${transcript}`);
     }
@@ -267,11 +291,22 @@ function buildHandoffPayload(sessionSnapshot, workspacePath, handoffId = generat
   const briefResult = workspacePath ? loadBrief(workspacePath) : { ok: false };
   const webBrief = briefResult.ok ? briefResult.brief : null;
   const layout = workspacePath ? detectWorkspaceLayout(workspacePath) : { suggestedProjectType: "generic" };
+
+  const goalSeed = overrides.goal
+    || sessionSnapshot?.goalIntent
+    || sessionSnapshot?.activePlan?.goal
+    || sessionSnapshot?.browserExecution?.goal
+    || (webBrief ? `Build corporate website for ${webBrief.companyName}` : "");
+
+  const workspaceContext = workspacePath
+    ? resolveWorkspaceHint(workspacePath, settings, goalSeed)
+    : { hint: "", deltaMode: false };
+
   const taskSummary = buildTaskSummary(sessionSnapshot, {
     includeTranscript: optimizer.routing.includeTranscript,
     handoffMaxChars: optimizer.routing.handoffMaxChars,
     webBrief,
-    workspacePath,
+    workspaceHint: workspaceContext.hint,
   });
   const complexityHint = overrides.complexityHint
     || (webBrief ? "high" : computeComplexityHint(taskSummary));
@@ -285,11 +320,7 @@ function buildHandoffPayload(sessionSnapshot, workspacePath, handoffId = generat
     source: "sauron-core",
     workspacePath,
     taskSummary: overrides.taskSummary || taskSummary,
-    goal: overrides.goal
-      || sessionSnapshot?.goalIntent
-      || sessionSnapshot?.activePlan?.goal
-      || sessionSnapshot?.browserExecution?.goal
-      || (webBrief ? `Build corporate website for ${webBrief.companyName}` : ""),
+    goal: goalSeed,
     sessionId: overrides.sessionId || sessionSnapshot?.sessionId || "",
     createdAt: new Date().toISOString(),
     autoStart: overrides.autoStart !== undefined ? Boolean(overrides.autoStart) : true,
@@ -300,6 +331,7 @@ function buildHandoffPayload(sessionSnapshot, workspacePath, handoffId = generat
       optimizerEnabled: optimizer.enabled,
       mode: optimizer.mode,
       budgetGovernorActive,
+      deltaHandoff: workspaceContext.deltaMode,
       ...(suggestedClineAgent ? { suggestedClineAgent } : {}),
     },
   };
@@ -349,12 +381,18 @@ async function prepareHandoffPayloadAsync({
   overrides = {},
   signal,
 }) {
+  const clarifySource = extractHandoffClarifySource(sessionSnapshot);
+  const lastClarify = workspacePath
+    ? readHandoffContextCache(workspacePath)?.lastClarify || ""
+    : "";
+
   const clarification = await clarifyHandoffTask({
-    rawText: extractHandoffClarifySource(sessionSnapshot),
+    rawText: clarifySource,
     settings,
     streamAIResponse,
     signal,
     appLogger,
+    lastClarify,
   });
 
   const payload = buildHandoffPayload(
@@ -366,8 +404,13 @@ async function prepareHandoffPayloadAsync({
   );
 
   if (overrides.taskSummary && workspacePath) {
-    const hint = buildWorkspaceTreeHint(workspacePath);
-    if (hint && !String(payload.taskSummary).includes("Workspace snapshot:")) {
+    const { hint } = resolveWorkspaceHint(
+      workspacePath,
+      settings,
+      payload.goal || clarifySource,
+    );
+    if (hint && !String(payload.taskSummary).includes("Workspace snapshot:")
+      && !String(payload.taskSummary).includes("Workspace delta:")) {
       payload.taskSummary = `${hint}\n\n${payload.taskSummary}`;
     }
   }
@@ -382,11 +425,16 @@ async function prepareHandoffPayloadAsync({
 
   if (workspacePath) {
     const layout = detectWorkspaceLayout(workspacePath);
-    const hint = buildWorkspaceTreeHint(workspacePath);
+    const { hint, deltaMode } = resolveWorkspaceHint(
+      workspacePath,
+      settings,
+      finopsEnriched.payload.goal || clarifySource,
+    );
     appLogger?.info?.("handoff-workspace-context", {
       charCount: hint.length,
       layout: layout.layout,
       clarified: Boolean(clarification),
+      deltaMode,
     });
   }
 
@@ -394,19 +442,22 @@ async function prepareHandoffPayloadAsync({
 }
 
 async function enrichHandoffPayloadFinOps(payload, settings = {}, options = {}) {
-  const budgetGovernorActive = await shouldActivateBudgetGovernor(settings, {
+  const governorTierState = await resolveGovernorTier(settings, {
     projectType: payload.projectType || options.projectType,
   });
+  const budgetGovernorActive = governorTierState.level !== "none";
 
   const { agentWallets } = await resolveAgentWalletState(settings);
 
   const suggestedClineAgent = resolveAgentForCline(payload.complexityHint, settings, {
     budgetGovernorActive,
+    governorTier: governorTierState.level,
     agentWallets,
   });
 
   payload.costContext = payload.costContext || {};
   payload.costContext.budgetGovernorActive = budgetGovernorActive;
+  payload.costContext.governorTier = governorTierState.level;
   if (suggestedClineAgent) {
     payload.costContext.suggestedClineAgent = suggestedClineAgent;
   }
@@ -477,6 +528,17 @@ function writeHandoff(workspacePath, payload) {
   const handoffPath = path.join(sauronDir, fileName);
 
   fs.writeFileSync(handoffPath, JSON.stringify(nextPayload, null, 2), "utf8");
+
+  const summary = String(nextPayload.taskSummary || "");
+  const treeMatch = summary.match(/(?:Workspace snapshot:|Workspace delta:)[\s\S]*?(?:\n\n|$)/);
+  const treeHint = treeMatch ? treeMatch[0].trim() : "";
+  const clarifyMatch = summary.match(/Clarified task \(for Cline\):\n([\s\S]*?)(?:\n\nOriginal context:|$)/);
+  updateHandoffContextCache(workspacePath, {
+    goal: nextPayload.goal || "",
+    treeHint,
+    lastClarify: clarifyMatch ? String(clarifyMatch[1]).trim() : "",
+  });
+
   return { handoffPath, handoffId, fileName };
 }
 

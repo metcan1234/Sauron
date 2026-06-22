@@ -128,6 +128,101 @@ function checkSauronDir(workspacePath) {
   }
 }
 
+function checkFinOpsHandoffCache(workspacePath) {
+  if (!workspacePath || !fs.existsSync(workspacePath)) {
+    return {
+      id: "finops-handoff-cache",
+      status: "warn",
+      message: "Handoff context cache kontrol edilemedi (workspace yok)",
+      fixHint: "Önce workspace klasörünü seçin.",
+      tier: "optional",
+    };
+  }
+  const cachePath = path.join(workspacePath, ".sauron", "handoff-context-cache.json");
+  try {
+    const sauronDir = path.join(workspacePath, ".sauron");
+    fs.mkdirSync(sauronDir, { recursive: true });
+    const probe = { probe: true, at: new Date().toISOString() };
+    fs.writeFileSync(cachePath, JSON.stringify(probe), "utf8");
+    return {
+      id: "finops-handoff-cache",
+      status: "pass",
+      message: "FinOps handoff context cache yazılabilir",
+      fixHint: "",
+      tier: "optional",
+    };
+  } catch (error) {
+    return {
+      id: "finops-handoff-cache",
+      status: "warn",
+      message: `Handoff cache yazılamadı: ${error?.message || error}`,
+      fixHint: "Workspace .sauron/ klasörüne yazma izni verin.",
+      tier: "optional",
+    };
+  }
+}
+
+function parseRulesVersionFromFile(rulesPath) {
+  try {
+    const content = fs.readFileSync(rulesPath, "utf8");
+    const match = content.match(/sauron-rules-version:\s*([^\s>]+)/i);
+    return match ? String(match[1]).trim() : "";
+  } catch {
+    return "";
+  }
+}
+
+function compareRulesVersion(left, right) {
+  const partsLeft = String(left || "0").split(".").map((part) => Number(part) || 0);
+  const partsRight = String(right || "0").split(".").map((part) => Number(part) || 0);
+  for (let index = 0; index < 3; index += 1) {
+    const a = partsLeft[index] || 0;
+    const b = partsRight[index] || 0;
+    if (a > b) return 1;
+    if (a < b) return -1;
+  }
+  return 0;
+}
+
+function checkFinOpsRulesVersion(workspacePath) {
+  if (!workspacePath || !fs.existsSync(workspacePath)) {
+    return {
+      id: "finops-rules-version",
+      status: "warn",
+      message: "Cline kuralları sürümü kontrol edilemedi (workspace yok)",
+      fixHint: "Handoff ile workspace kurallarını seed edin.",
+      tier: "optional",
+    };
+  }
+  const rulesPath = path.join(workspacePath, ".clinerules", "sauron-workspace.md");
+  if (!fs.existsSync(rulesPath)) {
+    return {
+      id: "finops-rules-version",
+      status: "warn",
+      message: "sauron-workspace.md bulunamadı (v1.3 bekleniyor)",
+      fixHint: "Bir handoff başlatın veya workspace bootstrap çalıştırın.",
+      tier: "optional",
+    };
+  }
+  const version = parseRulesVersionFromFile(rulesPath);
+  if (compareRulesVersion(version, "1.3") >= 0) {
+    return {
+      id: "finops-rules-version",
+      status: "pass",
+      message: `Cline kuralları güncel (v${version || "1.3"})`,
+      fixHint: "",
+      tier: "optional",
+    };
+  }
+  return {
+    id: "finops-rules-version",
+    status: "warn",
+    message: `Cline kuralları eski (v${version || "?"} — v1.3 önerilir)`,
+    fixHint: "Yeni bir handoff başlatın; kurallar otomatik güncellenir.",
+    tier: "optional",
+  };
+}
+
 function checkBridgeVsix() {
   const optionalTier = { tier: "optional" };
   const vsixPath = getBridgeVsixPath();
@@ -662,6 +757,8 @@ function runSauronDoctor(store, options = {}) {
 
   const workspacePath = String(store?.get?.("workspacePath") || "").trim();
   pushCheck(checks, checkSauronDir(workspacePath));
+  pushCheck(checks, checkFinOpsHandoffCache(workspacePath));
+  pushCheck(checks, checkFinOpsRulesVersion(workspacePath));
 
   appendBrowserAgentChecks(checks, runtimeSettings);
   appendWebStudioCheck(checks, store, runtimeSettings);

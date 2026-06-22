@@ -320,7 +320,7 @@
 
       <div class="settings-section">
         <h3>Maliyet Optimizer</h3>
-        <p class="settings-lead">Otomatik agent routing: Panel sohbet Gemini; Cline günlük iş DeepSeek; gerçek zor işler OpenAI (nadir). Governor günlük bütçede OpenAI→DeepSeek düşürür.</p>
+        <p class="settings-lead">Otomatik agent routing: Panel sohbet Gemini; Cline low Gemini Flash; günlük iş DeepSeek; gerçek zor işler OpenAI (nadir). Governor günlük bütçede kademe düşürür — Cline modelini kilitlemez, sadece önerir.</p>
 
         <div class="form-group">
           <label class="checkbox-label">
@@ -370,7 +370,43 @@
         <div class="form-group">
           <label>Günlük bütçe (TL)</label>
           <input class="form-input" id="finopsDailyBudgetTl" type="number" min="0" step="0.01" placeholder="0 = sınırsız"/>
-          <span class="hint">Bütçe hızı aşılırsa Cline bir tier düşürülür (görev başına en fazla 1).</span>
+          <span class="hint">Bütçe hızı aşılırsa Cline bir tier düşürülür (görev başına en fazca 1).</span>
+        </div>
+
+        <div class="settings-section" style="margin-top:16px">
+          <h4>FinOps Ultra</h4>
+          <p class="settings-lead">Token tasarrufu: delta handoff, clarify skip, yerel Ollama low önerisi. Cline VS Code içinde istediği modeli seçebilir.</p>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="finopsDeltaHandoffEnabled"/>
+              Delta handoff (tekrarlayan görevlerde küçük workspace bağlamı)
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="finopsClarifySkipEnabled"/>
+              Gereksiz clarify atla (kısa/eylem fiilli mesajlar)
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="finopsClineOllamaForLow"/>
+              Cline low → Ollama öner (yerel, sıfır API maliyeti)
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label>Panel context mesaj limiti</label>
+            <input class="form-input" id="finopsPanelContextMessages" type="number" min="4" max="50" step="1" placeholder="20"/>
+          </div>
+
+          <div class="form-group" style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-secondary" type="button" id="btn-finops-solo-preset">Solo Ultra Economy Uygula</button>
+            <button class="btn btn-secondary" type="button" id="btn-finops-preset-restore">Preset Geri Al</button>
+          </div>
         </div>
 
         <input type="hidden" id="finopsLegacyHidden" value=""/>

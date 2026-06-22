@@ -43,16 +43,23 @@ async function maybeCompressMemoryChat({
     }
 
     const messages = sessionManager.getSnapshot()?.messages || [];
-    if (countConversationalMessages(messages) < MEMORY_COMPRESS_THRESHOLD) {
-      return;
-    }
-
-    const batch = collectOldestConversationalBatch(messages, MEMORY_COMPRESS_BATCH);
-    if (batch.length < MEMORY_COMPRESS_BATCH) {
-      return;
-    }
-
     const settings = await getRuntimeSettings();
+    const {
+      resolveMemoryCompressThreshold,
+      resolveMemoryCompressBatch,
+    } = require("../sauron/finops/cost-optimizer-config");
+    const compressThreshold = resolveMemoryCompressThreshold(settings, MEMORY_COMPRESS_THRESHOLD);
+    const compressBatch = resolveMemoryCompressBatch(settings, MEMORY_COMPRESS_BATCH);
+
+    if (countConversationalMessages(messages) < compressThreshold) {
+      return;
+    }
+
+    const batch = collectOldestConversationalBatch(messages, compressBatch);
+    if (batch.length < compressBatch) {
+      return;
+    }
+
     const summaryText = await streamAIResponse({
       text: [
         "Aşağıdaki sohbeti 3-6 cümleyle özetle.",
