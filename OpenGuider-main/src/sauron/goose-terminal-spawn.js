@@ -1,12 +1,13 @@
 const { execFile } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const {
+  escapePowerShellSingleQuoted,
+  toPowerShellLiteralPath,
+  buildEncodedPowerShellArgs,
+} = require("./goose-powershell");
 
 const GOOSE_TERMINAL_TITLE = "Sauron Goose";
-
-function escapePowerShellSingleQuoted(value) {
-  return String(value || "").replace(/'/g, "''");
-}
 
 function findWindowsTerminalPathSync() {
   if (process.platform !== "win32") {
@@ -35,23 +36,23 @@ function findWindowsTerminalPathSync() {
 }
 
 function buildStartProcessCommand(scriptPath, workspacePath, wtPath) {
-  const script = escapePowerShellSingleQuoted(scriptPath);
-  const cwd = escapePowerShellSingleQuoted(workspacePath);
+  const scriptLit = toPowerShellLiteralPath(scriptPath);
+  const cwdLit = toPowerShellLiteralPath(workspacePath);
   const title = escapePowerShellSingleQuoted(GOOSE_TERMINAL_TITLE);
 
   if (wtPath) {
-    const wt = escapePowerShellSingleQuoted(wtPath);
+    const wtLit = toPowerShellLiteralPath(wtPath);
     return [
-      `$p = Start-Process -FilePath '${wt}'`,
-      `-ArgumentList @('-w','0','new-tab','--title','${title}','-d','${cwd}','powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-NoExit','-NoLogo','-File','${script}')`,
+      `$p = Start-Process -FilePath ${wtLit}`,
+      `-ArgumentList @('-w','0','new-tab','--title','${title}','-d',${cwdLit},'powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-NoExit','-NoLogo','-File',${scriptLit})`,
       "-WindowStyle Normal -PassThru",
     ].join(" ");
   }
 
   return [
     "$p = Start-Process -FilePath 'powershell.exe'",
-    `-ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-NoExit','-NoLogo','-File','${script}')`,
-    `-WorkingDirectory '${cwd}' -WindowStyle Normal -PassThru`,
+    `-ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-NoExit','-NoLogo','-File',${scriptLit})`,
+    `-WorkingDirectory ${cwdLit} -WindowStyle Normal -PassThru`,
   ].join(" ");
 }
 
@@ -124,11 +125,12 @@ function spawnVisibleGooseTerminal({ scriptPath, workspacePath }) {
   }
 
   const { command, terminal } = buildVisibleTerminalSpawnCommand(resolvedScript, resolvedWorkspace);
+  const encodedArgs = buildEncodedPowerShellArgs(command);
 
   return new Promise((resolve, reject) => {
     execFile(
       "powershell.exe",
-      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command],
+      encodedArgs,
       { windowsHide: true, timeout: 25000 },
       (error, stdout, stderr) => {
         if (error) {

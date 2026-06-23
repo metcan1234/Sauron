@@ -16,10 +16,11 @@ const {
   getActiveGooseSession,
 } = require("./goose-session-state");
 const { GOOSE_INSTRUCTIONS_DIR, GOOSE_INSTRUCTIONS_FILE } = require("./goose-config");
-
-function escapePowerShellSingleQuoted(value) {
-  return String(value || "").replace(/'/g, "''");
-}
+const {
+  escapePowerShellSingleQuoted,
+  toPowerShellLiteralPath,
+  writeUtf8BomFile,
+} = require("./goose-powershell");
 
 function getGooseLaunchDir() {
   const dir = path.join(os.tmpdir(), "sauron-goose");
@@ -90,10 +91,10 @@ function buildLaunchScript({
   providerConfig = {},
   env = {},
 }) {
-  const binary = escapePowerShellSingleQuoted(binaryPath);
-  const cwd = escapePowerShellSingleQuoted(workspacePath);
-  const taskFile = escapePowerShellSingleQuoted(taskFilePath);
-  const instructions = escapePowerShellSingleQuoted(instructionsPath);
+  const binaryLit = toPowerShellLiteralPath(binaryPath);
+  const cwdLit = toPowerShellLiteralPath(workspacePath);
+  const taskFileLit = toPowerShellLiteralPath(taskFilePath);
+  const instructionsLit = toPowerShellLiteralPath(instructionsPath);
   const provider = escapePowerShellSingleQuoted(providerConfig.provider || "openai");
   const model = escapePowerShellSingleQuoted(providerConfig.model || "gpt-4o-mini");
 
@@ -101,23 +102,23 @@ function buildLaunchScript({
 
   return [
     "$ErrorActionPreference = 'Continue'",
+    `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`,
     `$host.UI.RawUI.WindowTitle = '${escapePowerShellSingleQuoted(GOOSE_TERMINAL_TITLE)}'`,
     ...envLines,
-    `Set-Location -LiteralPath '${cwd}'`,
-    `$goose = '${binary}'`,
-    `$task = Get-Content -LiteralPath '${taskFile}' -Raw`,
+    `Set-Location -LiteralPath ${cwdLit}`,
+    `$task = Get-Content -LiteralPath ${taskFileLit} -Raw -Encoding UTF8`,
     `$args = @(`,
     "  'run',",
     "  '--no-session',",
     "  '-s',",
     `  '--provider', '${provider}',`,
     `  '--model', '${model}',`,
-    `  '-i', '${instructions}',`,
+    `  '-i', ${instructionsLit},`,
     "  '-t', $task",
     ")",
     "Write-Host 'Sauron Goose — baslatiliyor...' -ForegroundColor Cyan",
     `Write-Host "Provider: ${provider} | Model: ${model}"`,
-    "& $goose @args",
+    `& ${binaryLit} @args`,
     "$code = $LASTEXITCODE",
     "if ($code -ne 0) {",
     "  Write-Host \"Goose hata kodu: $code\" -ForegroundColor Red",
@@ -142,8 +143,8 @@ function writeLaunchArtifacts({
   const scriptPath = path.join(launchDir, `launch-${sessionId}.ps1`);
   const instructionsPath = path.join(workspacePath, GOOSE_INSTRUCTIONS_DIR, GOOSE_INSTRUCTIONS_FILE);
 
-  fs.writeFileSync(taskFilePath, String(taskText), "utf8");
-  fs.writeFileSync(
+  writeUtf8BomFile(taskFilePath, String(taskText));
+  writeUtf8BomFile(
     scriptPath,
     buildLaunchScript({
       binaryPath,
@@ -153,7 +154,6 @@ function writeLaunchArtifacts({
       providerConfig,
       env,
     }),
-    "utf8",
   );
 
   return { scriptPath, taskFilePath, instructionsPath };
@@ -308,6 +308,7 @@ module.exports = {
   buildLaunchScript,
   writeLaunchArtifacts,
   escapePowerShellSingleQuoted,
+  toPowerShellLiteralPath,
   getGooseLaunchDir,
   GOOSE_ENV_PREFIXES,
 };

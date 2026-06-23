@@ -62,4 +62,5 @@ Her oturum başlangıcında tahmini maliyet `goose-session-<mode>` operation ile
 - Goose binary repoya gömülmez.
 - Launcher görev metnini temp dosyaya yazar; PowerShell `-File` ile arg splatting kullanır (boşluklu yollar güvenli).
 - Windows'ta `Start-Process` + odak penceresi ile terminal görünür açılır; `GOOSE_TELEMETRY_OFF=1` ile ilk kurulum telemetri sorusu atlanır.
+- `.ps1` ve görev dosyaları UTF-8 BOM ile yazılır; yollar çift tırnaklı `& "...\goose.exe"` biçiminde çağrılır (Türkçe `İ/Ğ/Ş` yolları güvenli).
 - İlk kurulumda terminalde `goose configure` gerekebilir.

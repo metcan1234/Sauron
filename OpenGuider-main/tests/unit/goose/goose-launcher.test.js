@@ -14,6 +14,11 @@ const {
   buildStartProcessCommand,
   buildVisibleTerminalSpawnCommand,
 } = require("../../../src/sauron/goose-terminal-spawn");
+const {
+  UTF8_BOM,
+  encodePowerShellCommand,
+  toPowerShellLiteralPath,
+} = require("../../../src/sauron/goose-powershell");
 
 test("buildLaunchScript uses instructions file and interactive mode", () => {
   const script = buildLaunchScript({
@@ -29,7 +34,8 @@ test("buildLaunchScript uses instructions file and interactive mode", () => {
   assert.match(script, /'-s',/);
   assert.match(script, /--no-session/);
   assert.doesNotMatch(script, /--system/);
-  assert.match(script, /& \$goose @args/);
+  assert.match(script, /& "C:\\tools\\goose\.exe"/);
+  assert.doesNotMatch(script, /\$goose =/);
   assert.match(script, /Read-Host/);
   assert.match(script, /WindowTitle/);
   assert.match(script, /GOOSE_TELEMETRY_OFF/);
@@ -55,14 +61,69 @@ test("buildEnvSetupLines writes PowerShell env assignments", () => {
   assert.doesNotMatch(joined, /UNRELATED/);
 });
 
+test("buildLaunchScript preserves Turkish paths with double-quoted literals", () => {
+  const turkishPath = "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\goose-package\\goose.exe";
+  const script = buildLaunchScript({
+    binaryPath: turkishPath,
+    workspacePath: "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\proj",
+    taskFilePath: "C:\\Temp\\sauron-goose\\task-1.txt",
+    instructionsPath: "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\proj\\.goose\\instructions.md",
+    providerConfig: { provider: "ollama", model: "qwen2.5-coder:7b" },
+  });
+
+  assert.match(script, /EVERYTHİNG/);
+  assert.doesNotMatch(script, /EVERYTH°NG/);
+  assert.ok(script.includes(`& ${toPowerShellLiteralPath(turkishPath)} @args`));
+  assert.match(script, /-Encoding UTF8/);
+});
+
+test("writeLaunchArtifacts writes UTF-8 BOM ps1 and task files", () => {
+  const turkishWorkspace = path.join(os.tmpdir(), "goose-launch-EVERYTHİNG-test");
+  fs.mkdirSync(turkishWorkspace, { recursive: true });
+  const sessionId = "utf8-bom-session";
+  const binaryPath = "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\goose-package\\goose.exe";
+  const { scriptPath, taskFilePath } = writeLaunchArtifacts({
+    sessionId,
+    taskText: "list files in src",
+    binaryPath,
+    workspacePath: turkishWorkspace,
+    providerConfig: { provider: "ollama", model: "qwen2.5-coder:7b" },
+  });
+
+  const scriptRaw = fs.readFileSync(scriptPath);
+  const taskRaw = fs.readFileSync(taskFilePath);
+  assert.equal(scriptRaw[0], 0xef);
+  assert.equal(scriptRaw[1], 0xbb);
+  assert.equal(scriptRaw[2], 0xbf);
+  assert.equal(taskRaw[0], 0xef);
+  const script = scriptRaw.toString("utf8");
+  assert.match(script, /EVERYTHİNG/);
+  assert.match(script, /& "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\goose-package\\goose\.exe"/);
+
+  fs.rmSync(turkishWorkspace, { recursive: true, force: true });
+  fs.unlinkSync(scriptPath);
+  fs.unlinkSync(taskFilePath);
+});
+
+test("encodePowerShellCommand preserves Turkish characters for -EncodedCommand", () => {
+  const sample = `Set-Location -LiteralPath ${toPowerShellLiteralPath("C:\\EVERYTHİNG\\goose")}`;
+  const encoded = encodePowerShellCommand(sample);
+  const decoded = Buffer.from(encoded, "base64").toString("utf16le");
+  assert.match(decoded, /EVERYTHİNG/);
+  assert.doesNotMatch(decoded, /EVERYTH°NG/);
+});
+
 test("buildStartProcessCommand uses visible window style", () => {
+  const scriptPath = "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\launch.ps1";
   const cmd = buildStartProcessCommand(
-    "C:\\Temp\\launch.ps1",
-    "C:\\workspace",
+    scriptPath,
+    "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\workspace",
     null,
   );
   assert.match(cmd, /WindowStyle Normal/);
   assert.match(cmd, /-NoLogo/);
+  assert.match(cmd, /EVERYTHİNG/);
+  assert.match(cmd, /'-File',"/);
 });
 
 test("buildVisibleTerminalSpawnCommand prefers Windows Terminal when available", () => {
