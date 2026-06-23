@@ -9,6 +9,7 @@ const {
   buildGooseEnv,
   buildEnvSetupLines,
   writeLaunchArtifacts,
+  writeLaunchManifest,
 } = require("../../../src/sauron/goose-launcher");
 const {
   buildStartProcessCommand,
@@ -20,30 +21,58 @@ const {
 const {
   UTF8_BOM,
   encodePowerShellCommand,
+  encodeUtf8Base64,
   toPowerShellLiteralPath,
 } = require("../../../src/sauron/goose-powershell");
 
-test("buildLaunchScript uses instructions file and interactive mode", () => {
+test("buildLaunchScript uses manifest base64 paths instead of embedded literals", () => {
+  const manifestPath = "C:\\Temp\\sauron-goose\\manifest-goose-1.json";
   const script = buildLaunchScript({
-    binaryPath: "C:\\tools\\goose.exe",
-    workspacePath: "C:\\Users\\me\\Sauron Core\\proj",
-    taskFilePath: "C:\\Temp\\sauron-goose\\task-1.txt",
-    instructionsPath: "C:\\Users\\me\\Sauron Core\\proj\\.goose\\instructions.md",
+    manifestPath,
     providerConfig: { provider: "deepseek", model: "deepseek-chat" },
   });
 
-  assert.match(script, /-LiteralPath/);
-  assert.match(script, /'-i',/);
+  assert.match(script, /ConvertFrom-Json/);
+  assert.match(script, /binaryPathB64/);
+  assert.match(script, /FromBase64String/);
+  assert.match(script, /& \$binaryPath @gooseArgs/);
+  assert.doesNotMatch(script, /EVERYTH/);
+  assert.ok(script.includes(toPowerShellLiteralPath(manifestPath)));
   assert.match(script, /'-s',/);
   assert.match(script, /--no-session/);
-  assert.doesNotMatch(script, /--system/);
-  assert.match(script, /& "C:\\tools\\goose\.exe"/);
-  assert.match(script, /@gooseArgs/);
-  assert.doesNotMatch(script, /\$goose =/);
-  assert.doesNotMatch(script, /\$args = @/);
   assert.match(script, /ReadLine/);
-  assert.match(script, /WindowTitle/);
-  assert.match(script, /GOOSE_TELEMETRY_OFF/);
+});
+
+test("writeLaunchManifest stores UTF-8 paths as base64", () => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "goose-manifest-"));
+  const turkishPath = "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\goose-package\\goose.exe";
+  const manifestPath = writeLaunchManifest({
+    sessionId: "manifest-test",
+    binaryPath: turkishPath,
+    workspacePath: workspace,
+    taskFilePath: path.join(workspace, "task.txt"),
+    instructionsPath: path.join(workspace, ".goose", "instructions.md"),
+    providerConfig: { provider: "ollama", model: "qwen2.5-coder:7b" },
+  });
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8").replace(/^\uFEFF/, ""));
+  const decoded = Buffer.from(manifest.binaryPathB64, "base64").toString("utf8");
+  assert.equal(decoded, turkishPath);
+  assert.match(decoded, /EVERYTHİNG/);
+  fs.rmSync(workspace, { recursive: true, force: true });
+  fs.unlinkSync(manifestPath);
+});
+
+test("buildLaunchScript preserves Turkish paths with double-quoted literals", () => {
+  const turkishPath = "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\goose-package\\goose.exe";
+  const manifestPath = "C:\\Temp\\sauron-goose\\manifest-goose-1.json";
+  const script = buildLaunchScript({
+    manifestPath,
+    providerConfig: { provider: "ollama", model: "qwen2.5-coder:7b" },
+  });
+
+  assert.match(script, /binaryPathB64/);
+  assert.doesNotMatch(script, /EVERYTHÄ°NG/);
+  assert.equal(encodeUtf8Base64(turkishPath), Buffer.from(turkishPath, "utf8").toString("base64"));
 });
 
 test("buildGooseEnv disables telemetry and marks goose terminal context", () => {
@@ -66,28 +95,12 @@ test("buildEnvSetupLines writes PowerShell env assignments", () => {
   assert.doesNotMatch(joined, /UNRELATED/);
 });
 
-test("buildLaunchScript preserves Turkish paths with double-quoted literals", () => {
-  const turkishPath = "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\goose-package\\goose.exe";
-  const script = buildLaunchScript({
-    binaryPath: turkishPath,
-    workspacePath: "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\proj",
-    taskFilePath: "C:\\Temp\\sauron-goose\\task-1.txt",
-    instructionsPath: "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\proj\\.goose\\instructions.md",
-    providerConfig: { provider: "ollama", model: "qwen2.5-coder:7b" },
-  });
-
-  assert.match(script, /EVERYTHİNG/);
-  assert.doesNotMatch(script, /EVERYTH°NG/);
-  assert.ok(script.includes(`& ${toPowerShellLiteralPath(turkishPath)} @gooseArgs`));
-  assert.match(script, /-Encoding UTF8/);
-});
-
 test("writeLaunchArtifacts writes UTF-8 BOM ps1 and task files", () => {
   const turkishWorkspace = path.join(os.tmpdir(), "goose-launch-EVERYTHİNG-test");
   fs.mkdirSync(turkishWorkspace, { recursive: true });
   const sessionId = "utf8-bom-session";
   const binaryPath = "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\goose-package\\goose.exe";
-  const { scriptPath, taskFilePath } = writeLaunchArtifacts({
+  const { scriptPath, taskFilePath, manifestPath } = writeLaunchArtifacts({
     sessionId,
     taskText: "list files in src",
     binaryPath,
@@ -98,16 +111,20 @@ test("writeLaunchArtifacts writes UTF-8 BOM ps1 and task files", () => {
   const scriptRaw = fs.readFileSync(scriptPath);
   const taskRaw = fs.readFileSync(taskFilePath);
   assert.equal(scriptRaw[0], 0xef);
-  assert.equal(scriptRaw[1], 0xbb);
-  assert.equal(scriptRaw[2], 0xbf);
   assert.equal(taskRaw[0], 0xef);
   const script = scriptRaw.toString("utf8");
-  assert.match(script, /EVERYTHİNG/);
-  assert.match(script, /& "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\goose-package\\goose\.exe"/);
+  assert.match(script, /binaryPathB64/);
+  assert.doesNotMatch(script, /EVERYTHİNG/);
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8").replace(/^\uFEFF/, ""));
+  assert.equal(
+    Buffer.from(manifest.binaryPathB64, "base64").toString("utf8"),
+    binaryPath,
+  );
 
   fs.rmSync(turkishWorkspace, { recursive: true, force: true });
   fs.unlinkSync(scriptPath);
   fs.unlinkSync(taskFilePath);
+  fs.unlinkSync(manifestPath);
 });
 
 test("encodePowerShellCommand preserves Turkish characters for -EncodedCommand", () => {
@@ -209,7 +226,7 @@ test("writeLaunchArtifacts writes task and script files", () => {
   assert.ok(fs.existsSync(taskFilePath));
   assert.ok(fs.existsSync(scriptPath));
   assert.match(fs.readFileSync(taskFilePath, "utf8"), /quotes/);
-  assert.match(fs.readFileSync(scriptPath, "utf8"), /Get-Content -LiteralPath/);
+  assert.match(fs.readFileSync(scriptPath, "utf8"), /ConvertFrom-Json/);
 
   fs.rmSync(workspace, { recursive: true, force: true });
   fs.unlinkSync(scriptPath);

@@ -531,6 +531,7 @@ module.exports = {
   probeGooseBinary,
   verifyGooseCliBinary,
   resolveBinaryPathOnDisk,
+  resolveDirectoryOnDisk,
   isLikelyGooseDesktopPath,
   collectGooseBinaryCandidates,
   getGooseVersion,

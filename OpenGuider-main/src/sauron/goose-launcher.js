@@ -1,7 +1,7 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { probeGooseBinary } = require("./goose-binary-resolver");
+const { probeGooseBinary, resolveBinaryPathOnDisk, resolveDirectoryOnDisk } = require("./goose-binary-resolver");
 const {
   GOOSE_TERMINAL_TITLE,
   spawnVisibleGooseTerminal,
@@ -20,6 +20,9 @@ const {
   escapePowerShellSingleQuoted,
   toPowerShellLiteralPath,
   writeUtf8BomFile,
+  writeUtf8BomJson,
+  encodeUtf8Base64,
+  decodeUtf8Base64Lines,
 } = require("./goose-powershell");
 
 function getGooseLaunchDir() {
@@ -97,17 +100,11 @@ function buildKeepOpenFooter() {
 }
 
 function buildLaunchScript({
-  binaryPath,
-  workspacePath,
-  taskFilePath,
-  instructionsPath,
+  manifestPath,
   providerConfig = {},
   env = {},
 }) {
-  const binaryLit = toPowerShellLiteralPath(binaryPath);
-  const cwdLit = toPowerShellLiteralPath(workspacePath);
-  const taskFileLit = toPowerShellLiteralPath(taskFilePath);
-  const instructionsLit = toPowerShellLiteralPath(instructionsPath);
+  const manifestLit = toPowerShellLiteralPath(manifestPath);
   const provider = escapePowerShellSingleQuoted(providerConfig.provider || "openai");
   const model = escapePowerShellSingleQuoted(providerConfig.model || "gpt-4o-mini");
 
@@ -118,21 +115,29 @@ function buildLaunchScript({
     "try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}",
     `try { $host.UI.RawUI.WindowTitle = '${escapePowerShellSingleQuoted(GOOSE_TERMINAL_TITLE)}' } catch {}`,
     ...envLines,
-    `Set-Location -LiteralPath ${cwdLit}`,
-    `$task = Get-Content -LiteralPath ${taskFileLit} -Raw -Encoding UTF8`,
+    `$manifest = Get-Content -LiteralPath ${manifestLit} -Raw -Encoding UTF8 | ConvertFrom-Json`,
+    decodeUtf8Base64Lines("binaryPath", "binaryPathB64"),
+    decodeUtf8Base64Lines("workspacePath", "workspacePathB64"),
+    decodeUtf8Base64Lines("taskFilePath", "taskFilePathB64"),
+    decodeUtf8Base64Lines("instructionsPath", "instructionsPathB64"),
+    `Set-Location -LiteralPath $workspacePath`,
+    `$task = Get-Content -LiteralPath $taskFilePath -Raw -Encoding UTF8`,
     `$gooseArgs = @(`,
     "  'run',",
     "  '--no-session',",
     "  '-s',",
     `  '--provider', '${provider}',`,
     `  '--model', '${model}',`,
-    `  '-i', ${instructionsLit},`,
+    "  '-i', $instructionsPath,",
     "  '-t', $task",
     ")",
-    "Write-Host 'Sauron Goose — baslatiliyor...' -ForegroundColor Cyan",
+    "Write-Host 'Sauron Goose - baslatiliyor...' -ForegroundColor Cyan",
     `Write-Host "Provider: ${provider} | Model: ${model}"`,
     "try {",
-    `  & ${binaryLit} @gooseArgs`,
+    "  if (-not (Test-Path -LiteralPath $binaryPath)) {",
+    "    throw [System.IO.FileNotFoundException]::new(\"Goose binary bulunamadi: $binaryPath\")",
+    "  }",
+    "  & $binaryPath @gooseArgs",
     "  $code = $LASTEXITCODE",
     "  if ($code -ne 0) {",
     "    Write-Host \"Goose hata kodu: $code\" -ForegroundColor Red",
@@ -143,6 +148,27 @@ function buildLaunchScript({
     "}",
     ...buildKeepOpenFooter(),
   ].join("\r\n");
+}
+
+function writeLaunchManifest({
+  sessionId,
+  binaryPath,
+  workspacePath,
+  taskFilePath,
+  instructionsPath,
+  providerConfig = {},
+}) {
+  const launchDir = getGooseLaunchDir();
+  const manifestPath = path.join(launchDir, `manifest-${sessionId}.json`);
+  writeUtf8BomJson(manifestPath, {
+    binaryPathB64: encodeUtf8Base64(binaryPath),
+    workspacePathB64: encodeUtf8Base64(workspacePath),
+    taskFilePathB64: encodeUtf8Base64(taskFilePath),
+    instructionsPathB64: encodeUtf8Base64(instructionsPath),
+    provider: String(providerConfig.provider || "openai"),
+    model: String(providerConfig.model || "gpt-4o-mini"),
+  });
+  return manifestPath;
 }
 
 function writeLaunchArtifacts({
@@ -157,21 +183,26 @@ function writeLaunchArtifacts({
   const taskFilePath = path.join(launchDir, `task-${sessionId}.txt`);
   const scriptPath = path.join(launchDir, `launch-${sessionId}.ps1`);
   const instructionsPath = path.join(workspacePath, GOOSE_INSTRUCTIONS_DIR, GOOSE_INSTRUCTIONS_FILE);
+  const manifestPath = writeLaunchManifest({
+    sessionId,
+    binaryPath,
+    workspacePath,
+    taskFilePath,
+    instructionsPath,
+    providerConfig,
+  });
 
   writeUtf8BomFile(taskFilePath, String(taskText));
   writeUtf8BomFile(
     scriptPath,
     buildLaunchScript({
-      binaryPath,
-      workspacePath,
-      taskFilePath,
-      instructionsPath,
+      manifestPath,
       providerConfig,
       env,
     }),
   );
 
-  return { scriptPath, taskFilePath, instructionsPath };
+  return { scriptPath, taskFilePath, instructionsPath, manifestPath };
 }
 
 async function launchGoose({ workspacePath, taskText, settings = {}, modeOverride = null }) {
@@ -202,7 +233,8 @@ async function launchGoose({ workspacePath, taskText, settings = {}, modeOverrid
     };
   }
 
-  const binaryPath = probe.binaryPath;
+  const binaryPath = resolveBinaryPathOnDisk(probe.binaryPath) || probe.binaryPath;
+  const canonicalWorkspace = resolveDirectoryOnDisk(resolvedWorkspace) || resolvedWorkspace;
 
   const routing = modeOverride
     ? {
@@ -213,10 +245,10 @@ async function launchGoose({ workspacePath, taskText, settings = {}, modeOverrid
     }
     : await resolveGooseMode(task, settings);
 
-  seedGooseInstructions(resolvedWorkspace);
+  seedGooseInstructions(canonicalWorkspace);
 
   const sessionId = `goose-${Date.now()}`;
-  const handoffResult = writeGooseHandoff(resolvedWorkspace, {
+  const handoffResult = writeGooseHandoff(canonicalWorkspace, {
     taskText: task,
     mode: routing.mode,
     sessionId,
@@ -228,7 +260,7 @@ async function launchGoose({ workspacePath, taskText, settings = {}, modeOverrid
     sessionId,
     taskText: task,
     binaryPath,
-    workspacePath: resolvedWorkspace,
+    workspacePath: canonicalWorkspace,
     providerConfig: routing.providerConfig,
     env,
   });
@@ -237,7 +269,7 @@ async function launchGoose({ workspacePath, taskText, settings = {}, modeOverrid
   try {
     spawnResult = await spawnVisibleGooseTerminal({
       scriptPath,
-      workspacePath: resolvedWorkspace,
+      workspacePath: canonicalWorkspace,
       sessionId,
     });
   } catch (error) {
@@ -255,7 +287,7 @@ async function launchGoose({ workspacePath, taskText, settings = {}, modeOverrid
     sessionId,
   });
 
-  updateGooseHandoffStatus(resolvedWorkspace, handoffResult.handoff.id, "running", {
+  updateGooseHandoffStatus(canonicalWorkspace, handoffResult.handoff.id, "running", {
     provider: routing.providerConfig.provider,
     model: routing.providerConfig.model,
     binaryPath,
@@ -264,7 +296,7 @@ async function launchGoose({ workspacePath, taskText, settings = {}, modeOverrid
 
   setActiveGooseSession({
     sessionId,
-    workspacePath: resolvedWorkspace,
+    workspacePath: canonicalWorkspace,
     mode: routing.mode,
     startedAt: new Date().toISOString(),
     handoffId: handoffResult.handoff.id,
@@ -323,6 +355,7 @@ module.exports = {
   buildEnvSetupLines,
   buildLaunchScript,
   buildKeepOpenFooter,
+  writeLaunchManifest,
   writeLaunchArtifacts,
   escapePowerShellSingleQuoted,
   toPowerShellLiteralPath,
