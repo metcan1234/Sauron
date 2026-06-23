@@ -54,8 +54,8 @@ function findWindowsTerminalPathSync() {
   }
 }
 
-function buildGooseCliArgs({ taskText, providerConfig = {}, instructionsPath }) {
-  return [
+function buildGooseCliArgs({ taskText, providerConfig = {}, systemInstructions = "" }) {
+  const args = [
     "run",
     "--no-session",
     "-s",
@@ -63,11 +63,16 @@ function buildGooseCliArgs({ taskText, providerConfig = {}, instructionsPath }) 
     String(providerConfig.provider || "openai"),
     "--model",
     String(providerConfig.model || "gpt-4o-mini"),
-    "-i",
-    String(instructionsPath || ""),
     "-t",
     String(taskText || ""),
   ];
+
+  const system = String(systemInstructions || "").trim();
+  if (system) {
+    args.push("--system", system);
+  }
+
+  return args;
 }
 
 function buildHeldOpenCommandArgs(binaryPath, gooseArgs) {

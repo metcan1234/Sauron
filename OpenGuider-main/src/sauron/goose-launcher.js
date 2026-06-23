@@ -1,3 +1,4 @@
+const fs = require("fs");
 const path = require("path");
 const { probeGooseBinary, resolveBinaryPathOnDisk, resolveDirectoryOnDisk } = require("./goose-binary-resolver");
 const {
@@ -97,10 +98,19 @@ async function launchGoose({ workspacePath, taskText, settings = {}, modeOverrid
     GOOSE_INSTRUCTIONS_DIR,
     GOOSE_INSTRUCTIONS_FILE,
   );
+  let systemInstructions = "";
+  try {
+    if (fs.existsSync(instructionsPath)) {
+      systemInstructions = fs.readFileSync(instructionsPath, "utf8");
+    }
+  } catch {
+    // optional system instructions
+  }
+
   const gooseArgs = buildGooseCliArgs({
     taskText: task,
     providerConfig: routing.providerConfig,
-    instructionsPath,
+    systemInstructions,
   });
   const env = buildGooseEnv(settings, routing.providerConfig);
 

@@ -12,19 +12,33 @@ const {
   findWindowsTerminalPathSync,
 } = require("../../../src/sauron/goose-terminal-spawn");
 
-test("buildGooseCliArgs builds goose run argv without powershell", () => {
-  const instructionsPath = "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\proj\\.goose\\instructions.md";
+test("buildGooseCliArgs uses -t for task and --system for instructions", () => {
   const args = buildGooseCliArgs({
     taskText: "list files in src",
     providerConfig: { provider: "ollama", model: "qwen2.5-coder:7b" },
-    instructionsPath,
+    systemInstructions: "# Sauron rules\nBe concise.",
   });
 
   assert.deepEqual(args.slice(0, 4), ["run", "--no-session", "-s", "--provider"]);
   assert.equal(args[4], "ollama");
   assert.equal(args[6], "qwen2.5-coder:7b");
-  assert.equal(args[8], instructionsPath);
-  assert.match(args[8], /EVERYTHİNG/);
+  assert.equal(args[7], "-t");
+  assert.equal(args[8], "list files in src");
+  assert.equal(args[9], "--system");
+  assert.match(args[10], /Sauron rules/);
+  assert.ok(!args.includes("-i"));
+});
+
+test("buildGooseCliArgs omits --system when instructions empty", () => {
+  const args = buildGooseCliArgs({
+    taskText: "hello",
+    providerConfig: { provider: "ollama", model: "qwen2.5-coder:7b" },
+    systemInstructions: "",
+  });
+  assert.equal(args[7], "-t");
+  assert.equal(args[8], "hello");
+  assert.ok(!args.includes("--system"));
+  assert.ok(!args.includes("-i"));
 });
 
 test("buildHeldOpenCommandArgs wraps goose in cmd /k", () => {
@@ -35,13 +49,13 @@ test("buildHeldOpenCommandArgs wraps goose in cmd /k", () => {
   assert.deepEqual(heldOpen.slice(3), gooseArgs);
 });
 
-test("buildGooseCliArgs preserves Turkish paths in argv slots", () => {
-  const turkishBinaryFolder = "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\goose-package";
+test("buildGooseCliArgs preserves Turkish task text in -t argv slot", () => {
   const args = buildSpawnCliArgs({
-    taskText: "hello",
+    taskText: "EVERYTHİNG klasöründeki dosyaları listele",
     providerConfig: { provider: "ollama", model: "qwen2.5-coder:7b" },
-    instructionsPath: path.join(turkishBinaryFolder, ".goose", "instructions.md"),
+    systemInstructions: "",
   });
+  assert.equal(args[7], "-t");
   assert.match(args[8], /EVERYTHİNG/);
   assert.doesNotMatch(args.join("|"), /EVERYTHÄ°NG/);
 });

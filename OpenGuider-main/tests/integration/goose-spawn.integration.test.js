@@ -34,7 +34,7 @@ test("spawnGooseProcess opens held-open terminal with real goose binary", async 
   const args = buildGooseCliArgs({
     taskText: "echo spawn integration test",
     providerConfig: { provider: "ollama", model: "qwen2.5-coder:7b" },
-    instructionsPath,
+    systemInstructions: "# integration test rules",
   });
 
   const result = await spawnGooseProcess({
