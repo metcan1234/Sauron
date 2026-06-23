@@ -11,7 +11,7 @@ const {
 } = require("../plugins/browser/sidecar");
 const { hasAgentCredential } = require("./finops/agent-matrix");
 const { isCursorCliPath } = require("./vscode-launcher");
-const { discoverGooseBinary } = require("./goose-binary-resolver");
+const { discoverGooseBinary, isLikelyGooseDesktopPath } = require("./goose-binary-resolver");
 
 const SOLO_READINESS_IDS = new Set([
   "workspace-path",
@@ -642,8 +642,16 @@ function appendGooseChecks(checks, store, settings = {}) {
     pushCheck(checks, {
       id: "goose-binary",
       status: "warn",
-      message: "Goose binary bulunamadı",
-      fixHint: "Ayarlar → AI Ajanları → Goose binary yolunu girin veya goose.exe'yi PATH'e ekleyin.",
+      message: "Goose CLI bulunamadı",
+      fixHint: "Goose Desktop yeterli değil — CLI kurun (%USERPROFILE%\\.local\\bin\\goose.exe) veya Ayarlar → Goose binary yolunu girin.",
+      tier: "optional",
+    });
+  } else if (isLikelyGooseDesktopPath(binaryPath)) {
+    pushCheck(checks, {
+      id: "goose-binary",
+      status: "warn",
+      message: "Goose Desktop bulundu (CLI değil)",
+      fixHint: "Start Menu'deki Goose Desktop değil; terminal CLI kurun: download_cli.ps1",
       tier: "optional",
     });
   } else {

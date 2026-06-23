@@ -500,10 +500,17 @@ export function createPanelController({
 
     try {
       const probe = await api.invoke("probe-goose-binary");
-      if (!probe?.ok) {
+      if (!probe?.cliCapable) {
+        const isDesktop = probe?.kind === "desktop";
         ui.showErrorBanner({
-          title: "Goose binary bulunamadı",
-          message: "Block Goose CLI kurulu değil veya PATH'te yok. Ayarlar → AI Ajanları → Goose binary yolunu girin.",
+          title: isDesktop ? "Goose Desktop bulundu (CLI gerekli)" : "Goose CLI bulunamadı",
+          message: [
+            probe?.error || (isDesktop
+              ? "Start Menu'deki Goose masaüstü uygulaması terminal komutlarini desteklemez."
+              : "Block Goose CLI kurulu degil veya PATH'te yok."),
+            probe?.installHint || "PowerShell: Goose CLI icin download_cli.ps1 calistirin.",
+            isDesktop && probe?.desktopPath ? `Bulunan: ${probe.desktopPath}` : "",
+          ].filter(Boolean).join("\n\n"),
           actionLabel: "Ayarları aç",
           onAction: () => api.invoke("open-settings"),
         });
@@ -536,7 +543,8 @@ export function createPanelController({
       }
 
       setGooseUiActive(true, result);
-      ui.showToast(`Goose terminal açıldı (${result.mode})`, false);
+      const terminalLabel = result.terminal === "windows-terminal" ? "Windows Terminal" : "PowerShell";
+      ui.showToast(`Goose ${terminalLabel} penceresi açıldı (${result.mode})`, false);
     } catch (error) {
       ui.showToast(error?.message || "Goose başlatılamadı", true);
     } finally {

@@ -1,6 +1,11 @@
-const { spawn } = require("child_process");
+const fs = require("fs");
+const os = require("os");
 const path = require("path");
-const { discoverGooseBinaryAsync } = require("./goose-binary-resolver");
+const { probeGooseBinary } = require("./goose-binary-resolver");
+const {
+  GOOSE_TERMINAL_TITLE,
+  spawnVisibleGooseTerminal,
+} = require("./goose-terminal-spawn");
 const { seedGooseInstructions } = require("./goose-instructions");
 const { writeGooseHandoff, updateGooseHandoffStatus } = require("./goose-handoff");
 const { resolveGooseMode, resolveModeProviderConfig } = require("./goose-router");
@@ -16,10 +21,28 @@ function escapePowerShellSingleQuoted(value) {
   return String(value || "").replace(/'/g, "''");
 }
 
+function getGooseLaunchDir() {
+  const dir = path.join(os.tmpdir(), "sauron-goose");
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+const GOOSE_ENV_PREFIXES = [
+  "GOOSE_",
+  "OPENAI_",
+  "DEEPSEEK_",
+  "OPENROUTER_",
+  "GEMINI_",
+  "OLLAMA_",
+  "ANTHROPIC_",
+];
+
 function buildGooseEnv(settings = {}, providerConfig = {}) {
   const env = { ...process.env };
   env.GOOSE_PROVIDER = String(providerConfig.provider || "openai");
   env.GOOSE_MODEL = String(providerConfig.model || "gpt-4o-mini");
+  env.GOOSE_TELEMETRY_OFF = "1";
+  env.GOOSE_TERMINAL = "1";
 
   if (settings.openaiApiKey) env.OPENAI_API_KEY = settings.openaiApiKey;
   if (settings.deepseekApiKey) env.DEEPSEEK_API_KEY = settings.deepseekApiKey;
@@ -27,23 +50,113 @@ function buildGooseEnv(settings = {}, providerConfig = {}) {
   if (settings.geminiApiKey) env.GEMINI_API_KEY = settings.geminiApiKey;
   if (settings.ollamaUrl) env.OLLAMA_HOST = settings.ollamaUrl;
 
+  const overrides = providerConfig.envOverrides;
+  if (overrides && typeof overrides === "object") {
+    for (const [key, value] of Object.entries(overrides)) {
+      if (value != null && String(value).trim() !== "") {
+        env[key] = String(value);
+      }
+    }
+  }
+
   return env;
 }
 
-function buildLaunchScript(binaryPath, workspacePath, taskText, providerConfig) {
+function buildEnvSetupLines(env = {}) {
+  const lines = [];
+  for (const [key, value] of Object.entries(env)) {
+    if (value == null || String(value).trim() === "") {
+      continue;
+    }
+    if (!GOOSE_ENV_PREFIXES.some((prefix) => key.startsWith(prefix))) {
+      continue;
+    }
+    lines.push(`$env:${key} = '${escapePowerShellSingleQuoted(String(value))}'`);
+  }
+  if (!lines.some((line) => line.startsWith("$env:GOOSE_TELEMETRY_OFF"))) {
+    lines.push("$env:GOOSE_TELEMETRY_OFF = '1'");
+  }
+  if (!lines.some((line) => line.startsWith("$env:GOOSE_TERMINAL"))) {
+    lines.push("$env:GOOSE_TERMINAL = '1'");
+  }
+  return lines;
+}
+
+function buildLaunchScript({
+  binaryPath,
+  workspacePath,
+  taskFilePath,
+  instructionsPath,
+  providerConfig = {},
+  env = {},
+}) {
   const binary = escapePowerShellSingleQuoted(binaryPath);
   const cwd = escapePowerShellSingleQuoted(workspacePath);
-  const task = escapePowerShellSingleQuoted(taskText);
-  const provider = escapePowerShellSingleQuoted(providerConfig.provider);
-  const model = escapePowerShellSingleQuoted(providerConfig.model);
-  const systemPath = path.join(workspacePath, GOOSE_INSTRUCTIONS_DIR, GOOSE_INSTRUCTIONS_FILE);
-  const system = escapePowerShellSingleQuoted(`@${systemPath}`);
+  const taskFile = escapePowerShellSingleQuoted(taskFilePath);
+  const instructions = escapePowerShellSingleQuoted(instructionsPath);
+  const provider = escapePowerShellSingleQuoted(providerConfig.provider || "openai");
+  const model = escapePowerShellSingleQuoted(providerConfig.model || "gpt-4o-mini");
+
+  const envLines = buildEnvSetupLines(env);
 
   return [
-    `$ErrorActionPreference = 'Stop'`,
-    `Set-Location '${cwd}'`,
-    `& '${binary}' run --no-session --provider '${provider}' --model '${model}' --system '${system}' -t '${task}'`,
-  ].join("; ");
+    "$ErrorActionPreference = 'Continue'",
+    `$host.UI.RawUI.WindowTitle = '${escapePowerShellSingleQuoted(GOOSE_TERMINAL_TITLE)}'`,
+    ...envLines,
+    `Set-Location -LiteralPath '${cwd}'`,
+    `$goose = '${binary}'`,
+    `$task = Get-Content -LiteralPath '${taskFile}' -Raw`,
+    `$args = @(`,
+    "  'run',",
+    "  '--no-session',",
+    "  '-s',",
+    `  '--provider', '${provider}',`,
+    `  '--model', '${model}',`,
+    `  '-i', '${instructions}',`,
+    "  '-t', $task",
+    ")",
+    "Write-Host 'Sauron Goose — baslatiliyor...' -ForegroundColor Cyan",
+    `Write-Host "Provider: ${provider} | Model: ${model}"`,
+    "& $goose @args",
+    "$code = $LASTEXITCODE",
+    "if ($code -ne 0) {",
+    "  Write-Host \"Goose hata kodu: $code\" -ForegroundColor Red",
+    "  Write-Host 'Provider/API anahtari veya goose configure ayarlarini kontrol edin.' -ForegroundColor Yellow",
+    "}",
+    "Write-Host ''",
+    "Write-Host 'Kapatmak icin Enter.' -ForegroundColor DarkGray",
+    "Read-Host | Out-Null",
+  ].join("\r\n");
+}
+
+function writeLaunchArtifacts({
+  sessionId,
+  taskText,
+  binaryPath,
+  workspacePath,
+  providerConfig,
+  env = {},
+}) {
+  const launchDir = getGooseLaunchDir();
+  const taskFilePath = path.join(launchDir, `task-${sessionId}.txt`);
+  const scriptPath = path.join(launchDir, `launch-${sessionId}.ps1`);
+  const instructionsPath = path.join(workspacePath, GOOSE_INSTRUCTIONS_DIR, GOOSE_INSTRUCTIONS_FILE);
+
+  fs.writeFileSync(taskFilePath, String(taskText), "utf8");
+  fs.writeFileSync(
+    scriptPath,
+    buildLaunchScript({
+      binaryPath,
+      workspacePath,
+      taskFilePath,
+      instructionsPath,
+      providerConfig,
+      env,
+    }),
+    "utf8",
+  );
+
+  return { scriptPath, taskFilePath, instructionsPath };
 }
 
 async function launchGoose({ workspacePath, taskText, settings = {}, modeOverride = null }) {
@@ -56,13 +169,25 @@ async function launchGoose({ workspacePath, taskText, settings = {}, modeOverrid
     return { ok: false, error: "Goose görev metni boş." };
   }
 
-  const binaryPath = await discoverGooseBinaryAsync(settings);
-  if (!binaryPath) {
+  const probe = await probeGooseBinary(settings);
+  if (!probe.cliCapable || !probe.binaryPath) {
+    if (probe.kind === "desktop") {
+      return {
+        ok: false,
+        error: probe.error || "Goose Desktop bulundu; terminal CLI gerekir.",
+        installHint: probe.installHint,
+        desktopPath: probe.desktopPath || probe.binaryPath,
+        kind: "desktop",
+      };
+    }
     return {
       ok: false,
-      error: "Goose binary bulunamadı. Ayarlar → AI Ajanları → Goose yolunu kontrol edin.",
+      error: probe.error || "Goose CLI bulunamadı. Ayarlar → AI Ajanları → Goose yolunu kontrol edin.",
+      installHint: probe.installHint,
     };
   }
+
+  const binaryPath = probe.binaryPath;
 
   const routing = modeOverride
     ? {
@@ -83,16 +208,28 @@ async function launchGoose({ workspacePath, taskText, settings = {}, modeOverrid
   });
 
   const env = buildGooseEnv(settings, routing.providerConfig);
-  const innerScript = buildLaunchScript(binaryPath, resolvedWorkspace, task, routing.providerConfig);
-  const psCommand = `Start-Process powershell -ArgumentList '-NoExit','-Command','${innerScript.replace(/'/g, "''")}' -WindowStyle Normal`;
 
-  const child = spawn("powershell.exe", ["-NoProfile", "-Command", psCommand], {
-    detached: true,
-    stdio: "ignore",
+  const { scriptPath } = writeLaunchArtifacts({
+    sessionId,
+    taskText: task,
+    binaryPath,
+    workspacePath: resolvedWorkspace,
+    providerConfig: routing.providerConfig,
     env,
-    windowsHide: true,
   });
-  child.unref();
+
+  let spawnResult;
+  try {
+    spawnResult = await spawnVisibleGooseTerminal({
+      scriptPath,
+      workspacePath: resolvedWorkspace,
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      error: error?.message || "Goose terminal penceresi açılamadı.",
+    };
+  }
 
   await recordGooseSessionStart({
     settings,
@@ -106,6 +243,7 @@ async function launchGoose({ workspacePath, taskText, settings = {}, modeOverrid
     provider: routing.providerConfig.provider,
     model: routing.providerConfig.model,
     binaryPath,
+    scriptPath,
   });
 
   setActiveGooseSession({
@@ -114,7 +252,9 @@ async function launchGoose({ workspacePath, taskText, settings = {}, modeOverrid
     mode: routing.mode,
     startedAt: new Date().toISOString(),
     handoffId: handoffResult.handoff.id,
-    pid: child.pid,
+    pid: spawnResult.pid,
+    scriptPath,
+    terminal: spawnResult.terminal,
   });
 
   return {
@@ -127,6 +267,8 @@ async function launchGoose({ workspacePath, taskText, settings = {}, modeOverrid
     model: routing.providerConfig.model,
     binaryPath,
     handoffId: handoffResult.handoff.id,
+    scriptPath,
+    terminal: spawnResult.terminal,
   };
 }
 
@@ -162,6 +304,10 @@ module.exports = {
   cancelGooseSession,
   getGooseStatus,
   buildGooseEnv,
+  buildEnvSetupLines,
   buildLaunchScript,
+  writeLaunchArtifacts,
   escapePowerShellSingleQuoted,
+  getGooseLaunchDir,
+  GOOSE_ENV_PREFIXES,
 };

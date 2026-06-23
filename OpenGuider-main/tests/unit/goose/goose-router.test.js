@@ -7,12 +7,23 @@ const {
   hasOllamaConfigured,
 } = require("../../../src/sauron/goose-router");
 
-test("resolveModeProviderConfig uses openrouter when key present", () => {
+test("resolveModeProviderConfig uses deepseek when deepseek key present", () => {
   const cfg = resolveModeProviderConfig("balanced", {
-    openrouterApiKey: "sk-test",
+    deepseekApiKey: "sk-test",
+    deepseekModelCustom: "deepseek-chat",
   });
-  assert.equal(cfg.provider, "openrouter");
+  assert.equal(cfg.provider, "deepseek");
+  assert.equal(cfg.model, "deepseek-chat");
+});
+
+test("resolveModeProviderConfig uses openrouter via openai-compatible host", () => {
+  const cfg = resolveModeProviderConfig("balanced", {
+    openrouterApiKey: "sk-or-test",
+  });
+  assert.equal(cfg.provider, "openai");
   assert.equal(cfg.model, "deepseek/deepseek-chat");
+  assert.equal(cfg.envOverrides.GOOSE_PROVIDER__HOST, "https://openrouter.ai/api/v1");
+  assert.equal(cfg.envOverrides.OPENAI_API_KEY, "sk-or-test");
 });
 
 test("resolveModeProviderConfig economy uses ollama model from settings", () => {
@@ -37,6 +48,7 @@ test("resolveGooseMode falls back to balanced when economy ollama missing", asyn
     gooseAutoMode: true,
     ollamaUrl: "",
     ollamaModelCustom: "",
+    deepseekApiKey: "sk-test",
   });
   assert.equal(routing.mode, "balanced");
   assert.match(routing.reason, /fallback|complexity|ollama/i);

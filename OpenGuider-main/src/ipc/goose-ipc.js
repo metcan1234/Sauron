@@ -1,5 +1,5 @@
 const { launchGoose, cancelGooseSession, getGooseStatus } = require("../sauron/goose-launcher");
-const { discoverGooseBinaryAsync, getGooseVersion } = require("../sauron/goose-binary-resolver");
+const { probeGooseBinary, clearGooseBinaryCache } = require("../sauron/goose-binary-resolver");
 const { getGooseTodaySpentTl, summarizeGooseUsage } = require("../sauron/goose-finops");
 const { resolveGooseMode } = require("../sauron/goose-router");
 const { detectGooseComplexity } = require("../sauron/goose-complexity");
@@ -53,6 +53,7 @@ function registerGooseIpc({
           mode: result.mode,
           provider: result.provider,
           model: result.model,
+          terminal: result.terminal || null,
         });
       }
       return result;
@@ -65,12 +66,13 @@ function registerGooseIpc({
   ipcMain.handle("get-goose-status", async () => {
     const settings = await getRuntimeSettings();
     const status = getGooseStatus();
-    const binaryPath = await discoverGooseBinaryAsync(settings);
-    const version = binaryPath ? await getGooseVersion(binaryPath) : null;
+    const probe = await probeGooseBinary(settings);
     return {
       ...status,
-      binaryPath,
-      version,
+      binaryPath: probe.binaryPath,
+      version: probe.version || null,
+      cliCapable: probe.cliCapable === true,
+      kind: probe.kind || "missing",
       enabled: settings.gooseEnabled !== false,
     };
   });
@@ -109,11 +111,16 @@ function registerGooseIpc({
     };
   });
 
-  ipcMain.handle("probe-goose-binary", async () => {
+  ipcMain.handle("probe-goose-binary", async (_event, options = {}) => {
     const settings = await getRuntimeSettings();
-    const binaryPath = await discoverGooseBinaryAsync(settings);
-    const version = binaryPath ? await getGooseVersion(binaryPath) : null;
-    return { ok: Boolean(binaryPath), binaryPath, version };
+    const gooseBinaryPath = String(
+      options.gooseBinaryPath ?? settings.gooseBinaryPath ?? "",
+    ).trim();
+    clearGooseBinaryCache();
+    return probeGooseBinary({
+      ...settings,
+      gooseBinaryPath,
+    });
   });
 }
 

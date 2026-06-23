@@ -19,6 +19,41 @@ function showToast(msg, isError) {
   toastTimer = setTimeout(() => toast.classList.add("hidden"), 3000);
 }
 
+async function refreshGooseProbeStatus(gooseBinaryPath) {
+  const statusEl = document.getElementById("gooseProbeStatus");
+  const fromInput = gooseBinaryPath ?? document.getElementById("gooseBinaryPath")?.value?.trim() ?? "";
+  if (statusEl) {
+    statusEl.textContent = "Kontrol ediliyor…";
+  }
+  try {
+    const probe = await window.sauron.invoke("probe-goose-binary", {
+      gooseBinaryPath: fromInput,
+    });
+    if (!statusEl) {
+      return probe;
+    }
+    if (probe?.cliCapable) {
+      const version = probe.version ? ` v${probe.version}` : "";
+      const resolved = probe.resolvedPath && probe.resolvedPath !== fromInput
+        ? ` (cozulen: ${probe.resolvedPath})`
+        : "";
+      statusEl.textContent = `CLI bulundu: ${probe.binaryPath}${version}${resolved}`;
+      return probe;
+    }
+    if (probe?.kind === "desktop") {
+      statusEl.textContent = `Desktop bulundu (CLI degil): ${probe.desktopPath || probe.binaryPath || "?"}`;
+      return probe;
+    }
+    statusEl.textContent = probe?.error || "CLI bulunamadi.";
+    return probe;
+  } catch (error) {
+    if (statusEl) {
+      statusEl.textContent = `Hata: ${error.message}`;
+    }
+    return { ok: false, cliCapable: false, error: error.message };
+  }
+}
+
 async function refreshClineSyncStatus() {
   const statusEl = document.getElementById("clineSyncStatus");
   if (!statusEl) {
@@ -103,6 +138,7 @@ async function init() {
   if (gooseDefaultModeEl) gooseDefaultModeEl.value = settings.gooseDefaultMode || "balanced";
   if (gooseDailyBudgetTlEl) gooseDailyBudgetTlEl.value = String(settings.gooseDailyBudgetTl ?? 0);
   if (gooseAutoModeEl) gooseAutoModeEl.checked = settings.gooseAutoMode !== false;
+  void refreshGooseProbeStatus(settings.gooseBinaryPath || "");
   // STT / TTS
   document.getElementById("assemblyaiApiKey").value  = settings.assemblyaiApiKey  || "";
   document.getElementById("whisperApiKey").value     = settings.whisperApiKey     || "";
@@ -386,20 +422,8 @@ async function init() {
     void runDoctorCheck();
   });
 
-  document.getElementById("btn-probe-goose")?.addEventListener("click", async () => {
-    const statusEl = document.getElementById("gooseProbeStatus");
-    if (statusEl) statusEl.textContent = "Kontrol ediliyor…";
-    try {
-      const probe = await window.sauron.invoke("probe-goose-binary");
-      if (probe?.ok) {
-        const version = probe.version ? ` v${probe.version}` : "";
-        if (statusEl) statusEl.textContent = `Bulundu: ${probe.binaryPath}${version}`;
-      } else if (statusEl) {
-        statusEl.textContent = "Bulunamadı — binary yolunu girin veya PATH'e ekleyin.";
-      }
-    } catch (error) {
-      if (statusEl) statusEl.textContent = `Hata: ${error.message}`;
-    }
+  document.getElementById("btn-probe-goose")?.addEventListener("click", () => {
+    void refreshGooseProbeStatus();
   });
 
   bindSettingsTabs();
@@ -1388,8 +1412,15 @@ async function saveSettings() {
     if (result?.warnings?.length) {
       showToast(result.warnings[0], true);
     }
-    showToast("✓ Settings saved");
-    setTimeout(() => window.sauron.invoke("close-settings"), 800);
+    const gooseProbe = await refreshGooseProbeStatus(newSettings.gooseBinaryPath);
+    if (gooseProbe?.cliCapable) {
+      showToast(`✓ Ayarlar kaydedildi — Goose CLI v${gooseProbe.version || "?"}`);
+    } else if (newSettings.gooseBinaryPath) {
+      showToast(gooseProbe?.error || "Ayarlar kaydedildi — Goose CLI dogrulanamadi", true);
+    } else {
+      showToast("✓ Settings saved");
+    }
+    setTimeout(() => window.sauron.invoke("close-settings"), 1200);
   } catch (err) {
     showToast("Save failed: " + err.message, true);
   }

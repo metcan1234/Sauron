@@ -1,6 +1,6 @@
 # Sauron Goose Kısmı (v1.7)
 
-Goose, Sauron'da Cline/handoff ve FinOps Ultra'dan **bağımsız** üçüncü workspace katmanıdır. Paneldeki **🪿** butonu Block Goose CLI'yi ayrı bir PowerShell terminalinde başlatır.
+Goose, Sauron'da Cline/handoff ve FinOps Ultra'dan **bağımsız** üçüncü workspace katmanıdır. Paneldeki **🪿** butonu Block Goose CLI'yi **ön planda** ayrı bir terminal penceresinde başlatır (Windows Terminal varsa orada, yoksa PowerShell).
 
 ## Mimari
 
@@ -17,7 +17,7 @@ Goose routing **Cline model önerisini veya handoff içeriğini değiştirmez**.
 | Mod | Provider | Ne zaman |
 |-----|----------|----------|
 | Economy | Ollama (yerel) | Basit dosya/komut görevleri |
-| Balanced | OpenRouter → DeepSeek | Orta karmaşıklık |
+| Balanced | DeepSeek (native) veya OpenRouter (OpenAI uyumlu) | Orta karmaşıklık |
 | Premium | OpenAI | Mimari/refactor/güvenlik anahtar kelimeleri |
 
 `gooseAutoMode` açıkken mod görev metnine göre seçilir. Kapalıyken `gooseDefaultMode` kullanılır.
@@ -48,13 +48,18 @@ Her oturum başlangıcında tahmini maliyet `goose-session-<mode>` operation ile
 
 ## Kurulum
 
-1. [Block Goose](https://github.com/block/goose) CLI kurun.
+1. **[Goose CLI](https://github.com/block/goose)** kurun — **Desktop (GUI) yeterli değil.**
+   - PowerShell: `download_cli.ps1` ile `%USERPROFILE%\.local\bin\goose.exe`
+   - Start Menu'deki Goose masaüstü uygulaması Sauron 🪿 ile çalışmaz.
 2. Economy için Ollama + model (ör. `qwen2.5-coder:7b`).
-3. Balanced için OpenRouter veya DeepSeek API anahtarı.
-4. Ayarlar → Goose binary kontrol et.
+3. Balanced için DeepSeek veya OpenRouter/OpenAI anahtarı.
+4. Ayarlar → **Goose binary kontrol et** → “CLI bulundu” yazmalı.
 
 ## Sınırlamalar
 
 - Maliyet terminal token'larından okunmaz; oturum başına tahmin kullanılır.
 - Durdur düğmesi PowerShell parent PID'ini sonlandırır; iç içe Goose süreci kalabilir.
 - Goose binary repoya gömülmez.
+- Launcher görev metnini temp dosyaya yazar; PowerShell `-File` ile arg splatting kullanır (boşluklu yollar güvenli).
+- Windows'ta `Start-Process` + odak penceresi ile terminal görünür açılır; `GOOSE_TELEMETRY_OFF=1` ile ilk kurulum telemetri sorusu atlanır.
+- İlk kurulumda terminalde `goose configure` gerekebilir.

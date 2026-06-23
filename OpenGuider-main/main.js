@@ -119,6 +119,7 @@ const { registerMicroGuideIpc } = require("./src/ipc/micro-guide-ipc");
 const { registerBuildPipelineIpc } = require("./src/ipc/build-pipeline-ipc");
 const { registerCodeAgentIpc } = require("./src/ipc/code-agent-ipc");
 const { registerGooseIpc } = require("./src/ipc/goose-ipc");
+const { clearGooseBinaryCache } = require("./src/sauron/goose-binary-resolver");
 const { createWindowManager } = require("./src/main/window-manager");
 const { createTrayMenu } = require("./src/main/tray-menu");
 const { raisePanelAboveOverlay, resetPanelAlwaysOnTop } = require("./src/main/panel-window-focus");
@@ -1548,6 +1549,7 @@ function setupIPC() {
     } catch (err) {
       appLogger.warn("cline-credential-request-failed", { error: err?.message || err });
     }
+    clearGooseBinaryCache();
     return {
       ok: true,
       warnings: guardedInput.warnings,
