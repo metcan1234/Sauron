@@ -1,6 +1,6 @@
 const path = require("path");
 
-const GOOSE_INSTRUCTIONS_VERSION = "1.0";
+const GOOSE_INSTRUCTIONS_VERSION = "1.1";
 const GOOSE_INSTRUCTIONS_DIR = ".goose";
 const GOOSE_INSTRUCTIONS_FILE = "instructions.md";
 

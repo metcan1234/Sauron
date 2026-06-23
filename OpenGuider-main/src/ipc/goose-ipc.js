@@ -1,6 +1,6 @@
 const { launchGoose, cancelGooseSession, getGooseStatus } = require("../sauron/goose-launcher");
 const { probeGooseBinary, clearGooseBinaryCache } = require("../sauron/goose-binary-resolver");
-const { getGooseTodaySpentTl, summarizeGooseUsage } = require("../sauron/goose-finops");
+const { getGooseDailySpendSummary } = require("../sauron/goose-finops");
 const { resolveGooseMode } = require("../sauron/goose-router");
 const { detectGooseComplexity } = require("../sauron/goose-complexity");
 
@@ -87,16 +87,7 @@ function registerGooseIpc({
 
   ipcMain.handle("get-goose-daily-spend", async () => {
     const settings = await getRuntimeSettings();
-    const spentTl = await getGooseTodaySpentTl(settings);
-    const summary = await summarizeGooseUsage(settings);
-    const dailyBudgetTl = Number(settings.gooseDailyBudgetTl) || 0;
-    return {
-      ok: true,
-      spentTl,
-      dailyBudgetTl,
-      remainingTl: dailyBudgetTl > 0 ? Math.max(0, dailyBudgetTl - spentTl) : null,
-      summary,
-    };
+    return getGooseDailySpendSummary(settings);
   });
 
   ipcMain.handle("preview-goose-mode", async (_event, { taskText } = {}) => {

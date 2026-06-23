@@ -1,7 +1,23 @@
 const { trackCall, readUsageEntries, resolveUsageLogPath } = require("./finops/usage-tracker");
 const { GOOSE_TOKEN_MODES } = require("./goose-config");
+const { resolveGovernorTier } = require("./finops/daily-budget-governor");
+const { buildBudgetWarnNotice } = require("./goose-budget-policy");
 
 const GOOSE_OPERATION_PREFIX = "goose-session-";
+
+function wordCountMultiplier(wordCount) {
+  const words = Number(wordCount) || 0;
+  if (words <= 20) {
+    return 1;
+  }
+  if (words <= 50) {
+    return 1.15;
+  }
+  if (words <= 100) {
+    return 1.35;
+  }
+  return 1.6;
+}
 
 async function getGooseTodaySpentTl(settings = {}) {
   const logPath = resolveUsageLogPath(settings);
@@ -28,13 +44,15 @@ async function getGooseTodaySpentTl(settings = {}) {
   return total;
 }
 
-function estimateGooseSessionCostTl(mode) {
+function estimateGooseSessionCostTl(mode, options = {}) {
   const key = String(mode || "balanced");
   const configured = GOOSE_TOKEN_MODES[key]?.estimatedCostTl;
-  if (configured != null) {
-    return Number(configured);
+  const base = configured != null ? Number(configured) : 0.12;
+  if (key === "economy") {
+    return 0;
   }
-  return 0.12;
+  const multiplier = wordCountMultiplier(options.wordCount);
+  return Math.round(base * multiplier * 10000) / 10000;
 }
 
 async function recordGooseSessionStart({
@@ -43,8 +61,9 @@ async function recordGooseSessionStart({
   provider,
   model,
   sessionId = "",
+  wordCount = 0,
 }) {
-  const costTl = estimateGooseSessionCostTl(mode);
+  const costTl = estimateGooseSessionCostTl(mode, { wordCount });
   trackCall({
     provider: String(provider || "unknown"),
     model: String(model || "default"),
@@ -55,10 +74,11 @@ async function recordGooseSessionStart({
     latencyMs: 0,
     timestamp: new Date().toISOString(),
     sessionId: String(sessionId || "").trim() || undefined,
-    sourceNote: "Goose terminal session (estimated)",
+    sourceNote: `Goose terminal session (estimated, ${wordCount} words)`,
     estimated: true,
+    wordCount: Number(wordCount) || 0,
   }, settings);
-  return { costTl, estimated: true };
+  return { costTl, estimated: true, wordCount };
 }
 
 async function summarizeGooseUsage(settings = {}) {
@@ -77,9 +97,9 @@ async function summarizeGooseUsage(settings = {}) {
       const cost = Number(entry.costTl) || 0;
       total += cost;
       count += 1;
-      const mode = operation.replace(GOOSE_OPERATION_PREFIX, "");
-      if (byMode[mode] != null) {
-        byMode[mode] += cost;
+      const modeKey = operation.replace(GOOSE_OPERATION_PREFIX, "");
+      if (byMode[modeKey] != null) {
+        byMode[modeKey] += cost;
       }
     }
   } catch {
@@ -89,10 +109,38 @@ async function summarizeGooseUsage(settings = {}) {
   return { total, count, byMode };
 }
 
+async function getGooseDailySpendSummary(settings = {}) {
+  const spentTl = await getGooseTodaySpentTl(settings);
+  const summary = await summarizeGooseUsage(settings);
+  const dailyBudgetTl = Number(settings.gooseDailyBudgetTl) || 0;
+  const budgetWarn = buildBudgetWarnNotice(settings, spentTl);
+
+  let governorTier = { level: "none", spendRatio: 0 };
+  if (settings.gooseFinopsShareGlobalBudget !== false) {
+    try {
+      governorTier = await resolveGovernorTier(settings);
+    } catch {
+      governorTier = { level: "none", spendRatio: 0 };
+    }
+  }
+
+  return {
+    ok: true,
+    spentTl,
+    dailyBudgetTl,
+    remainingTl: dailyBudgetTl > 0 ? Math.max(0, dailyBudgetTl - spentTl) : null,
+    summary,
+    budgetWarn,
+    governorTier,
+  };
+}
+
 module.exports = {
   GOOSE_OPERATION_PREFIX,
+  wordCountMultiplier,
   getGooseTodaySpentTl,
   estimateGooseSessionCostTl,
   recordGooseSessionStart,
   summarizeGooseUsage,
+  getGooseDailySpendSummary,
 };

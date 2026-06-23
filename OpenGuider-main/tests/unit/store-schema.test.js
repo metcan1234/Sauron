@@ -45,4 +45,8 @@ test("store schema includes goose defaults", () => {
   assert.equal(schema.gooseDefaultMode.default, "balanced");
   assert.equal(schema.gooseDailyBudgetTl.default, 0);
   assert.equal(schema.gooseAutoMode.default, true);
+  assert.equal(schema.gooseBudgetAutoDowngrade.default, false);
+  assert.equal(schema.gooseBudgetWarnAt.default, 0.8);
+  assert.equal(schema.gooseFinopsShareGlobalBudget.default, true);
+  assert.equal(schema.gooseShowModeHint.default, true);
 });

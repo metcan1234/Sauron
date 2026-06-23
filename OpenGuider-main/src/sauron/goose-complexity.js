@@ -1,19 +1,22 @@
+const {
+  LOW_COMPLEXITY_KEYWORDS,
+  HIGH_COMPLEXITY_KEYWORDS,
+  MEDIUM_COMPLEXITY_KEYWORDS,
+} = require("./finops/cost-optimizer-config");
+
 const HIGH_KEYWORDS = [
+  ...HIGH_COMPLEXITY_KEYWORDS,
   "refactor",
   "mimari",
-  "architecture",
   "tüm proje",
   "bütün dosyalar",
   "güvenlik",
-  "security",
-  "database",
-  "schema",
   "deploy",
   "production",
-  "migrate",
 ];
 
 const LOW_KEYWORDS = [
+  ...LOW_COMPLEXITY_KEYWORDS,
   "aç",
   "open",
   "göster",
@@ -29,9 +32,12 @@ const LOW_KEYWORDS = [
   "sil",
   "delete",
   "yeniden adlandır",
-  "rename",
   "fix typo",
   "typo",
+];
+
+const MEDIUM_KEYWORDS = [
+  ...MEDIUM_COMPLEXITY_KEYWORDS,
 ];
 
 function detectGooseComplexity(taskText) {
@@ -42,10 +48,14 @@ function detectGooseComplexity(taskText) {
 
   const wordCount = text.split(/\s+/).filter(Boolean).length;
   const highHit = HIGH_KEYWORDS.some((keyword) => text.includes(keyword));
+  const mediumHit = MEDIUM_KEYWORDS.some((keyword) => text.includes(keyword));
   const lowHit = LOW_KEYWORDS.some((keyword) => text.includes(keyword));
 
   if (highHit || wordCount > 100) {
     return "premium";
+  }
+  if (mediumHit) {
+    return "balanced";
   }
   if (lowHit && wordCount < 30) {
     return "economy";
@@ -63,6 +73,7 @@ function complexityToMode(complexity) {
 module.exports = {
   HIGH_KEYWORDS,
   LOW_KEYWORDS,
+  MEDIUM_KEYWORDS,
   detectGooseComplexity,
   complexityToMode,
 };

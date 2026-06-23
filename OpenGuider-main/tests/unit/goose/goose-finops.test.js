@@ -12,6 +12,13 @@ test("estimateGooseSessionCostTl returns mode-specific estimates", () => {
   assert.equal(estimateGooseSessionCostTl("premium"), 0.25);
 });
 
+test("estimateGooseSessionCostTl scales with word count for cloud modes", () => {
+  const short = estimateGooseSessionCostTl("balanced", { wordCount: 10 });
+  const long = estimateGooseSessionCostTl("balanced", { wordCount: 120 });
+  assert.ok(long > short);
+  assert.equal(short, 0.12);
+});
+
 test("goose operation prefix is stable for usage logs", () => {
   assert.equal(GOOSE_OPERATION_PREFIX, "goose-session-");
 });

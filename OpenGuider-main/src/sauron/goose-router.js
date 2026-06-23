@@ -2,6 +2,8 @@ const { detectGooseComplexity } = require("./goose-complexity");
 const { getGooseTodaySpentTl } = require("./goose-finops");
 const { GOOSE_TOKEN_MODES } = require("./goose-config");
 const { checkOllamaRunning } = require("./goose-ollama-check");
+const { applyModeProfileToProviderConfig } = require("./goose-mode-profiles");
+const { buildBudgetWarnNotice, buildGovernorNotice } = require("./goose-budget-policy");
 
 function hasOllamaConfigured(settings = {}) {
   const url = String(settings.ollamaUrl || "").trim();
@@ -12,19 +14,17 @@ function hasOllamaConfigured(settings = {}) {
 function resolveModeProviderConfig(mode, settings = {}) {
   const key = ["economy", "balanced", "premium"].includes(mode) ? mode : "balanced";
   const base = { ...GOOSE_TOKEN_MODES[key] };
+  let providerConfig;
 
   if (key === "economy") {
     const model = String(settings.ollamaModelCustom || base.model || "qwen2.5-coder").trim();
-    return { ...base, provider: "ollama", model };
-  }
-
-  if (key === "balanced") {
+    providerConfig = { ...base, provider: "ollama", model };
+  } else if (key === "balanced") {
     const deepseekModel = String(settings.deepseekModelCustom || base.model || "deepseek-chat").trim();
     if (String(settings.deepseekApiKey || "").trim()) {
-      return { ...base, provider: "deepseek", model: deepseekModel };
-    }
-    if (String(settings.openrouterApiKey || "").trim()) {
-      return {
+      providerConfig = { ...base, provider: "deepseek", model: deepseekModel };
+    } else if (String(settings.openrouterApiKey || "").trim()) {
+      providerConfig = {
         ...base,
         provider: "openai",
         model: "deepseek/deepseek-chat",
@@ -34,26 +34,32 @@ function resolveModeProviderConfig(mode, settings = {}) {
         },
         routeNote: "openrouter-openai-compat",
       };
-    }
-    if (String(settings.openaiApiKey || "").trim()) {
-      return {
+    } else if (String(settings.openaiApiKey || "").trim()) {
+      providerConfig = {
         ...base,
         provider: "openai",
         model: String(settings.openaiModelCustom || base.fallbackModel || "gpt-4o-mini").trim(),
       };
+    } else {
+      providerConfig = {
+        ...base,
+        provider: base.fallbackProvider || "openai",
+        model: base.fallbackModel || "gpt-4o-mini",
+        fallbackReason: "deepseek-unavailable",
+      };
     }
-    return {
-      ...base,
-      provider: base.fallbackProvider || "openai",
-      model: base.fallbackModel || "gpt-4o-mini",
-      fallbackReason: "deepseek-unavailable",
-    };
+  } else {
+    providerConfig = { ...base, provider: "openai", model: "gpt-4o-mini" };
   }
 
-  return { ...base, provider: "openai", model: "gpt-4o-mini" };
+  return applyModeProfileToProviderConfig(key, providerConfig);
 }
 
 async function applyBudgetDowngrade(mode, settings = {}) {
+  if (settings.gooseBudgetAutoDowngrade !== true) {
+    return mode;
+  }
+
   const dailyLimit = Number(settings.gooseDailyBudgetTl) || 0;
   if (dailyLimit <= 0) {
     return mode;
@@ -74,18 +80,33 @@ async function applyBudgetDowngrade(mode, settings = {}) {
 
 async function resolveGooseMode(taskText, settings = {}) {
   if (settings.gooseEnabled === false) {
-    return { mode: "balanced", reason: "goose-disabled", providerConfig: null };
+    return { mode: "balanced", reason: "goose-disabled", providerConfig: null, notices: [] };
   }
 
   let mode = settings.gooseAutoMode === false
     ? String(settings.gooseDefaultMode || "balanced")
     : detectGooseComplexity(taskText);
 
+  const notices = [];
+  const spentTl = await getGooseTodaySpentTl(settings);
+  const budgetWarn = buildBudgetWarnNotice(settings, spentTl);
+  if (budgetWarn) {
+    notices.push(budgetWarn);
+  }
+
+  const governorNotice = await buildGovernorNotice(settings);
+  if (governorNotice) {
+    notices.push(governorNotice);
+  }
+
+  const beforeBudget = mode;
   mode = await applyBudgetDowngrade(mode, settings);
+  if (mode !== beforeBudget) {
+    notices.push(`Bütçe politikası: mod ${beforeBudget} → ${mode} olarak düşürüldü.`);
+  }
 
   let providerConfig = resolveModeProviderConfig(mode, settings);
   let reason = settings.gooseAutoMode === false ? "manual-default" : "complexity-route";
-  const notices = [];
 
   if (mode === "economy" && !hasOllamaConfigured(settings)) {
     mode = "balanced";

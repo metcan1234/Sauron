@@ -674,13 +674,40 @@ function appendGooseChecks(checks, store, settings = {}) {
       fixHint: "Ücretsiz Economy mod için Ollama URL ve model adı girin.",
       tier: "optional",
     });
-    return;
+  } else {
+    pushCheck(checks, {
+      id: "goose-economy-provider",
+      status: "pass",
+      message: `Goose Economy (Ollama) yapılandırıldı: ${ollamaUrl}`,
+      fixHint: "",
+      tier: "optional",
+    });
   }
 
+  const { getGooseModeProfile } = require("./goose-mode-profiles");
+  const economyProfile = getGooseModeProfile("economy");
+  const hasProfileEnv = Boolean(
+    economyProfile.envOverrides.GOOSE_CLI_MIN_PRIORITY
+    && economyProfile.envOverrides.GOOSE_AUTO_COMPACT_THRESHOLD,
+  );
   pushCheck(checks, {
-    id: "goose-economy-provider",
+    id: "goose-mode-profile",
+    status: hasProfileEnv ? "pass" : "warn",
+    message: hasProfileEnv
+      ? "Goose mod profilleri (economy compaction) hazır"
+      : "Goose mod profilleri eksik",
+    fixHint: hasProfileEnv ? "" : "Uygulamayı güncelleyin veya goose-mode-profiles.js kontrol edin.",
+    tier: "optional",
+  });
+
+  const autoDowngrade = settings.gooseBudgetAutoDowngrade === true;
+  const budgetLimit = Number(settings.gooseDailyBudgetTl) || 0;
+  pushCheck(checks, {
+    id: "goose-budget-policy",
     status: "pass",
-    message: `Goose Economy (Ollama) yapılandırıldı: ${ollamaUrl}`,
+    message: autoDowngrade
+      ? `Goose bütçe: otomatik mod düşürme açık${budgetLimit > 0 ? ` (${budgetLimit} TL)` : ""}`
+      : `Goose bütçe: yumuşak uyarı${budgetLimit > 0 ? ` (${budgetLimit} TL)` : " (sınırsız)"}`,
     fixHint: "",
     tier: "optional",
   });

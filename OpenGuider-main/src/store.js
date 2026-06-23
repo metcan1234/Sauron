@@ -121,6 +121,10 @@ const schema = {
   gooseDefaultMode: { type: "string", enum: ["economy", "balanced", "premium"], default: "balanced" },
   gooseDailyBudgetTl: { type: "number", default: 0 },
   gooseAutoMode: { type: "boolean", default: true },
+  gooseBudgetAutoDowngrade: { type: "boolean", default: false },
+  gooseBudgetWarnAt: { type: "number", default: 0.8 },
+  gooseFinopsShareGlobalBudget: { type: "boolean", default: true },
+  gooseShowModeHint: { type: "boolean", default: true },
 };
 function createStore() { return new Store({ schema, clearInvalidConfig: true }); }
 module.exports = { createStore, schema };

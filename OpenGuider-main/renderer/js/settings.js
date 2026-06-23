@@ -133,11 +133,17 @@ async function init() {
   const gooseDefaultModeEl = document.getElementById("gooseDefaultMode");
   const gooseDailyBudgetTlEl = document.getElementById("gooseDailyBudgetTl");
   const gooseAutoModeEl = document.getElementById("gooseAutoMode");
+  const gooseBudgetAutoDowngradeEl = document.getElementById("gooseBudgetAutoDowngrade");
+  const gooseShowModeHintEl = document.getElementById("gooseShowModeHint");
+  const gooseFinopsShareGlobalBudgetEl = document.getElementById("gooseFinopsShareGlobalBudget");
   if (gooseEnabledEl) gooseEnabledEl.checked = settings.gooseEnabled !== false;
   if (gooseBinaryPathEl) gooseBinaryPathEl.value = settings.gooseBinaryPath || "";
   if (gooseDefaultModeEl) gooseDefaultModeEl.value = settings.gooseDefaultMode || "balanced";
   if (gooseDailyBudgetTlEl) gooseDailyBudgetTlEl.value = String(settings.gooseDailyBudgetTl ?? 0);
   if (gooseAutoModeEl) gooseAutoModeEl.checked = settings.gooseAutoMode !== false;
+  if (gooseBudgetAutoDowngradeEl) gooseBudgetAutoDowngradeEl.checked = settings.gooseBudgetAutoDowngrade === true;
+  if (gooseShowModeHintEl) gooseShowModeHintEl.checked = settings.gooseShowModeHint !== false;
+  if (gooseFinopsShareGlobalBudgetEl) gooseFinopsShareGlobalBudgetEl.checked = settings.gooseFinopsShareGlobalBudget !== false;
   void refreshGooseProbeStatus(settings.gooseBinaryPath || "");
   // STT / TTS
   document.getElementById("assemblyaiApiKey").value  = settings.assemblyaiApiKey  || "";
@@ -1087,6 +1093,12 @@ async function refreshFinOpsSummary() {
             parts.push(`Kalan: ${gooseSpend.remainingTl.toFixed(4)} TL`);
           }
         }
+        if (gooseSpend?.budgetWarn) {
+          parts.push(gooseSpend.budgetWarn);
+        }
+        if (gooseSpend?.governorTier?.level && gooseSpend.governorTier.level !== "none") {
+          parts.push(`FinOps governor: ${gooseSpend.governorTier.level}`);
+        }
         gooseHintEl.textContent = parts.join(" · ");
       }
     } catch {
@@ -1373,6 +1385,9 @@ async function saveSettings() {
     gooseDefaultMode:        document.getElementById("gooseDefaultMode")?.value || "balanced",
     gooseDailyBudgetTl:      Number(document.getElementById("gooseDailyBudgetTl")?.value) || 0,
     gooseAutoMode:           document.getElementById("gooseAutoMode")?.checked !== false,
+    gooseBudgetAutoDowngrade: document.getElementById("gooseBudgetAutoDowngrade")?.checked === true,
+    gooseFinopsShareGlobalBudget: document.getElementById("gooseFinopsShareGlobalBudget")?.checked !== false,
+    gooseShowModeHint:       document.getElementById("gooseShowModeHint")?.checked !== false,
     awareAssistanceEnabled:  document.getElementById("awareAssistanceEnabled").checked,
     includeScreenshotByDefault: false,
     workspacePath:           document.getElementById("workspacePath").value.trim(),

@@ -5,6 +5,7 @@ const {
   resolveGooseMode,
   resolveModeProviderConfig,
   hasOllamaConfigured,
+  applyBudgetDowngrade,
 } = require("../../../src/sauron/goose-router");
 
 test("resolveModeProviderConfig uses deepseek when deepseek key present", () => {
@@ -33,6 +34,8 @@ test("resolveModeProviderConfig economy uses ollama model from settings", () => 
   });
   assert.equal(cfg.provider, "ollama");
   assert.equal(cfg.model, "qwen2.5-coder:7b");
+  assert.equal(cfg.envOverrides.GOOSE_MAX_TURNS, "40");
+  assert.equal(cfg.envOverrides.GOOSE_CONTEXT_STRATEGY, "summarize");
 });
 
 test("hasOllamaConfigured requires url and model", () => {
@@ -63,4 +66,17 @@ test("resolveGooseMode respects manual default when auto off", async () => {
   });
   assert.equal(routing.mode, "premium");
   assert.equal(routing.reason, "manual-default");
+});
+
+test("applyBudgetDowngrade is opt-in via gooseBudgetAutoDowngrade", async () => {
+  const mode = await applyBudgetDowngrade("premium", {
+    gooseDailyBudgetTl: 1,
+    gooseBudgetAutoDowngrade: false,
+  });
+  assert.equal(mode, "premium");
+});
+
+test("detectGooseComplexity routes rewrite to balanced via medium keywords", () => {
+  const { detectGooseComplexity } = require("../../../src/sauron/goose-complexity");
+  assert.equal(detectGooseComplexity("rewrite the helper utilities"), "balanced");
 });

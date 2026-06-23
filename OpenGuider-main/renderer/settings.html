@@ -222,7 +222,25 @@
         <div class="form-group">
           <label>Günlük Goose bütçesi (TL)</label>
           <input class="form-input" id="gooseDailyBudgetTl" type="number" min="0" step="0.01" placeholder="0 = sınırsız"/>
-          <span class="hint">Aşıldıkça mod otomatik düşürülür (premium → balanced → economy).</span>
+          <span class="hint">0 = sınırsız. Otomatik mod düşürme aşağıdaki seçenekle açılır.</span>
+        </div>
+        <div class="form-group">
+          <label class="checkbox-row">
+            <input type="checkbox" id="gooseBudgetAutoDowngrade"/>
+            Bütçe aşıldığında otomatik mod düşür (premium → balanced → economy)
+          </label>
+        </div>
+        <div class="form-group">
+          <label class="checkbox-row">
+            <input type="checkbox" id="gooseShowModeHint" checked/>
+            Görev öncesi mod önerisi göster (toast)
+          </label>
+        </div>
+        <div class="form-group">
+          <label class="checkbox-row">
+            <input type="checkbox" id="gooseFinopsShareGlobalBudget" checked/>
+            FinOps global bütçe uyarılarını Goose ile paylaş
+          </label>
         </div>
         <div class="form-group">
           <label class="checkbox-row">

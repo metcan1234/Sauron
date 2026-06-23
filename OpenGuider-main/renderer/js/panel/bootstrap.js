@@ -530,6 +530,14 @@ export function createPanelController({
           confirmDanger: false,
         });
         mode = proceed ? recommended : defaultMode;
+      } else if (settings.gooseShowModeHint !== false) {
+        const preview = await api.invoke("preview-goose-mode", { taskText });
+        const recommended = preview?.mode || "balanced";
+        const noticeParts = [`Önerilen mod: ${recommended} — devam ediliyor`];
+        if (Array.isArray(preview?.notices) && preview.notices.length > 0) {
+          noticeParts.push(preview.notices[0]);
+        }
+        ui.showToast(noticeParts.join(" · "), false);
       }
 
       const result = await api.invoke("start-goose-session", { taskText, mode });

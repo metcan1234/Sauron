@@ -9,6 +9,7 @@ const { seedGooseInstructions } = require("./goose-instructions");
 const { writeGooseHandoff, updateGooseHandoffStatus } = require("./goose-handoff");
 const { resolveGooseMode, resolveModeProviderConfig } = require("./goose-router");
 const { recordGooseSessionStart } = require("./goose-finops");
+const { optimizeGooseTaskText, buildModeSystemInstructions } = require("./goose-task-optimizer");
 const {
   setActiveGooseSession,
   clearActiveGooseSession,
@@ -43,13 +44,16 @@ function buildGooseEnv(settings = {}, providerConfig = {}) {
 
 async function launchGoose({ workspacePath, taskText, settings = {}, modeOverride = null }) {
   const resolvedWorkspace = String(workspacePath || settings.workspacePath || "").trim();
-  const task = String(taskText || "").trim();
+  const rawTask = String(taskText || "").trim();
   if (!resolvedWorkspace) {
     return { ok: false, error: "Workspace path is not configured." };
   }
-  if (!task) {
+  if (!rawTask) {
     return { ok: false, error: "Goose görev metni boş." };
   }
+
+  const optimizedTask = optimizeGooseTaskText(rawTask);
+  const task = optimizedTask.text;
 
   const probe = await probeGooseBinary(settings);
   if (!probe.cliCapable || !probe.binaryPath) {
@@ -106,6 +110,16 @@ async function launchGoose({ workspacePath, taskText, settings = {}, modeOverrid
   } catch {
     // optional system instructions
   }
+  systemInstructions = buildModeSystemInstructions(
+    systemInstructions,
+    routing.mode,
+    canonicalWorkspace,
+  );
+
+  const launchNotices = [...(routing.notices || [])];
+  if (optimizedTask.truncated) {
+    launchNotices.push("Görev metni token tasarrufu için kısaltıldı.");
+  }
 
   const gooseArgs = buildGooseCliArgs({
     taskText: task,
@@ -135,6 +149,7 @@ async function launchGoose({ workspacePath, taskText, settings = {}, modeOverrid
     provider: routing.providerConfig.provider,
     model: routing.providerConfig.model,
     sessionId,
+    wordCount: optimizedTask.wordCount,
   });
 
   updateGooseHandoffStatus(canonicalWorkspace, handoffResult.handoff.id, "running", {
@@ -160,7 +175,7 @@ async function launchGoose({ workspacePath, taskText, settings = {}, modeOverrid
     sessionId,
     mode: routing.mode,
     reason: routing.reason,
-    notices: routing.notices,
+    notices: launchNotices,
     provider: routing.providerConfig.provider,
     model: routing.providerConfig.model,
     binaryPath,
