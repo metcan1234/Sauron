@@ -13,6 +13,9 @@ const {
 const {
   buildStartProcessCommand,
   buildVisibleTerminalSpawnCommand,
+  buildWindowsTerminalCommandLine,
+  writeVisibleTerminalBootstrap,
+  buildPowerShellLaunchArgs,
 } = require("../../../src/sauron/goose-terminal-spawn");
 const {
   UTF8_BOM,
@@ -35,8 +38,10 @@ test("buildLaunchScript uses instructions file and interactive mode", () => {
   assert.match(script, /--no-session/);
   assert.doesNotMatch(script, /--system/);
   assert.match(script, /& "C:\\tools\\goose\.exe"/);
+  assert.match(script, /@gooseArgs/);
   assert.doesNotMatch(script, /\$goose =/);
-  assert.match(script, /Read-Host/);
+  assert.doesNotMatch(script, /\$args = @/);
+  assert.match(script, /ReadLine/);
   assert.match(script, /WindowTitle/);
   assert.match(script, /GOOSE_TELEMETRY_OFF/);
 });
@@ -73,7 +78,7 @@ test("buildLaunchScript preserves Turkish paths with double-quoted literals", ()
 
   assert.match(script, /EVERYTHİNG/);
   assert.doesNotMatch(script, /EVERYTH°NG/);
-  assert.ok(script.includes(`& ${toPowerShellLiteralPath(turkishPath)} @args`));
+  assert.ok(script.includes(`& ${toPowerShellLiteralPath(turkishPath)} @gooseArgs`));
   assert.match(script, /-Encoding UTF8/);
 });
 
@@ -113,17 +118,51 @@ test("encodePowerShellCommand preserves Turkish characters for -EncodedCommand",
   assert.doesNotMatch(decoded, /EVERYTH°NG/);
 });
 
+test("buildPowerShellLaunchArgs always includes -NoExit", () => {
+  const args = buildPowerShellLaunchArgs("C:\\Temp\\launch.ps1");
+  assert.ok(args.includes("-NoExit"));
+  assert.ok(args.includes("-File"));
+});
+
+test("buildWindowsTerminalCommandLine passes single command line with -NoExit", () => {
+  const line = buildWindowsTerminalCommandLine(
+    "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\open.ps1",
+    "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\workspace",
+  );
+  assert.match(line, /-NoExit/);
+  assert.match(line, /EVERYTHİNG/);
+  assert.match(line, /--title "Sauron Goose"/);
+  assert.match(line, /-File "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\open\.ps1"/);
+});
+
+test("writeVisibleTerminalBootstrap writes keep-open wrapper script", () => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "goose-bootstrap-"));
+  const launchScript = path.join(workspace, "launch.ps1");
+  fs.writeFileSync(launchScript, "Write-Host test", "utf8");
+  const bootstrapPath = writeVisibleTerminalBootstrap({
+    sessionId: "bootstrap-test",
+    scriptPath: launchScript,
+    workspacePath: workspace,
+  });
+  const raw = fs.readFileSync(bootstrapPath);
+  const content = raw.toString("utf8");
+  assert.equal(raw[0], 0xef);
+  assert.match(content, /-NoExit/);
+  assert.match(content, /ReadLine/);
+  fs.rmSync(workspace, { recursive: true, force: true });
+  fs.unlinkSync(bootstrapPath);
+});
+
 test("buildStartProcessCommand uses visible window style", () => {
-  const scriptPath = "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\launch.ps1";
+  const entryScript = "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\open.ps1";
   const cmd = buildStartProcessCommand(
-    scriptPath,
+    entryScript,
     "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\workspace",
     null,
   );
   assert.match(cmd, /WindowStyle Normal/);
-  assert.match(cmd, /-NoLogo/);
+  assert.match(cmd, /-NoExit/);
   assert.match(cmd, /EVERYTHİNG/);
-  assert.match(cmd, /'-File',"/);
 });
 
 test("buildVisibleTerminalSpawnCommand prefers Windows Terminal when available", () => {

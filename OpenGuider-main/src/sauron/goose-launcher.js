@@ -83,6 +83,19 @@ function buildEnvSetupLines(env = {}) {
   return lines;
 }
 
+function buildKeepOpenFooter() {
+  return [
+    "Write-Host ''",
+    "Write-Host 'Kapatmak icin Enter.' -ForegroundColor DarkGray",
+    "try {",
+    "  if ([Environment]::UserInteractive) { [void][Console]::ReadLine() }",
+    "  else { Start-Sleep -Seconds 3600 }",
+    "} catch {",
+    "  Start-Sleep -Seconds 3600",
+    "}",
+  ];
+}
+
 function buildLaunchScript({
   binaryPath,
   workspacePath,
@@ -102,12 +115,12 @@ function buildLaunchScript({
 
   return [
     "$ErrorActionPreference = 'Continue'",
-    `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`,
-    `$host.UI.RawUI.WindowTitle = '${escapePowerShellSingleQuoted(GOOSE_TERMINAL_TITLE)}'`,
+    "try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}",
+    `try { $host.UI.RawUI.WindowTitle = '${escapePowerShellSingleQuoted(GOOSE_TERMINAL_TITLE)}' } catch {}`,
     ...envLines,
     `Set-Location -LiteralPath ${cwdLit}`,
     `$task = Get-Content -LiteralPath ${taskFileLit} -Raw -Encoding UTF8`,
-    `$args = @(`,
+    `$gooseArgs = @(`,
     "  'run',",
     "  '--no-session',",
     "  '-s',",
@@ -118,15 +131,17 @@ function buildLaunchScript({
     ")",
     "Write-Host 'Sauron Goose — baslatiliyor...' -ForegroundColor Cyan",
     `Write-Host "Provider: ${provider} | Model: ${model}"`,
-    `& ${binaryLit} @args`,
-    "$code = $LASTEXITCODE",
-    "if ($code -ne 0) {",
-    "  Write-Host \"Goose hata kodu: $code\" -ForegroundColor Red",
-    "  Write-Host 'Provider/API anahtari veya goose configure ayarlarini kontrol edin.' -ForegroundColor Yellow",
+    "try {",
+    `  & ${binaryLit} @gooseArgs`,
+    "  $code = $LASTEXITCODE",
+    "  if ($code -ne 0) {",
+    "    Write-Host \"Goose hata kodu: $code\" -ForegroundColor Red",
+    "    Write-Host 'Provider/API anahtari veya goose configure ayarlarini kontrol edin.' -ForegroundColor Yellow",
+    "  }",
+    "} catch {",
+    "  Write-Host $_.Exception.Message -ForegroundColor Red",
     "}",
-    "Write-Host ''",
-    "Write-Host 'Kapatmak icin Enter.' -ForegroundColor DarkGray",
-    "Read-Host | Out-Null",
+    ...buildKeepOpenFooter(),
   ].join("\r\n");
 }
 
@@ -223,6 +238,7 @@ async function launchGoose({ workspacePath, taskText, settings = {}, modeOverrid
     spawnResult = await spawnVisibleGooseTerminal({
       scriptPath,
       workspacePath: resolvedWorkspace,
+      sessionId,
     });
   } catch (error) {
     return {
@@ -306,6 +322,7 @@ module.exports = {
   buildGooseEnv,
   buildEnvSetupLines,
   buildLaunchScript,
+  buildKeepOpenFooter,
   writeLaunchArtifacts,
   escapePowerShellSingleQuoted,
   toPowerShellLiteralPath,
