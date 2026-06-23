@@ -86,6 +86,16 @@ html, body {
   background: var(--surface);
 }
 
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-width: 108px;
+  max-width: 42%;
+  overflow: hidden;
+}
+
 .header-logo {
   width: 44px; height: 44px;
   display: flex; align-items: center; justify-content: center;
@@ -98,11 +108,11 @@ html, body {
 }
 
 .header-title {
-  font-weight: 400;
-  font-size: 16px;
-  letter-spacing: 1px;
-  flex: 1;
-  min-width: 0;
+  font-weight: 500;
+  font-size: 15px;
+  letter-spacing: 0.6px;
+  flex: 0 1 auto;
+  min-width: 4.5rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

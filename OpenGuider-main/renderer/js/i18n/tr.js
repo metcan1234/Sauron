@@ -1,5 +1,5 @@
 export const tr = {
-  appTitle: "Sauron Core",
+  appTitle: "Sauron",
   agentIdle: "boşta",
   finopsTitle: "FinOps",
   settings: "Ayarlar",
