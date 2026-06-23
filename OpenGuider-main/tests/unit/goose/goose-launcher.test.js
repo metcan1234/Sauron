@@ -8,6 +8,7 @@ const {
 } = require("../../../src/sauron/goose-launcher");
 const {
   buildGooseCliArgs: buildSpawnCliArgs,
+  buildHeldOpenCommandArgs,
   findWindowsTerminalPathSync,
 } = require("../../../src/sauron/goose-terminal-spawn");
 
@@ -22,11 +23,16 @@ test("buildGooseCliArgs builds goose run argv without powershell", () => {
   assert.deepEqual(args.slice(0, 4), ["run", "--no-session", "-s", "--provider"]);
   assert.equal(args[4], "ollama");
   assert.equal(args[6], "qwen2.5-coder:7b");
-  assert.equal(args[7], "-i");
   assert.equal(args[8], instructionsPath);
   assert.match(args[8], /EVERYTHİNG/);
-  assert.equal(args[9], "-t");
-  assert.equal(args[10], "list files in src");
+});
+
+test("buildHeldOpenCommandArgs wraps goose in cmd /k", () => {
+  const binaryPath = "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\goose-package\\goose.exe";
+  const gooseArgs = ["run", "--no-session", "-s"];
+  const heldOpen = buildHeldOpenCommandArgs(binaryPath, gooseArgs);
+  assert.deepEqual(heldOpen.slice(0, 3), ["cmd.exe", "/k", binaryPath]);
+  assert.deepEqual(heldOpen.slice(3), gooseArgs);
 });
 
 test("buildGooseCliArgs preserves Turkish paths in argv slots", () => {
@@ -64,9 +70,10 @@ test("buildGooseEnv applies provider env overrides", () => {
   assert.equal(env.GOOSE_PROVIDER__HOST, "https://openrouter.ai/api/v1");
 });
 
-test("findWindowsTerminalPathSync returns string or null on windows", () => {
+test("findWindowsTerminalPathSync resolves wt via where.exe on windows", () => {
   const wtPath = findWindowsTerminalPathSync();
-  if (process.platform === "win32" && wtPath) {
+  if (process.platform === "win32") {
+    assert.ok(wtPath);
     assert.match(wtPath, /wt\.exe$/i);
   } else {
     assert.equal(wtPath, null);

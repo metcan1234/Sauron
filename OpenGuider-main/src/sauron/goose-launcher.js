@@ -106,7 +106,7 @@ async function launchGoose({ workspacePath, taskText, settings = {}, modeOverrid
 
   let spawnResult;
   try {
-    spawnResult = spawnGooseProcess({
+    spawnResult = await spawnGooseProcess({
       binaryPath,
       workspacePath: canonicalWorkspace,
       args: gooseArgs,

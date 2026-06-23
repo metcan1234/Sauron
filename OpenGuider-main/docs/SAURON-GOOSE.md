@@ -63,5 +63,5 @@ Her oturum başlangıcında tahmini maliyet `goose-session-<mode>` operation ile
 - Launcher görev metnini temp dosyaya yazar; PowerShell `-File` ile arg splatting kullanır (boşluklu yollar güvenli).
 - Windows'ta `Start-Process` + odak penceresi ile terminal görünür açılır; `GOOSE_TELEMETRY_OFF=1` ile ilk kurulum telemetri sorusu atlanır.
 - Goose, PowerShell `.ps1` yerine **Node.js `spawn`** ile başlatılır (Türkçe yol güvenli).
-- Windows Terminal varsa `wt.exe` argv ile; yoksa `cmd start` veya doğrudan spawn.
+- Windows Terminal `where.exe wt` ile bulunur; Goose her zaman `cmd.exe /k` içinde çalışır (hata olsa terminal açık kalır).
 - İlk kurulumda terminalde `goose configure` gerekebilir.
