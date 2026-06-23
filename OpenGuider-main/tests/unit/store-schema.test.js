@@ -38,3 +38,11 @@ test("store schema includes finops ultra defaults", () => {
   assert.equal(schema.finopsMemoryCompressBatch.default, 20);
   assert.deepEqual(schema.finopsPresetBackup.default, {});
 });
+
+test("store schema includes goose defaults", () => {
+  assert.equal(schema.gooseEnabled.default, true);
+  assert.equal(schema.gooseBinaryPath.default, "");
+  assert.equal(schema.gooseDefaultMode.default, "balanced");
+  assert.equal(schema.gooseDailyBudgetTl.default, 0);
+  assert.equal(schema.gooseAutoMode.default, true);
+});

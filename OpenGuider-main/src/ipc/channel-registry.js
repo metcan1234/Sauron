@@ -31,6 +31,8 @@ const PRELOAD_ON_CHANNELS = [
   "code-agent-diff-pending",
   "code-agent-complete",
   "code-agent-error",
+  "goose-session-started",
+  "goose-session-cancelled",
 ];
 
 const PRELOAD_SEND_CHANNELS = [

@@ -7,9 +7,11 @@ export function applyOptionalFeatureVisibility(doc, settings = {}) {
   const webStudioOn = settings.webStudioEnabled !== false;
   const selfBuildOn = settings.selfBuildEnabled !== false;
   const codeAgentOn = isCodeAgentEnabled(settings);
+  const gooseOn = isGooseEnabled(settings);
 
   doc.getElementById("btn-web-preview")?.classList.toggle("hidden", !webStudioOn);
   doc.getElementById("btn-code-studio")?.classList.toggle("hidden", !codeAgentOn);
+  doc.getElementById("btn-goose")?.classList.toggle("hidden", !gooseOn);
   doc.getElementById("empty-cta-code-agent")?.classList.toggle("hidden", !codeAgentOn);
   doc.getElementById("web-studio-overlay")?.classList.toggle("feature-disabled", !webStudioOn);
   doc.getElementById("self-build-overlay")?.classList.toggle("feature-disabled", !selfBuildOn);
@@ -26,6 +28,7 @@ export function applyOptionalFeatureVisibility(doc, settings = {}) {
     if (browserOn) parts.push("Browser agent");
     if (selfBuildOn) parts.push("Self-Build");
     if (codeAgentOn) parts.push("Kod Agent");
+    if (gooseOn) parts.push("Goose");
     if (parts.length === 0) {
       advancedEl.classList.add("hidden");
     } else {
@@ -45,4 +48,8 @@ export function isSelfBuildEnabled(settings = {}) {
 
 export function isCodeAgentEnabled(settings = {}) {
   return settings.codeAgentNativeEnabled === true;
+}
+
+export function isGooseEnabled(settings = {}) {
+  return settings.gooseEnabled !== false;
 }

@@ -11,6 +11,7 @@ const {
 } = require("../plugins/browser/sidecar");
 const { hasAgentCredential } = require("./finops/agent-matrix");
 const { isCursorCliPath } = require("./vscode-launcher");
+const { discoverGooseBinary } = require("./goose-binary-resolver");
 
 const SOLO_READINESS_IDS = new Set([
   "workspace-path",
@@ -620,6 +621,63 @@ function computeReadinessReport(checks = []) {
   };
 }
 
+function appendGooseChecks(checks, store, settings = {}) {
+  if (settings.gooseEnabled === false) {
+    pushCheck(checks, {
+      id: "goose-enabled",
+      status: "pass",
+      message: "Goose Kısmı devre dışı (atlandı)",
+      fixHint: "",
+      tier: "optional",
+    });
+    return;
+  }
+
+  const binaryPath = discoverGooseBinary({
+    gooseBinaryPath: store?.get?.("gooseBinaryPath") || "",
+    ...settings,
+  });
+
+  if (!binaryPath) {
+    pushCheck(checks, {
+      id: "goose-binary",
+      status: "warn",
+      message: "Goose binary bulunamadı",
+      fixHint: "Ayarlar → AI Ajanları → Goose binary yolunu girin veya goose.exe'yi PATH'e ekleyin.",
+      tier: "optional",
+    });
+  } else {
+    pushCheck(checks, {
+      id: "goose-binary",
+      status: "pass",
+      message: `Goose binary: ${path.basename(binaryPath)}`,
+      fixHint: "",
+      tier: "optional",
+    });
+  }
+
+  const ollamaUrl = String(settings.ollamaUrl || "http://localhost:11434").trim();
+  const hasOllamaModel = Boolean(String(settings.ollamaModelCustom || "").trim());
+  if (!hasOllamaModel) {
+    pushCheck(checks, {
+      id: "goose-economy-provider",
+      status: "warn",
+      message: "Goose Economy (Ollama) yapılandırılmamış",
+      fixHint: "Ücretsiz Economy mod için Ollama URL ve model adı girin.",
+      tier: "optional",
+    });
+    return;
+  }
+
+  pushCheck(checks, {
+    id: "goose-economy-provider",
+    status: "pass",
+    message: `Goose Economy (Ollama) yapılandırıldı: ${ollamaUrl}`,
+    fixHint: "",
+    tier: "optional",
+  });
+}
+
 function appendCodeAgentChecks(checks, store, settings = {}) {
   if (settings.codeAgentNativeEnabled !== true) {
     pushCheck(checks, {
@@ -762,6 +820,7 @@ function runSauronDoctor(store, options = {}) {
 
   appendBrowserAgentChecks(checks, runtimeSettings);
   appendWebStudioCheck(checks, store, runtimeSettings);
+  appendGooseChecks(checks, store, runtimeSettings);
   appendCodeAgentChecks(checks, store, runtimeSettings);
   pushCheck(checks, checkAiCredentials(runtimeSettings));
 

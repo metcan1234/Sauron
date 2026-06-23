@@ -456,6 +456,104 @@ export function createPanelController({
     }
   }
 
+  function resolveGooseTaskText() {
+    const plan = String(dom.planGoal?.value || "").trim();
+    if (plan) {
+      return plan;
+    }
+    return String(dom.textInput?.value || "").trim();
+  }
+
+  function setGooseUiActive(active, payload = {}) {
+    dom.gooseBadge?.classList.toggle("hidden", !active);
+    dom.btnGooseCancel?.classList.toggle("hidden", !active);
+    if (active && dom.gooseBadge && payload.mode) {
+      dom.gooseBadge.textContent = `🪿 Goose · ${payload.mode}`;
+      dom.gooseBadge.title = `${payload.provider || ""} / ${payload.model || ""}`.trim();
+    }
+  }
+
+  async function openGooseSession() {
+    if (!dom.btnGoose || dom.btnGoose.disabled) {
+      return;
+    }
+
+    const settings = await api.invoke("get-settings");
+    if (settings?.gooseEnabled === false) {
+      ui.showToast("Goose Kısmı devre dışı — Ayarlar → AI Ajanları", true);
+      return;
+    }
+
+    const taskText = resolveGooseTaskText();
+    if (!taskText) {
+      ui.showToast("Goose için görev metni girin (sohbet veya plan alanı)", true);
+      dom.textInput?.focus();
+      return;
+    }
+
+    if (!String(settings?.workspacePath || "").trim()) {
+      ui.showToast("Workspace path ayarlanmamış — Ayarlar → Çalışma Kısmı", true);
+      return;
+    }
+
+    dom.btnGoose.disabled = true;
+
+    try {
+      const probe = await api.invoke("probe-goose-binary");
+      if (!probe?.ok) {
+        ui.showErrorBanner({
+          title: "Goose binary bulunamadı",
+          message: "Block Goose CLI kurulu değil veya PATH'te yok. Ayarlar → AI Ajanları → Goose binary yolunu girin.",
+          actionLabel: "Ayarları aç",
+          onAction: () => api.invoke("open-settings"),
+        });
+        return;
+      }
+
+      let mode = null;
+      if (settings.gooseAutoMode === false) {
+        const preview = await api.invoke("preview-goose-mode", { taskText });
+        const defaultMode = settings.gooseDefaultMode || "balanced";
+        const recommended = preview?.mode || defaultMode;
+        const proceed = await ui.confirmDialog({
+          title: "Goose modu",
+          message: `Önerilen: ${recommended}\nVarsayılan: ${defaultMode}\n\nÖnerilen modla başlatılsın mı? (Hayır = varsayılan mod)`,
+          confirmLabel: "Önerilen",
+          cancelLabel: "Varsayılan",
+          confirmDanger: false,
+        });
+        mode = proceed ? recommended : defaultMode;
+      }
+
+      const result = await api.invoke("start-goose-session", { taskText, mode });
+      if (!result?.ok) {
+        ui.showToast(result?.error || "Goose başlatılamadı", true);
+        return;
+      }
+
+      if (Array.isArray(result.notices) && result.notices.length > 0) {
+        ui.showToast(result.notices.join(" "), false);
+      }
+
+      setGooseUiActive(true, result);
+      ui.showToast(`Goose terminal açıldı (${result.mode})`, false);
+    } catch (error) {
+      ui.showToast(error?.message || "Goose başlatılamadı", true);
+    } finally {
+      dom.btnGoose.disabled = false;
+    }
+  }
+
+  async function cancelGooseSession() {
+    const result = await api.invoke("cancel-goose-session");
+    setGooseUiActive(false);
+    if (result?.ok) {
+      ui.showToast("Goose oturumu durduruldu");
+    } else if (result?.error) {
+      ui.showToast(result.error, true);
+    }
+  }
+
   function getActionShortcutMap() {
     return [
       { settingKey: "previousStepShortcut", action: () => api.invoke("previous-step"), button: dom.btnPlanPrev, title: t("shortcutPlanPrev") },
@@ -954,6 +1052,14 @@ export function createPanelController({
       void openWorkspaceHandoff();
     });
 
+    dom.btnGoose?.addEventListener("click", () => {
+      void openGooseSession();
+    });
+
+    dom.btnGooseCancel?.addEventListener("click", () => {
+      void cancelGooseSession();
+    });
+
     if (dom.workspaceStatusFocus) {
       dom.workspaceStatusFocus.addEventListener("click", async () => {
         const handled = await ui.invokeWorkspaceStatusFocus();
@@ -1161,6 +1267,14 @@ export function createPanelController({
     api.on("code-agent-error", (payload) => {
       doc.getElementById("code-agent-badge")?.classList.add("hidden");
       ui.showToast(payload?.error || "Kod agent hatasi", true);
+    });
+
+    api.on("goose-session-started", (payload) => {
+      setGooseUiActive(true, payload || {});
+    });
+
+    api.on("goose-session-cancelled", () => {
+      setGooseUiActive(false);
     });
 
     api.on("browser-agent-status-changed", (status) => {

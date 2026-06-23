@@ -118,6 +118,7 @@ const { registerWebStudioIpc } = require("./src/ipc/web-studio-ipc");
 const { registerMicroGuideIpc } = require("./src/ipc/micro-guide-ipc");
 const { registerBuildPipelineIpc } = require("./src/ipc/build-pipeline-ipc");
 const { registerCodeAgentIpc } = require("./src/ipc/code-agent-ipc");
+const { registerGooseIpc } = require("./src/ipc/goose-ipc");
 const { createWindowManager } = require("./src/main/window-manager");
 const { createTrayMenu } = require("./src/main/tray-menu");
 const { raisePanelAboveOverlay, resetPanelAlwaysOnTop } = require("./src/main/panel-window-focus");
@@ -1454,6 +1455,15 @@ function registerModularIpcHandlers() {
     panelWindow,
     store,
     currentAIControllerRef,
+  });
+
+  registerGooseIpc({
+    ipcMain,
+    debugLog,
+    appLogger,
+    getRuntimeSettings,
+    panelWindow,
+    store,
   });
 
   registerBrowserIpc({

@@ -193,6 +193,48 @@
           </div>
         </details>
       </div>
+
+      <div class="settings-section" style="margin-top:24px;">
+        <h3>Goose Kısmı</h3>
+        <p class="settings-lead">Block Goose terminal ajanı — Cline ve handoff akışından bağımsız üçüncü workspace katmanı. Otomatik mod görev karmaşıklığına göre Economy (Ollama) / Balanced (DeepSeek) / Premium yönlendirir.</p>
+        <div class="form-group">
+          <label class="toggle-card">
+            <input type="checkbox" id="gooseEnabled" class="plugin-checkbox" checked/>
+            <span class="toggle-copy">
+              <strong>Goose Kısmını etkinleştir</strong>
+              <span>Panelde 🪿 butonu ve terminal oturumu başlatma.</span>
+            </span>
+          </label>
+        </div>
+        <div class="form-group">
+          <label>Goose binary yolu</label>
+          <input class="form-input" id="gooseBinaryPath" type="text" placeholder="Boş = PATH veya %USERPROFILE%\.local\bin\goose.exe"/>
+          <span class="hint">Repo içine gömülmez. Block Goose CLI kurulu olmalı.</span>
+        </div>
+        <div class="form-group">
+          <label>Varsayılan mod (otomatik kapalıyken)</label>
+          <select class="form-input" id="gooseDefaultMode">
+            <option value="economy">Economy — Ollama (ücretsiz)</option>
+            <option value="balanced">Balanced — DeepSeek / OpenRouter</option>
+            <option value="premium">Premium — OpenAI</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Günlük Goose bütçesi (TL)</label>
+          <input class="form-input" id="gooseDailyBudgetTl" type="number" min="0" step="0.01" placeholder="0 = sınırsız"/>
+          <span class="hint">Aşıldıkça mod otomatik düşürülür (premium → balanced → economy).</span>
+        </div>
+        <div class="form-group">
+          <label class="checkbox-row">
+            <input type="checkbox" id="gooseAutoMode" checked/>
+            Otomatik mod seçimi (görev metnine göre)
+          </label>
+        </div>
+        <div class="form-group">
+          <button class="btn btn-secondary" id="btn-probe-goose" type="button">Goose binary kontrol et</button>
+          <span class="hint" id="gooseProbeStatus">Henüz kontrol edilmedi</span>
+        </div>
+      </div>
     </div>
 
     <div class="settings-tab-section" data-tab-content="workspace">
@@ -288,6 +330,12 @@
         <div class="form-group">
           <label>Harcama Kırılımı</label>
           <pre class="form-input" id="finopsBreakdown" style="min-height:88px;white-space:pre-wrap;font-family:var(--mono,monospace);">—</pre>
+        </div>
+
+        <div class="form-group">
+          <label>Goose harcaması (bugün, tahmini)</label>
+          <input class="form-input" id="gooseDailySpentTl" type="text" readonly placeholder="—"/>
+          <span class="hint" id="gooseDailySpendHint">Terminal oturumları tahmini maliyetle kaydedilir.</span>
         </div>
 
         <div class="form-group">

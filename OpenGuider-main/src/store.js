@@ -116,6 +116,11 @@ const schema = {
   finopsMemoryCompressThreshold: { type: "number", default: 40 },
   finopsMemoryCompressBatch: { type: "number", default: 20 },
   finopsPresetBackup: { type: "object", default: {} },
+  gooseEnabled: { type: "boolean", default: true },
+  gooseBinaryPath: { type: "string", default: "" },
+  gooseDefaultMode: { type: "string", enum: ["economy", "balanced", "premium"], default: "balanced" },
+  gooseDailyBudgetTl: { type: "number", default: 0 },
+  gooseAutoMode: { type: "boolean", default: true },
 };
 function createStore() { return new Store({ schema, clearInvalidConfig: true }); }
 module.exports = { createStore, schema };

@@ -117,3 +117,19 @@ test("runSauronDoctor includes ai-credentials check", () => {
   assert.ok(result.readiness);
   fs.rmSync(workspace, { recursive: true, force: true });
 });
+
+test("runSauronDoctor warns when goose binary missing", () => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "sauron-doctor-goose-"));
+  const store = {
+    get(key) {
+      if (key === "workspacePath") return workspace;
+      if (key === "gooseBinaryPath") return "";
+      return null;
+    },
+  };
+  const result = runSauronDoctor(store, { settings: { gooseEnabled: true } });
+  const gooseBinary = result.checks.find((entry) => entry.id === "goose-binary");
+  assert.equal(gooseBinary?.status, "warn");
+  assert.match(gooseBinary?.message, /bulunamadı/i);
+  fs.rmSync(workspace, { recursive: true, force: true });
+});

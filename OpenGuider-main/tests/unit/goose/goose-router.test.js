@@ -1,0 +1,54 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+
+const {
+  resolveGooseMode,
+  resolveModeProviderConfig,
+  hasOllamaConfigured,
+} = require("../../../src/sauron/goose-router");
+
+test("resolveModeProviderConfig uses openrouter when key present", () => {
+  const cfg = resolveModeProviderConfig("balanced", {
+    openrouterApiKey: "sk-test",
+  });
+  assert.equal(cfg.provider, "openrouter");
+  assert.equal(cfg.model, "deepseek/deepseek-chat");
+});
+
+test("resolveModeProviderConfig economy uses ollama model from settings", () => {
+  const cfg = resolveModeProviderConfig("economy", {
+    ollamaUrl: "http://localhost:11434",
+    ollamaModelCustom: "qwen2.5-coder:7b",
+  });
+  assert.equal(cfg.provider, "ollama");
+  assert.equal(cfg.model, "qwen2.5-coder:7b");
+});
+
+test("hasOllamaConfigured requires url and model", () => {
+  assert.equal(hasOllamaConfigured({ ollamaUrl: "http://localhost:11434" }), false);
+  assert.equal(
+    hasOllamaConfigured({ ollamaUrl: "http://localhost:11434", ollamaModelCustom: "qwen" }),
+    true,
+  );
+});
+
+test("resolveGooseMode falls back to balanced when economy ollama missing", async () => {
+  const routing = await resolveGooseMode("dosyayı aç", {
+    gooseAutoMode: true,
+    ollamaUrl: "",
+    ollamaModelCustom: "",
+  });
+  assert.equal(routing.mode, "balanced");
+  assert.match(routing.reason, /fallback|complexity|ollama/i);
+  assert.ok(routing.notices.some((n) => /Ollama/i.test(n)));
+});
+
+test("resolveGooseMode respects manual default when auto off", async () => {
+  const routing = await resolveGooseMode("herhangi görev", {
+    gooseAutoMode: false,
+    gooseDefaultMode: "premium",
+    openaiApiKey: "sk-test",
+  });
+  assert.equal(routing.mode, "premium");
+  assert.equal(routing.reason, "manual-default");
+});

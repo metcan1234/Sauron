@@ -93,6 +93,16 @@ async function init() {
   const openrouterMaxTokensEl = document.getElementById("openrouterMaxTokens");
   if (openrouterMaxTokensEl) openrouterMaxTokensEl.value = String(settings.openrouterMaxTokens ?? 2048);
   document.getElementById("ollamaModel").value       = settings.ollamaModelCustom     || "";
+  const gooseEnabledEl = document.getElementById("gooseEnabled");
+  const gooseBinaryPathEl = document.getElementById("gooseBinaryPath");
+  const gooseDefaultModeEl = document.getElementById("gooseDefaultMode");
+  const gooseDailyBudgetTlEl = document.getElementById("gooseDailyBudgetTl");
+  const gooseAutoModeEl = document.getElementById("gooseAutoMode");
+  if (gooseEnabledEl) gooseEnabledEl.checked = settings.gooseEnabled !== false;
+  if (gooseBinaryPathEl) gooseBinaryPathEl.value = settings.gooseBinaryPath || "";
+  if (gooseDefaultModeEl) gooseDefaultModeEl.value = settings.gooseDefaultMode || "balanced";
+  if (gooseDailyBudgetTlEl) gooseDailyBudgetTlEl.value = String(settings.gooseDailyBudgetTl ?? 0);
+  if (gooseAutoModeEl) gooseAutoModeEl.checked = settings.gooseAutoMode !== false;
   // STT / TTS
   document.getElementById("assemblyaiApiKey").value  = settings.assemblyaiApiKey  || "";
   document.getElementById("whisperApiKey").value     = settings.whisperApiKey     || "";
@@ -374,6 +384,22 @@ async function init() {
 
   document.getElementById("btn-run-doctor")?.addEventListener("click", () => {
     void runDoctorCheck();
+  });
+
+  document.getElementById("btn-probe-goose")?.addEventListener("click", async () => {
+    const statusEl = document.getElementById("gooseProbeStatus");
+    if (statusEl) statusEl.textContent = "Kontrol ediliyor…";
+    try {
+      const probe = await window.sauron.invoke("probe-goose-binary");
+      if (probe?.ok) {
+        const version = probe.version ? ` v${probe.version}` : "";
+        if (statusEl) statusEl.textContent = `Bulundu: ${probe.binaryPath}${version}`;
+      } else if (statusEl) {
+        statusEl.textContent = "Bulunamadı — binary yolunu girin veya PATH'e ekleyin.";
+      }
+    } catch (error) {
+      if (statusEl) statusEl.textContent = `Hata: ${error.message}`;
+    }
   });
 
   bindSettingsTabs();
@@ -1022,6 +1048,26 @@ async function refreshFinOpsSummary() {
       breakdownEl.textContent = lines.length ? lines.join("\n") : "Henüz kayıt yok.";
     }
     renderAgentWalletRows(collectAgentWallets(), summary?.agentWallets || {});
+    try {
+      const gooseSpend = await window.sauron.invoke("get-goose-daily-spend");
+      const gooseSpentEl = document.getElementById("gooseDailySpentTl");
+      const gooseHintEl = document.getElementById("gooseDailySpendHint");
+      if (gooseSpentEl) {
+        gooseSpentEl.value = `${(gooseSpend?.spentTl ?? 0).toFixed(4)} TL`;
+      }
+      if (gooseHintEl) {
+        const parts = [`${gooseSpend?.summary?.count ?? 0} oturum (tahmini)`];
+        if (gooseSpend?.dailyBudgetTl > 0) {
+          parts.push(`Bütçe: ${gooseSpend.dailyBudgetTl.toFixed(2)} TL`);
+          if (gooseSpend.remainingTl != null) {
+            parts.push(`Kalan: ${gooseSpend.remainingTl.toFixed(4)} TL`);
+          }
+        }
+        gooseHintEl.textContent = parts.join(" · ");
+      }
+    } catch {
+      // optional row
+    }
   } catch (error) {
     const hintEl = document.getElementById("finopsSummaryHint");
     if (hintEl) hintEl.textContent = `Özet alınamadı: ${error.message}`;
@@ -1298,6 +1344,11 @@ async function saveSettings() {
     webStudioEnabled:        document.getElementById("webStudioEnabled")?.checked !== false,
     selfBuildEnabled:        document.getElementById("selfBuildEnabled")?.checked !== false,
     codeAgentNativeEnabled:  document.getElementById("codeAgentNativeEnabled")?.checked === true,
+    gooseEnabled:            document.getElementById("gooseEnabled")?.checked !== false,
+    gooseBinaryPath:         document.getElementById("gooseBinaryPath")?.value.trim() || "",
+    gooseDefaultMode:        document.getElementById("gooseDefaultMode")?.value || "balanced",
+    gooseDailyBudgetTl:      Number(document.getElementById("gooseDailyBudgetTl")?.value) || 0,
+    gooseAutoMode:           document.getElementById("gooseAutoMode")?.checked !== false,
     awareAssistanceEnabled:  document.getElementById("awareAssistanceEnabled").checked,
     includeScreenshotByDefault: false,
     workspacePath:           document.getElementById("workspacePath").value.trim(),

@@ -1,4 +1,16 @@
-# Manuel Test Checklist — v1.6.0
+# Manuel Test Checklist — v1.7.0
+
+## v1.7 Goose Kısmı
+
+- [ ] Ayarlar → AI Ajanları → Goose kartı görünür; binary kontrol çalışır
+- [ ] `gooseEnabled` kapalı → panelde 🪿 gizli
+- [ ] Workspace + görev metni → 🪿 → PowerShell + Goose terminal açılır
+- [ ] `.goose/instructions.md` ve `.sauron/goose-*.json` oluşur
+- [ ] Ollama kapalı + economy görev → Balanced fallback toast
+- [ ] `gooseAutoMode` kapalı → mod onay diyaloğu
+- [ ] FinOps → Goose harcaması (bugün) satırı güncellenir
+- [ ] Doctor → goose-binary / goose-economy-provider uyarıları
+- [ ] ⌘ Cline handoff regresyonu bozulmamış
 
 ## v1.6 FinOps Ultra
 
