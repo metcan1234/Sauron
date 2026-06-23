@@ -1,238 +1,159 @@
-const { execFile } = require("child_process");
+const { spawn } = require("child_process");
 const fs = require("fs");
-const os = require("os");
 const path = require("path");
-const {
-  escapePowerShellSingleQuoted,
-  toPowerShellLiteralPath,
-  writeUtf8BomFile,
-  buildEncodedPowerShellArgs,
-} = require("./goose-powershell");
 
 const GOOSE_TERMINAL_TITLE = "Sauron Goose";
-
-function getGooseTerminalDir() {
-  const dir = path.join(os.tmpdir(), "sauron-goose");
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
-}
 
 function findWindowsTerminalPathSync() {
   if (process.platform !== "win32") {
     return null;
   }
 
-  const candidates = [
-    path.join(process.env.LOCALAPPDATA || "", "Microsoft", "WindowsApps", "wt.exe"),
-  ];
-
-  for (const candidate of candidates) {
-    try {
-      if (fs.existsSync(candidate)) {
-        return candidate;
-      }
-    } catch {
-      // ignore
-    }
+  const candidate = path.join(process.env.LOCALAPPDATA || "", "Microsoft", "WindowsApps", "wt.exe");
+  try {
+    return fs.existsSync(candidate) ? candidate : null;
+  } catch {
+    return null;
   }
-
-  return null;
 }
 
-function buildPowerShellLaunchArgs(scriptPath) {
+function buildGooseCliArgs({ taskText, providerConfig = {}, instructionsPath }) {
   return [
-    "-NoExit",
-    "-NoProfile",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-NoLogo",
-    "-File",
-    scriptPath,
+    "run",
+    "--no-session",
+    "-s",
+    "--provider",
+    String(providerConfig.provider || "openai"),
+    "--model",
+    String(providerConfig.model || "gpt-4o-mini"),
+    "-i",
+    String(instructionsPath || ""),
+    "-t",
+    String(taskText || ""),
   ];
 }
 
-function buildWindowsTerminalCommandLine(scriptPath, workspacePath) {
-  const scriptLit = toPowerShellLiteralPath(scriptPath);
-  const cwdLit = toPowerShellLiteralPath(workspacePath);
-  return [
-    "-w 0 nt",
-    '--title "Sauron Goose"',
-    `-d ${cwdLit}`,
-    "--",
-    "powershell.exe",
-    "-NoExit -NoProfile -ExecutionPolicy Bypass -NoLogo",
-    `-File ${scriptLit}`,
-  ].join(" ");
-}
-
-function writeVisibleTerminalBootstrap({ sessionId, scriptPath, workspacePath }) {
-  const bootstrapPath = path.join(getGooseTerminalDir(), `open-${sessionId}.ps1`);
-  const cwdLit = toPowerShellLiteralPath(workspacePath);
-  const psArgs = buildPowerShellLaunchArgs(scriptPath)
-    .map((part) => `'${escapePowerShellSingleQuoted(part)}'`)
-    .join(", ");
-
-  const content = [
-    "$ErrorActionPreference = 'Continue'",
-    `try { $host.UI.RawUI.WindowTitle = '${escapePowerShellSingleQuoted(GOOSE_TERMINAL_TITLE)}' } catch {}`,
-    `Set-Location -LiteralPath ${cwdLit}`,
-    "Write-Host 'Sauron Goose terminal acildi.' -ForegroundColor Cyan",
-    `$psArgs = @(${psArgs})`,
-    "& powershell.exe @psArgs",
-    "Write-Host ''",
-    "Write-Host 'Goose scripti bitti. Kapatmak icin Enter.' -ForegroundColor DarkGray",
-    "try {",
-    "  if ([Environment]::UserInteractive) { [void][Console]::ReadLine() }",
-    "  else { Start-Sleep -Seconds 3600 }",
-    "} catch {",
-    "  Start-Sleep -Seconds 3600",
-    "}",
-  ].join("\r\n");
-
-  writeUtf8BomFile(bootstrapPath, content);
-  return bootstrapPath;
-}
-
-function buildStartProcessCommand(entryScriptPath, workspacePath, wtPath) {
-  const entryLit = toPowerShellLiteralPath(entryScriptPath);
-  const cwdLit = toPowerShellLiteralPath(workspacePath);
-
-  if (wtPath) {
-    const wtLit = toPowerShellLiteralPath(wtPath);
-    const wtCommandLine = buildWindowsTerminalCommandLine(entryScriptPath, workspacePath);
-    return [
-      `$p = Start-Process -FilePath ${wtLit}`,
-      `-ArgumentList '${escapePowerShellSingleQuoted(wtCommandLine)}'`,
-      "-WindowStyle Normal -PassThru",
-    ].join(" ");
-  }
-
-  const argList = buildPowerShellLaunchArgs(entryScriptPath)
-    .map((part) => `'${escapePowerShellSingleQuoted(part)}'`)
-    .join(", ");
-
-  return [
-    "$p = Start-Process -FilePath 'powershell.exe'",
-    `-ArgumentList @(${argList})`,
-    `-WorkingDirectory ${cwdLit} -WindowStyle Normal -PassThru`,
-  ].join(" ");
-}
-
-function buildFocusTerminalSnippet() {
-  const title = escapePowerShellSingleQuoted(GOOSE_TERMINAL_TITLE);
-  return [
-    "Start-Sleep -Milliseconds 700",
-    "Add-Type @\"",
-    "using System;",
-    "using System.Runtime.InteropServices;",
-    "public class SauronGooseFocus {",
-    "  [DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);",
-    "  [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr hWnd);",
-    "  [DllImport(\"user32.dll\")] public static extern bool IsIconic(IntPtr hWnd);",
-    "}",
-    "\"@",
-    `$needle = '${title}'`,
-    "$proc = Get-Process | Where-Object {",
-    "  $_.MainWindowHandle -ne 0 -and (",
-    "    $_.MainWindowTitle -like \"*$needle*\" -or",
-    "    $_.MainWindowTitle -like '*goose*' -or",
-    "    $_.ProcessName -eq 'WindowsTerminal'",
-    "  )",
-    "} | Sort-Object StartTime -Descending | Select-Object -First 1",
-    "if ($proc) {",
-    "  $h = $proc.MainWindowHandle",
-    "  if ($h -ne 0) {",
-    "    if ([SauronGooseFocus]::IsIconic($h)) { [SauronGooseFocus]::ShowWindow($h, 9) | Out-Null }",
-    "    else { [SauronGooseFocus]::ShowWindow($h, 5) | Out-Null }",
-    "    [SauronGooseFocus]::SetForegroundWindow($h) | Out-Null",
-    "  }",
-    "}",
-  ].join("\n");
-}
-
-function buildVisibleTerminalSpawnCommand(entryScriptPath, workspacePath) {
-  const wtPath = findWindowsTerminalPathSync();
-  const startCmd = buildStartProcessCommand(entryScriptPath, workspacePath, wtPath);
-  const focusSnippet = buildFocusTerminalSnippet();
+function spawnDetached(child) {
+  child.unref();
   return {
-    command: `${startCmd}; $spawnPid = $p.Id; ${focusSnippet}; Write-Output $spawnPid`,
-    terminal: wtPath ? "windows-terminal" : "powershell",
-    wtPath,
+    pid: child.pid || null,
   };
 }
 
-function spawnVisibleGooseTerminal({ scriptPath, workspacePath, sessionId = null }) {
-  const resolvedScript = String(scriptPath || "").trim();
-  const resolvedWorkspace = String(workspacePath || "").trim();
-  if (!resolvedScript || !resolvedWorkspace) {
-    return Promise.reject(new Error("Goose terminal script or workspace path is missing."));
-  }
+function spawnWindowsTerminalGoose({ wtPath, binaryPath, workspacePath, args, env }) {
+  const wtArgs = [
+    "-w",
+    "0",
+    "nt",
+    "--title",
+    GOOSE_TERMINAL_TITLE,
+    "-d",
+    workspacePath,
+    "--",
+    binaryPath,
+    ...args,
+  ];
 
-  const bootstrapId = sessionId || `goose-open-${Date.now()}`;
-  const entryScriptPath = writeVisibleTerminalBootstrap({
-    sessionId: bootstrapId,
-    scriptPath: resolvedScript,
-    workspacePath: resolvedWorkspace,
+  const child = spawn(wtPath, wtArgs, {
+    detached: true,
+    stdio: "ignore",
+    env,
+    windowsHide: false,
   });
 
-  if (process.platform !== "win32") {
-    return new Promise((resolve, reject) => {
-      const child = require("child_process").spawn(
-        "powershell.exe",
-        buildPowerShellLaunchArgs(entryScriptPath),
-        {
-          detached: true,
-          stdio: "ignore",
-          cwd: resolvedWorkspace,
-          windowsHide: false,
-        },
-      );
-      child.on("error", reject);
-      child.unref();
-      resolve({
-        pid: child.pid,
-        terminal: "powershell",
-        entryScriptPath,
-      });
+  return {
+    ...spawnDetached(child),
+    terminal: "windows-terminal",
+  };
+}
+
+function spawnCmdStartGoose({ binaryPath, workspacePath, args, env }) {
+  const child = spawn(
+    "cmd.exe",
+    [
+      "/c",
+      "start",
+      GOOSE_TERMINAL_TITLE,
+      "/D",
+      workspacePath,
+      binaryPath,
+      ...args,
+    ],
+    {
+      detached: true,
+      stdio: "ignore",
+      env,
+      windowsHide: true,
+    },
+  );
+
+  return {
+    ...spawnDetached(child),
+    terminal: "cmd",
+  };
+}
+
+function spawnDirectGoose({ binaryPath, workspacePath, args, env }) {
+  const child = spawn(binaryPath, args, {
+    cwd: workspacePath,
+    env,
+    detached: true,
+    stdio: "ignore",
+    windowsHide: false,
+  });
+
+  return {
+    ...spawnDetached(child),
+    terminal: "direct",
+  };
+}
+
+function spawnGooseProcess({ binaryPath, workspacePath, args, env }) {
+  const resolvedBinary = String(binaryPath || "").trim();
+  const resolvedWorkspace = String(workspacePath || "").trim();
+  const gooseArgs = Array.isArray(args) ? args : [];
+
+  if (!resolvedBinary) {
+    throw new Error("Goose binary path is missing.");
+  }
+  if (!resolvedWorkspace) {
+    throw new Error("Workspace path is missing.");
+  }
+
+  const wtPath = findWindowsTerminalPathSync();
+  if (process.platform === "win32" && wtPath) {
+    return spawnWindowsTerminalGoose({
+      wtPath,
+      binaryPath: resolvedBinary,
+      workspacePath: resolvedWorkspace,
+      args: gooseArgs,
+      env,
     });
   }
 
-  const { command, terminal } = buildVisibleTerminalSpawnCommand(entryScriptPath, resolvedWorkspace);
-  const encodedArgs = buildEncodedPowerShellArgs(command);
+  if (process.platform === "win32") {
+    return spawnCmdStartGoose({
+      binaryPath: resolvedBinary,
+      workspacePath: resolvedWorkspace,
+      args: gooseArgs,
+      env,
+    });
+  }
 
-  return new Promise((resolve, reject) => {
-    execFile(
-      "powershell.exe",
-      encodedArgs,
-      { windowsHide: true, timeout: 25000 },
-      (error, stdout, stderr) => {
-        if (error) {
-          reject(new Error(stderr?.trim() || error.message || "Goose terminal could not be opened."));
-          return;
-        }
-        const lines = String(stdout || "")
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter(Boolean);
-        const pid = parseInt(lines[lines.length - 1], 10);
-        resolve({
-          pid: Number.isFinite(pid) ? pid : null,
-          terminal,
-          entryScriptPath,
-        });
-      },
-    );
+  return spawnDirectGoose({
+    binaryPath: resolvedBinary,
+    workspacePath: resolvedWorkspace,
+    args: gooseArgs,
+    env,
   });
 }
 
 module.exports = {
   GOOSE_TERMINAL_TITLE,
-  escapePowerShellSingleQuoted,
   findWindowsTerminalPathSync,
-  buildPowerShellLaunchArgs,
-  buildWindowsTerminalCommandLine,
-  writeVisibleTerminalBootstrap,
-  buildStartProcessCommand,
-  buildVisibleTerminalSpawnCommand,
-  spawnVisibleGooseTerminal,
+  buildGooseCliArgs,
+  spawnGooseProcess,
+  spawnWindowsTerminalGoose,
+  spawnCmdStartGoose,
+  spawnDirectGoose,
 };
