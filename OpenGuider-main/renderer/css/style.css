@@ -2854,7 +2854,22 @@ kbd {
   text-decoration: none;
 }
 
-.gamedev-setup-overlay {
+.gamedev-setup-step {
+  margin: 12px 0;
+}
+
+.gamedev-setup-status {
+  font-size: 12px;
+  color: var(--text-muted, #9aa0a6);
+  margin-top: 8px;
+}
+
+.gamedev-setup-progress {
+  font-size: 12px;
+  margin-bottom: 8px;
+  opacity: 0.85;
+}
+
   position: fixed;
   inset: 0;
   z-index: 12000;

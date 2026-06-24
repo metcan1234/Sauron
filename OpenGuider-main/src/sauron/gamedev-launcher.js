@@ -4,9 +4,9 @@ const {
   generateHandoffId,
   writeHandoff,
   seedSauronRules,
-  launchVSCode,
   focusVSCodeWorkspace,
 } = require("./handoff");
+const { focusOrLaunchWorkspaceVSCode } = require("./gamedev-vscode-focus");
 const { mergeCostOptimizerConfig } = require("./finops/cost-optimizer-config");
 const { GAMEDEV_ENGINE_LABELS, normalizeGamedevEngine } = require("./gamedev-config");
 const { probeGamedevMcpEntry, resolveGamedevMcpEntryPath } = require("./gamedev-path-resolver");
@@ -36,19 +36,12 @@ const {
 } = require("./gamedev-router");
 const { appendGamedevLedgerEvent } = require("./gamedev-finops-ledger");
 const { resolveGamedevGenre } = require("./gamedev-genre-router");
+const { resolveWireRecipePointer } = require("./unity-wire-recipes");
 const {
   startGamePipeline,
   getCurrentPhaseGoal,
 } = require("./game-pipeline");
 const { scaffoldUnityTemplate } = require("./scaffold-unity-template");
-
-const RELIABLE_VSCODE_LAUNCH_OPTIONS = {
-  newWindow: false,
-  force: true,
-  skipRecovery: true,
-  skipVerification: true,
-  bypassDebounce: true,
-};
 
 function resolveWorkspacePath(workspacePath, settings = {}) {
   const fromArg = String(workspacePath || "").trim();
@@ -56,29 +49,6 @@ function resolveWorkspacePath(workspacePath, settings = {}) {
     return fromArg;
   }
   return String(settings.workspacePath || "").trim();
-}
-
-async function focusOrLaunchWorkspaceVSCode(workspacePath) {
-  const resolved = String(workspacePath || "").trim();
-  if (!resolved) {
-    return { ok: false, error: "Workspace path is required." };
-  }
-
-  const focused = await focusVSCodeWorkspace(resolved, {
-    allowLaunch: false,
-    verifyTimeoutMs: 4000,
-    skipPostVerifySettle: true,
-  });
-
-  const launchResult = focused?.verified
-    ? focused
-    : await launchVSCode(resolved, RELIABLE_VSCODE_LAUNCH_OPTIONS);
-
-  return {
-    ok: true,
-    launchResult,
-    action: focused?.verified ? "focus_existing" : (launchResult?.skipped ? "launch_skipped" : "launch"),
-  };
 }
 
 async function activateGamedevMode(settings = {}) {
@@ -175,6 +145,7 @@ async function launchGamedevSession({
   }
 
   const effectiveTask = phaseInfo?.goal || rawTask;
+  const wireRecipePointer = phaseInfo ? resolveWireRecipePointer(phaseInfo.genre || genre.genre, phaseInfo.phase) : null;
   const delta = resolveGamedevDeltaHandoff(settings, resolvedWorkspace, effectiveTask);
   const planBullets = buildGameDevPlanBullets(effectiveTask);
 
@@ -202,6 +173,7 @@ async function launchGamedevSession({
       ...(delta.hint ? [delta.hint] : []),
       ...(sceneHint ? [sceneHint] : []),
       ...(planBullets ? [`Plan (0-token):\n${planBullets}`] : []),
+      ...(wireRecipePointer ? [`Wire recipe pointer: ${wireRecipePointer}`] : []),
     ],
   });
 
@@ -225,6 +197,7 @@ async function launchGamedevSession({
     pipelineId: phaseInfo?.pipeline?.id || null,
     pipelinePhase: phaseInfo?.phase || null,
     pipelineTotalPhases: phaseInfo?.totalPhases || null,
+    wireRecipe: wireRecipePointer,
     gamedev: {
       engine,
       mcpServerId: mcpWrite.serverId,
@@ -239,6 +212,7 @@ async function launchGamedevSession({
       pipelineRunId: phaseInfo?.pipeline?.id || null,
       phase: phaseInfo?.phase || null,
       totalPhases: phaseInfo?.totalPhases || null,
+      wireRecipe: wireRecipePointer,
     },
     costContext: {
       coreModelTier: optimizer.coreModelTier,
@@ -261,6 +235,7 @@ async function launchGamedevSession({
     connectorConnected: status?.connector?.connected === true,
     status,
   });
+  void require("./gamedev-scene-cache").tryCaptureHierarchySnapshot(resolvedWorkspace);
   recordGamedevHandoffContext(
     resolvedWorkspace,
     handoffMeta.optimizedTask,
@@ -277,16 +252,6 @@ async function launchGamedevSession({
     pipelineId: phaseInfo?.pipeline?.id,
     phase: phaseInfo?.phase,
   });
-  if (phaseInfo?.pipeline?.phases) {
-    const phaseDef = phaseInfo.pipeline.phases.find((p) => p.phase === phaseInfo.phase);
-    if (phaseDef?.verification?.mcp === "unity_play_mode") {
-      appendGamedevLedgerEvent(resolvedWorkspace, {
-        type: "mcp-tool",
-        tool: "unity_play_mode",
-        phase: phaseInfo.phase,
-      });
-    }
-  }
 
   setGamedevModeActive(true, {
     engine,

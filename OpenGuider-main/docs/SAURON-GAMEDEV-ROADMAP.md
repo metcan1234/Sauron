@@ -1,5 +1,28 @@
 # Sauron Game Dev Roadmap (FAZ 3–7)
 
+## Shipped in v2.1.0
+
+### Production auto-chain
+- `advanceGamePipelineAfterComplete` + `writeGamedevPhaseHandoff`
+- UI `refreshGamePipeline` polling (build-pipeline parity)
+- MCP verification gate (`unity_play_mode`, skip when bridge offline)
+
+### Playable scaffold
+- `templates/unity/_shared/` — Main.unity, Editor bootstrap, asset stubs
+- Genre scenes copied to `Assets/SauronGameDev/{genre}/Scenes/`
+- `scripts/scaffold-unity-template.js` CLI
+
+### MCP extension (+7 tools)
+- `unity-script`: set/edit/grep scripts
+- `unity-scene`: save/load scene, save/instantiate prefab
+- FinOps ledger hook via `SAURON_GAMEDEV_WORKSPACE`
+
+### Token economy v2.1
+- Phase-based 0-token plan bullets
+- Wire recipe pointers (no JSON in handoff body)
+- Hierarchy snapshot in scene cache (bounded)
+- Honest `mcp-tool` ledger (no fake launch log)
+
 ## Shipped in v2.0.0
 
 ### FAZ 3 — Game Pipeline

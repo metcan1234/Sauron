@@ -3,6 +3,7 @@ const path = require("path");
 
 const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
 const TEMPLATES_ROOT = path.join(PROJECT_ROOT, "templates", "unity");
+const SHARED_ROOT = path.join(TEMPLATES_ROOT, "_shared");
 
 const GENRE_LABELS = {
   "co-op-climb": "Co-op Climb",
@@ -21,6 +22,29 @@ function copyDirRecursive(src, dest) {
       fs.copyFileSync(srcPath, destPath);
     }
   }
+}
+
+function copySharedAssets(destRoot) {
+  if (!fs.existsSync(SHARED_ROOT)) {
+    return { ok: false, error: "Shared template folder missing." };
+  }
+  const sharedDest = path.join(destRoot, "_shared");
+  copyDirRecursive(SHARED_ROOT, sharedDest);
+  return { ok: true, sharedDest };
+}
+
+function ensureMainScene(genreDest, genre) {
+  const sceneSrc = path.join(SHARED_ROOT, "Scenes", "Main.unity");
+  const sceneDestDir = path.join(genreDest, "Scenes");
+  const sceneDest = path.join(sceneDestDir, "Main.unity");
+  if (!fs.existsSync(sceneSrc)) {
+    return false;
+  }
+  fs.mkdirSync(sceneDestDir, { recursive: true });
+  if (!fs.existsSync(sceneDest)) {
+    fs.copyFileSync(sceneSrc, sceneDest);
+  }
+  return true;
 }
 
 function mergeManifestPackages(workspacePath) {
@@ -52,6 +76,21 @@ function mergeManifestPackages(workspacePath) {
   fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 }
 
+function writeWireRecipeToWorkspace(workspacePath, genre) {
+  const recipesSrc = path.join(PROJECT_ROOT, "src", "sauron", "unity-wire-recipes", "recipes");
+  const recipesDest = path.join(workspacePath, ".sauron", "unity-wire-recipes");
+  if (!fs.existsSync(recipesSrc)) {
+    return;
+  }
+  fs.mkdirSync(recipesDest, { recursive: true });
+  const prefix = `${genre}-`;
+  for (const file of fs.readdirSync(recipesSrc)) {
+    if (file.startsWith(prefix) || file === "empty-phase2.json") {
+      fs.copyFileSync(path.join(recipesSrc, file), path.join(recipesDest, file));
+    }
+  }
+}
+
 function scaffoldUnityTemplate(workspacePath, templateId) {
   const resolved = String(workspacePath || "").trim();
   const genre = String(templateId || "").trim();
@@ -67,9 +106,13 @@ function scaffoldUnityTemplate(workspacePath, templateId) {
     return { ok: false, error: `Template folder missing: ${src}` };
   }
 
-  const dest = path.join(resolved, "Assets", "SauronGameDev", genre);
+  const destRoot = path.join(resolved, "Assets", "SauronGameDev");
+  const dest = path.join(destRoot, genre);
   copyDirRecursive(src, dest);
+  const shared = copySharedAssets(destRoot);
+  const hasScene = ensureMainScene(dest, genre);
   mergeManifestPackages(resolved);
+  writeWireRecipeToWorkspace(resolved, genre);
 
   const markerPath = path.join(resolved, ".sauron", "gamedev-template.json");
   fs.mkdirSync(path.dirname(markerPath), { recursive: true });
@@ -78,6 +121,8 @@ function scaffoldUnityTemplate(workspacePath, templateId) {
     label: GENRE_LABELS[genre],
     scaffoldedAt: new Date().toISOString(),
     assetsPath: `Assets/SauronGameDev/${genre}`,
+    scenePath: hasScene ? `Assets/SauronGameDev/${genre}/Scenes/Main.unity` : null,
+    sharedPath: shared.ok ? "Assets/SauronGameDev/_shared" : null,
   }, null, 2), "utf8");
 
   return {
@@ -85,10 +130,14 @@ function scaffoldUnityTemplate(workspacePath, templateId) {
     templateId: genre,
     label: GENRE_LABELS[genre],
     assetsPath: dest,
+    scenePath: hasScene ? path.join(dest, "Scenes", "Main.unity") : null,
+    sharedCopied: shared.ok,
   };
 }
 
 module.exports = {
   GENRE_LABELS,
   scaffoldUnityTemplate,
+  copySharedAssets,
+  ensureMainScene,
 };

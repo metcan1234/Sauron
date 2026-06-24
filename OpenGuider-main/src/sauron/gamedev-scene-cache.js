@@ -48,7 +48,58 @@ function buildSceneCacheHandoffHint(workspacePath, engine) {
   if (cache.connectorConnected === true) {
     parts.push("Bridge: connected at last session");
   }
+  if (cache.hierarchy?.rootCount) {
+    parts.push(`Hierarchy roots: ${cache.hierarchy.rootCount}`);
+  }
+  if (Array.isArray(cache.hierarchy?.lastPaths) && cache.hierarchy.lastPaths.length > 0) {
+    parts.push(`Paths: ${cache.hierarchy.lastPaths.slice(0, 5).join(", ")}`);
+  }
   return parts.join(" | ");
+}
+
+async function tryCaptureHierarchySnapshot(workspacePath) {
+  const resolved = String(workspacePath || "").trim();
+  if (!resolved) {
+    return { ok: false };
+  }
+  try {
+    const { dispatchUnityCommand } = require("./gamedev-mcp-proxy");
+    const result = await dispatchUnityCommand("get_hierarchy", { rootPath: "", depth: 3 }, { timeoutMs: 4000 });
+    if (!result.ok) {
+      return { ok: false, skipped: true };
+    }
+    const hierarchy = result.result && typeof result.result === "object" ? result.result : result;
+    const nodes = hierarchy?.nodes || hierarchy?.children || hierarchy?.roots || [];
+    const paths = [];
+    const walk = (items, prefix = "") => {
+      for (const item of items || []) {
+        const name = item?.name || item?.path || "";
+        const full = prefix ? `${prefix}/${name}` : name;
+        if (full) {
+          paths.push(full.slice(0, 80));
+        }
+        if (paths.length >= 12) {
+          return;
+        }
+        if (item?.children) {
+          walk(item.children, full);
+        }
+      }
+    };
+    walk(Array.isArray(nodes) ? nodes : []);
+    const existing = readGamedevSceneCache(resolved) || {};
+    writeGamedevSceneCache(resolved, {
+      ...existing,
+      hierarchy: {
+        rootCount: Array.isArray(nodes) ? nodes.length : 0,
+        lastPaths: paths.slice(0, 12),
+        capturedAt: new Date().toISOString(),
+      },
+    });
+    return { ok: true, pathCount: paths.length };
+  } catch {
+    return { ok: false, skipped: true };
+  }
 }
 
 function updateGamedevSceneCache(workspacePath, { engine, goal, connectorConnected, status } = {}) {
@@ -71,4 +122,5 @@ module.exports = {
   writeGamedevSceneCache,
   buildSceneCacheHandoffHint,
   updateGamedevSceneCache,
+  tryCaptureHierarchySnapshot,
 };

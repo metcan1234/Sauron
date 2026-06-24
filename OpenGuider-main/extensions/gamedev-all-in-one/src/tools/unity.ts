@@ -1,12 +1,21 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { executeUnityCommand } from "../connectors/unity/index.js";
+import { recordGamedevMcpTool } from "../finops/gamedev-ledger.js";
 
 function toolResult(result: Record<string, unknown>) {
   return {
     content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
     structuredContent: result
   };
+}
+
+async function runUnityTool(toolName: string, method: string, params: Record<string, unknown>, timeoutMs?: number) {
+  const result = await executeUnityCommand(method, params, { timeoutMs });
+  if (result.ok) {
+    recordGamedevMcpTool(toolName);
+  }
+  return result;
 }
 
 export function registerUnityTools(server: McpServer) {
@@ -22,7 +31,7 @@ export function registerUnityTools(server: McpServer) {
       }
     },
     async ({ rootPath, depth, timeoutMs }) => {
-      const result = await executeUnityCommand("get_hierarchy", { rootPath, depth }, { timeoutMs });
+      const result = await runUnityTool("unity_get_hierarchy", "get_hierarchy", { rootPath, depth }, timeoutMs);
       return toolResult(result);
     }
   );
@@ -39,7 +48,7 @@ export function registerUnityTools(server: McpServer) {
       }
     },
     async ({ path, includeComponents, timeoutMs }) => {
-      const result = await executeUnityCommand("get_gameobject", { path, includeComponents }, { timeoutMs });
+      const result = await runUnityTool("unity_get_gameobject", "get_gameobject", { path, includeComponents }, timeoutMs);
       return toolResult(result);
     }
   );
@@ -57,7 +66,7 @@ export function registerUnityTools(server: McpServer) {
       }
     },
     async ({ name, parentPath, primitiveType, timeoutMs }) => {
-      const result = await executeUnityCommand("create_gameobject", { name, parentPath, primitiveType }, { timeoutMs });
+      const result = await runUnityTool("unity_create_gameobject", "create_gameobject", { name, parentPath, primitiveType }, timeoutMs);
       return toolResult(result);
     }
   );
@@ -73,7 +82,7 @@ export function registerUnityTools(server: McpServer) {
       }
     },
     async ({ path, timeoutMs }) => {
-      const result = await executeUnityCommand("delete_gameobject", { path }, { timeoutMs });
+      const result = await runUnityTool("unity_delete_gameobject", "delete_gameobject", { path }, timeoutMs);
       return toolResult(result);
     }
   );
@@ -92,7 +101,7 @@ export function registerUnityTools(server: McpServer) {
       }
     },
     async ({ path, component, property, value, timeoutMs }) => {
-      const result = await executeUnityCommand("set_component_property", { path, component, property, value }, { timeoutMs });
+      const result = await runUnityTool("unity_set_component_property", "set_component_property", { path, component, property, value }, timeoutMs);
       return toolResult(result);
     }
   );
@@ -109,7 +118,7 @@ export function registerUnityTools(server: McpServer) {
       }
     },
     async ({ path, component, timeoutMs }) => {
-      const result = await executeUnityCommand("add_component", { path, component }, { timeoutMs });
+      const result = await runUnityTool("unity_add_component", "add_component", { path, component }, timeoutMs);
       return toolResult(result);
     }
   );
@@ -128,7 +137,7 @@ export function registerUnityTools(server: McpServer) {
       }
     },
     async ({ path, position, rotation, scale, timeoutMs }) => {
-      const result = await executeUnityCommand("set_transform", { path, position, rotation, scale }, { timeoutMs });
+      const result = await runUnityTool("unity_set_transform", "set_transform", { path, position, rotation, scale }, timeoutMs);
       return toolResult(result);
     }
   );
@@ -144,7 +153,7 @@ export function registerUnityTools(server: McpServer) {
       }
     },
     async ({ scriptPath, timeoutMs }) => {
-      const result = await executeUnityCommand("get_script_source", { scriptPath }, { timeoutMs });
+      const result = await runUnityTool("unity_get_script_source", "get_script_source", { scriptPath }, timeoutMs);
       return toolResult(result);
     }
   );
@@ -160,7 +169,7 @@ export function registerUnityTools(server: McpServer) {
       }
     },
     async ({ action, timeoutMs }) => {
-      const result = await executeUnityCommand("play_mode", { action }, { timeoutMs });
+      const result = await runUnityTool("unity_play_mode", "play_mode", { action }, timeoutMs);
       return toolResult(result);
     }
   );
@@ -176,7 +185,7 @@ export function registerUnityTools(server: McpServer) {
       }
     },
     async ({ menuPath, timeoutMs }) => {
-      const result = await executeUnityCommand("execute_menu_item", { menuPath }, { timeoutMs });
+      const result = await runUnityTool("unity_execute_menu_item", "execute_menu_item", { menuPath }, timeoutMs);
       return toolResult(result);
     }
   );

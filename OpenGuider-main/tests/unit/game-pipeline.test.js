@@ -42,7 +42,7 @@ test("startGamePipeline resumes active pipeline", () => {
   assert.equal(second.pipeline.templateId, "unity-co-op-climb-v1");
   const phase = getCurrentPhaseGoal(tmp);
   assert.equal(phase.phase, 1);
-  assert.match(phase.goal, /Scaffold/i);
+  assert.match(phase.goal, /playable|Verify/i);
 });
 
 test("advanceGamePipeline moves to next phase after task complete artifact", () => {

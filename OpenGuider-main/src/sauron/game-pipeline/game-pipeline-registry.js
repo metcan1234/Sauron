@@ -39,7 +39,7 @@ const GAME_PIPELINE_REGISTRY = {
     phases: [
       {
         phase: 1,
-        goal: "Scaffold co-op-climb template + URP scene",
+        goal: "Verify playable base scene from scaffold + enter play mode via unity_play_mode MCP",
         complexityHint: "low",
         verification: { artifact: "cline-task-complete.json" },
       },
@@ -80,7 +80,7 @@ const GAME_PIPELINE_REGISTRY = {
     phases: [
       {
         phase: 1,
-        goal: "Scaffold horror-coop template + first-person setup",
+        goal: "Verify playable horror base scene from scaffold + first-person setup",
         complexityHint: "low",
       },
       {
@@ -115,7 +115,7 @@ const GAME_PIPELINE_REGISTRY = {
     phases: [
       {
         phase: 1,
-        goal: "Scaffold social-deduction template + lobby UI stub",
+        goal: "Verify playable social-deduction base scene + lobby UI stub from scaffold",
         complexityHint: "low",
       },
       {

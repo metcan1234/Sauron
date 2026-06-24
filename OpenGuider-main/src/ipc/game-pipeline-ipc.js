@@ -1,7 +1,7 @@
 const {
   listGamePipelines,
   startGamePipeline,
-  advanceGamePipeline,
+  advanceGamePipelineAfterComplete,
   getGamePipelineStatus,
   getGamePipeline,
 } = require("../sauron/game-pipeline");
@@ -82,7 +82,9 @@ function registerGamePipelineIpc({
     try {
       const settings = await getRuntimeSettings();
       const resolved = resolveWorkspacePath(workspacePath);
-      const result = advanceGamePipeline(resolved, settings);
+      const result = await advanceGamePipelineAfterComplete(resolved, settings, {
+        launchVSCode: true,
+      });
       const status = getGamePipelineStatus(resolved);
       broadcastPipelineEvent(status);
       return result;

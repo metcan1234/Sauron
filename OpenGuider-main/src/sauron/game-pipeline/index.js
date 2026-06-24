@@ -3,6 +3,7 @@ const { planGamePipeline } = require("./game-pipeline-planner");
 const {
   startGamePipeline,
   advanceGamePipeline,
+  advanceGamePipelineAfterComplete,
   getCurrentPhaseGoal,
   getGamePipelineStatus,
 } = require("./game-pipeline-runner");
@@ -14,6 +15,7 @@ module.exports = {
   planGamePipeline,
   startGamePipeline,
   advanceGamePipeline,
+  advanceGamePipelineAfterComplete,
   getCurrentPhaseGoal,
   getGamePipelineStatus,
 };

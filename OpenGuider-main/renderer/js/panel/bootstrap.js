@@ -160,6 +160,36 @@ export function createPanelController({
   let gamedevUiEngaged = false;
   let lastGamedevOpenAt = 0;
 
+  async function refreshGamePipeline() {
+    try {
+      const status = await api.invoke("get-game-pipeline-status");
+      if (status?.pipeline?.status === "active" || status?.pipeline?.status === "completed") {
+        const phase = status.phase;
+        if (dom.gamedevPipelineBar) {
+          const label = status.pipeline?.status === "completed"
+            ? "Pipeline tamamlandı"
+            : (status.pendingComplete ? "Doğrulanıyor…" : `Faz ${phase?.phase || "?"}/${phase?.totalPhases || "?"}`);
+          dom.gamedevPipelineBar.textContent = phase
+            ? `${label}: ${String(phase.goal || "").slice(0, 48)}`
+            : label;
+        }
+      }
+      if (status?.pendingComplete && status?.pipeline?.status === "active") {
+        const advanced = await api.invoke("advance-game-pipeline");
+        if (advanced?.ok && advanced.action === "next-phase") {
+          ui.showToast(`Game Dev faz ${advanced.pipeline?.currentPhase}/${advanced.pipeline?.totalPhases} handoff yazıldı`);
+        } else if (advanced?.ok && advanced.action === "completed") {
+          ui.showToast("Game Dev pipeline tamamlandı");
+        } else if (advanced?.ok && advanced.action === "fix-handoff") {
+          ui.showToast("Doğrulama hatası — düzeltme handoff yazıldı", true);
+        }
+        await refreshGamePipeline();
+      }
+    } catch (error) {
+      log("game pipeline refresh error", error);
+    }
+  }
+
   async function refreshBuildPipeline() {
     try {
       const status = await api.invoke("get-build-pipeline-status");
@@ -172,6 +202,7 @@ export function createPanelController({
           ui.showToast("Üretim hattı tamamlandı");
         }
         await refreshBuildPipeline();
+      await refreshGamePipeline();
       }
     } catch (error) {
       log("build pipeline refresh error", error);
@@ -185,6 +216,7 @@ export function createPanelController({
         ui.renderHandoffHistory(result.items || []);
       }
       await refreshBuildPipeline();
+      await refreshGamePipeline();
     } catch (error) {
       log("handoff history refresh error", error);
     }
@@ -696,12 +728,71 @@ export function createPanelController({
 
   let gamedevSessionInFlight = false;
 
+  let gamedevSetupStep = 1;
+
+  function setGamedevSetupStep(step) {
+    gamedevSetupStep = Math.max(1, Math.min(3, step));
+    for (let i = 1; i <= 3; i += 1) {
+      doc.getElementById(`gamedev-setup-step-${i}`)?.classList.toggle("hidden", i !== gamedevSetupStep);
+    }
+    const progress = doc.getElementById("gamedev-setup-progress");
+    if (progress) {
+      progress.textContent = `Adım ${gamedevSetupStep} / 3`;
+    }
+    doc.getElementById("gamedev-setup-prev")?.classList.toggle("hidden", gamedevSetupStep === 1);
+    doc.getElementById("gamedev-setup-next")?.classList.toggle("hidden", gamedevSetupStep === 3);
+    doc.getElementById("gamedev-setup-done")?.classList.toggle("hidden", gamedevSetupStep !== 3);
+  }
+
+  async function refreshGamedevSetupProbe(step) {
+    const settings = await api.invoke("get-settings");
+    if (step === 1) {
+      const ws = String(settings?.workspacePath || "").trim();
+      const layout = ws ? await api.invoke("detect-workspace-layout", { workspacePath: ws }) : null;
+      const el = doc.getElementById("gamedev-setup-workspace-status");
+      if (el) {
+        if (!ws) {
+          el.textContent = "Workspace ayarlanmamış — Ayarlar → Çalışma Kısmı";
+        } else if (layout?.layout === "electron-core" || layout?.isOpenGuider) {
+          el.textContent = "Uyarı: Sauron kaynak kodu seçili — Unity proje klasörü gerekli";
+        } else {
+          el.textContent = `Workspace: ${ws}`;
+        }
+      }
+    }
+    if (step === 2) {
+      const status = await api.invoke("get-gamedev-status").catch(() => null);
+      const el = doc.getElementById("gamedev-setup-bridge-status");
+      if (el) {
+        const connected = status?.connector?.connected === true;
+        el.textContent = connected
+          ? `${status.engineLabel || "Unity"} bridge bağlı`
+          : "Bridge bekleniyor — Unity Editor + MCP başlatın";
+      }
+    }
+    if (step === 3) {
+      const doctor = await api.invoke("run-doctor", { live: true }).catch(() => null);
+      const checks = doctor?.checks || [];
+      const autoChain = checks.find((c) => c.id === "gamedev-pipeline-autochain");
+      const mcp = checks.find((c) => c.id === "gamedev-mcp-entry");
+      const el = doc.getElementById("gamedev-setup-doctor-status");
+      if (el) {
+        el.textContent = [
+          mcp?.message || "MCP kontrol ediliyor…",
+          autoChain?.message || "",
+        ].filter(Boolean).join(" · ");
+      }
+    }
+  }
+
   function showGamedevSetupWizard(settings = {}) {
     const templateEl = doc.getElementById("gamedev-setup-template");
     if (templateEl && settings.gamedevDefaultTemplate) {
       templateEl.value = settings.gamedevDefaultTemplate;
     }
+    setGamedevSetupStep(1);
     dom.gamedevSetupOverlay?.classList.remove("hidden");
+    void refreshGamedevSetupProbe(1);
   }
 
   async function completeGamedevSetup() {
@@ -1287,6 +1378,7 @@ export function createPanelController({
         const result = await api.invoke("advance-build-pipeline");
         if (result?.ok) {
           await refreshBuildPipeline();
+      await refreshGamePipeline();
           await refreshHandoffHistory();
         } else {
           ui.showToast(result?.error || "Faz ilerletilemedi", true);
@@ -1334,6 +1426,16 @@ export function createPanelController({
 
     dom.btnGamedevCancel?.addEventListener("click", () => {
       void cancelGamedevMode();
+    });
+
+    doc.getElementById("gamedev-setup-prev")?.addEventListener("click", () => {
+      setGamedevSetupStep(gamedevSetupStep - 1);
+      void refreshGamedevSetupProbe(gamedevSetupStep);
+    });
+
+    doc.getElementById("gamedev-setup-next")?.addEventListener("click", () => {
+      setGamedevSetupStep(gamedevSetupStep + 1);
+      void refreshGamedevSetupProbe(gamedevSetupStep);
     });
 
     doc.getElementById("gamedev-setup-done")?.addEventListener("click", () => {

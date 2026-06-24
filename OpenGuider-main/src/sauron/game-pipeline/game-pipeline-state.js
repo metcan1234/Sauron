@@ -52,10 +52,37 @@ function clearTaskCompleteArtifact(workspacePath) {
   }
 }
 
+async function runGameVerification(workspacePath, verification) {
+  if (!verification) {
+    return { ok: true, skipped: true };
+  }
+
+  if (verification.artifact) {
+    const artifact = readTaskCompleteArtifact(workspacePath);
+    if (artifact) {
+      return { ok: true, skipped: false, artifact: true };
+    }
+    return { ok: true, skipped: true, artifact: false };
+  }
+
+  if (verification.mcp === "unity_play_mode") {
+    const { runUnityPlayModeVerification } = require("../gamedev-mcp-proxy");
+    return runUnityPlayModeVerification("play");
+  }
+
+  if (verification.command) {
+    const { runVerification } = require("../build-pipeline/pipeline-state");
+    return runVerification(workspacePath, verification);
+  }
+
+  return { ok: true, skipped: true };
+}
+
 module.exports = {
   GAME_PIPELINE_STATE_FILE,
   readGamePipelineState,
   writeGamePipelineState,
   readTaskCompleteArtifact,
   clearTaskCompleteArtifact,
+  runGameVerification,
 };

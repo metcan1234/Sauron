@@ -94,6 +94,61 @@ async function appendGamedevLiveChecks(checks, settings = {}) {
   if (settings.gamedevEnabled === false) {
     return;
   }
+
+  const workspacePath = String(settings.workspacePath || "").trim();
+  if (workspacePath) {
+    try {
+      const { readGamePipelineState } = require("./game-pipeline/game-pipeline-state");
+      const pipeline = readGamePipelineState(workspacePath);
+      if (pipeline?.status === "active") {
+        checks.push({
+          id: "gamedev-pipeline-active",
+          status: "pass",
+          message: `Game pipeline aktif: faz ${pipeline.currentPhase}/${pipeline.totalPhases}`,
+          fixHint: "",
+          tier: "optional",
+        });
+      }
+      if (settings.gamedevPipelineAutoChain === false) {
+        checks.push({
+          id: "gamedev-pipeline-autochain",
+          status: "warn",
+          message: "Game pipeline auto-chain kapalı",
+          fixHint: "Ayarlar → Game Dev → Pipeline auto-chain'i etkinleştirin.",
+          tier: "optional",
+        });
+      } else {
+        checks.push({
+          id: "gamedev-pipeline-autochain",
+          status: "pass",
+          message: "Game pipeline auto-chain etkin",
+          fixHint: "",
+          tier: "optional",
+        });
+      }
+    } catch {
+      // optional
+    }
+  }
+
+  if (settings.gamedevActiveEngine === "unity" || !settings.gamedevActiveEngine) {
+    try {
+      const { probeUnityBridge } = require("./gamedev-mcp-proxy");
+      const probe = await probeUnityBridge();
+      checks.push({
+        id: "gamedev-unity-bridge-port",
+        status: probe.connected ? "pass" : "warn",
+        message: probe.connected
+          ? "Unity bridge TCP 7890 bağlı"
+          : "Unity bridge TCP 7890 bekleniyor",
+        fixHint: probe.connected ? "" : `Unity → Package Manager → Git URL: ${UNITY_BRIDGE_PACKAGE_URL}`,
+        tier: "optional",
+      });
+    } catch {
+      // optional
+    }
+  }
+
   try {
     const status = await getGamedevStatus(settings);
     const connected = status?.connector?.connected === true;

@@ -5,6 +5,8 @@ import { registerRobloxScriptTools } from "../tools/roblox-script.js";
 import { registerRobloxInstanceTools } from "../tools/roblox-instance.js";
 import { registerRobloxQueryTools } from "../tools/roblox-query.js";
 import { registerUnityTools } from "../tools/unity.js";
+import { registerUnityScriptTools } from "../tools/unity-script.js";
+import { registerUnitySceneTools } from "../tools/unity-scene.js";
 import { registerUnrealTools } from "../tools/unreal.js";
 import { registerBlenderTools } from "../tools/blender.js";
 import { registerRobloxPhysicsTools } from "../tools/roblox-physics.js";
@@ -26,6 +28,8 @@ export function createServer() {
   registerRobloxQueryTools(server);
   registerRobloxPhysicsTools(server);
   registerUnityTools(server);
+  registerUnityScriptTools(server);
+  registerUnitySceneTools(server);
   registerUnityPhysicsTools(server);
   registerUnrealTools(server);
   registerUnrealPhysicsTools(server);

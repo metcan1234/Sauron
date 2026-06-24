@@ -52,6 +52,7 @@ function buildEngineEnv(engine, workspacePath) {
   const env = {};
 
   if (resolved) {
+    env.SAURON_GAMEDEV_WORKSPACE = resolved;
     if (normalized === "unity") {
       env.UNITY_PROJECT_PATH = resolved;
       env.UNITY_BRIDGE_PORT = String(GAMEDEV_ENGINE_PORTS.unity);

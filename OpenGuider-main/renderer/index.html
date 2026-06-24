@@ -148,9 +148,9 @@
         <select id="gamedev-template-select" class="gamedev-template-select" title="Oyun şablonu">
           <option value="auto">Otomatik (görevden)</option>
           <option value="empty">Boş Unity</option>
-          <option value="co-op-climb">Co-op Climb</option>
-          <option value="horror-coop">Horror Co-op</option>
-          <option value="social-deduction">Social Deduction</option>
+          <option value="co-op-climb">Co-op Climb (PEAK tarzı)</option>
+          <option value="horror-coop">Horror Co-op (Zort tarzı)</option>
+          <option value="social-deduction">Social Deduction (Feign tarzı)</option>
         </select>
         <span class="gamedev-pipeline-bar" id="gamedev-pipeline-bar" title="Aktif pipeline fazı"></span>
         <a class="gamedev-dashboard-link" id="gamedev-dashboard-link" href="#" title="gamedev dashboard">Dashboard</a>
@@ -340,22 +340,32 @@
 <div class="gamedev-setup-overlay hidden" id="gamedev-setup-overlay" role="dialog" aria-modal="true">
   <div class="onboarding-modal gamedev-setup-modal">
     <h3>Game Dev kurulum</h3>
-    <ol class="onboarding-steps">
-      <li>Ayarlar → <strong>Çalışma Kısmı yolu</strong> = Unity proje klasörünüz (Assets/ içeren).</li>
-      <li>Unity Package Manager → Git URL: CoplayDev unity-mcp bridge.</li>
-      <li>Şablon seçin ve Cline'da <strong>gamedev-all-in-one</strong> MCP'yi başlatın.</li>
-    </ol>
-    <label class="ws-label">Şablon
-      <select class="form-input" id="gamedev-setup-template">
-        <option value="auto">Otomatik</option>
-        <option value="co-op-climb">Co-op Climb</option>
-        <option value="horror-coop">Horror Co-op</option>
-        <option value="social-deduction">Social Deduction</option>
-        <option value="empty">Boş Unity</option>
-      </select>
-    </label>
+    <p class="gamedev-setup-progress" id="gamedev-setup-progress">Adım 1 / 3</p>
+    <div class="gamedev-setup-step" id="gamedev-setup-step-1">
+      <p>Unity proje klasörünüzü <strong>Çalışma Kısmı</strong> olarak ayarlayın (içinde <code>Assets/</code> ve <code>Packages/manifest.json</code> olmalı).</p>
+      <p id="gamedev-setup-workspace-status" class="gamedev-setup-status"></p>
+    </div>
+    <div class="gamedev-setup-step hidden" id="gamedev-setup-step-2">
+      <p>Unity Package Manager → Git URL: <strong>CoplayDev unity-mcp</strong> bridge kurun.</p>
+      <p>Cline'da <strong>gamedev-all-in-one</strong> MCP sunucusunu başlatın (TCP 7890).</p>
+      <p id="gamedev-setup-bridge-status" class="gamedev-setup-status"></p>
+    </div>
+    <div class="gamedev-setup-step hidden" id="gamedev-setup-step-3">
+      <label class="ws-label">Şablon
+        <select class="form-input" id="gamedev-setup-template">
+          <option value="auto">Otomatik</option>
+          <option value="co-op-climb">Co-op Climb (PEAK)</option>
+          <option value="horror-coop">Horror Co-op (Zort)</option>
+          <option value="social-deduction">Social Deduction (Feign)</option>
+          <option value="empty">Boş Unity</option>
+        </select>
+      </label>
+      <p id="gamedev-setup-doctor-status" class="gamedev-setup-status"></p>
+    </div>
     <div class="onboarding-actions">
-      <button class="confirm-btn primary" id="gamedev-setup-done" type="button">Tamam, başlayalım</button>
+      <button class="confirm-btn ghost" id="gamedev-setup-prev" type="button">Geri</button>
+      <button class="confirm-btn" id="gamedev-setup-next" type="button">İleri</button>
+      <button class="confirm-btn primary hidden" id="gamedev-setup-done" type="button">Tamam, başlayalım</button>
     </div>
   </div>
 </div>

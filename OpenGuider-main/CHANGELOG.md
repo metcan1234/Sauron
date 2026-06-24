@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.1.0 — 2026-06-24
+
+### Added — Game Dev Production System
+- **Auto-chain**: `advanceGamePipelineAfterComplete` + `refreshGamePipeline` UI poll (build-pipeline parity)
+- **Phase handoffs**: `gamedev-phase-handoff.js` — economy fields preserved per phase
+- **Playable Unity scaffold**: scenes, shared Editor bootstrap, bundled asset stubs per genre
+- **MCP +7 tools**: `unity_set/edit/grep_scripts`, `unity_save/load_scene`, `unity_save_as/instantiate_prefab`
+- **Wire recipes**: `.sauron/unity-wire-recipes/` + handoff pointer (0-token)
+- **FinOps honesty**: real `mcp-tool` ledger on MCP dispatch; removed launch-time fake playtest log
+- **Scene cache v2**: optional hierarchy snapshot (`rootCount`, bounded `lastPaths`)
+- **3-step setup wizard**: workspace probe, bridge check, doctor + template (PEAK/Zort/Feign labels)
+- **CLI**: `scripts/scaffold-unity-template.js`
+- **Doctor**: gamedev pipeline auto-chain + Unity bridge TCP 7890 live probe
+
+### Preserved
+- `mcpTools: "full"`, bounded handoff, `includeTranscript: false`, build/goose channels unchanged
+
 ## 2.0.0 — 2026-06-24
 
 ### Added — Game Dev Studio (FAZ 3–6)
