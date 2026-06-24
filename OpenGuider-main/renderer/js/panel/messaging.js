@@ -214,6 +214,37 @@ export function createMessagingController({
     }
   }
 
+  function flushMicroGuideConversationUi(sessionSnapshot) {
+    const session = sessionSnapshot || state.getSessionSnapshot();
+    if (!session) {
+      return;
+    }
+    state.setSessionSnapshot(session);
+    const messages = state.getConversationHistory();
+    ui.renderConversation(messages);
+    ui.scrollToBottom();
+    ui.renderAgentState(session.status === "executing" ? "idle" : (session.status || "idle"));
+    ui.renderPanelModeState({
+      assistantMode: state.getSetting("assistantMode") || "assistant",
+      sessionSnapshot: session,
+    });
+    if (dom.microGuideActions) {
+      const micro = session?.microGuideSession;
+      const active = Boolean(micro?.active);
+      const waiting = micro?.status === "waiting_user" || micro?.status === "limit_reached";
+      dom.microGuideActions.classList.toggle("hidden", !(active && waiting));
+      if (dom.btnMicroGuideDone) {
+        dom.btnMicroGuideDone.disabled = !active || micro?.status === "limit_reached";
+      }
+      if (dom.btnMicroGuideContinue) {
+        dom.btnMicroGuideContinue.classList.toggle("hidden", micro?.status !== "limit_reached");
+      }
+      if (dom.btnMicroGuideCancel) {
+        dom.btnMicroGuideCancel.disabled = !active;
+      }
+    }
+  }
+
   async function runMicroGuideIpc(channel, payload, goalText) {
     state.setStreaming(true);
     dom.sendBtn.classList.add("hidden");
@@ -232,13 +263,14 @@ export function createMessagingController({
     }, 120000);
 
     let typingId = null;
+    let ipcResult = null;
     try {
       if (goalText) {
         ui.appendUserMessage(goalText);
         state.addConversationMessage({ role: "user", content: goalText });
       }
       typingId = ui.showTypingIndicator();
-      await api.invoke(channel, payload);
+      ipcResult = await api.invoke(channel, payload);
     } catch (error) {
       onAIError(error.message);
     } finally {
@@ -253,7 +285,7 @@ export function createMessagingController({
       dom.sendBtn.classList.remove("hidden");
       if (stopBtn) stopBtn.classList.add("hidden");
       dom.sendBtn.disabled = false;
-      ui.renderAgentState("idle");
+      flushMicroGuideConversationUi(ipcResult?.session);
     }
   }
 

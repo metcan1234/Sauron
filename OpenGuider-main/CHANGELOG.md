@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.10 — 2026-06-24
+
+### Fixed — Ekran rehberliği sohbet güncellemesi
+- **Başlat** sonrası yapay zeka cevabı artık uygulamayı yeniden açmadan sohbette görünür
+- Mikro rehber IPC tamamlanınca oturum anlık görüntüsü sohbet arayüzüne yazılır (streaming sırasında atlanan `session-updated` senkronu)
+
 ## 2.2.9 — 2026-06-24
 
 ### Fixed — Mikro rehber + ses (PTT)
