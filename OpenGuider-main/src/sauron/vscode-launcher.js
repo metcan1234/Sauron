@@ -899,7 +899,7 @@ async function performOpenWorkspaceInVSCode(workspacePath, options = {}) {
   const effectiveNewWindow = await resolveEffectiveNewWindow(requestedNewWindow);
   const debounceKey = getDebounceKey(workspacePath);
 
-  if (!options.force && shouldSkipDuplicateLaunch(debounceKey)) {
+  if (!options.force && !options.bypassDebounce && shouldSkipDuplicateLaunch(debounceKey)) {
     const focused = await focusExistingVSCodeWindow(workspacePath, options);
     if (focused) {
       return {
@@ -908,6 +908,13 @@ async function performOpenWorkspaceInVSCode(workspacePath, options = {}) {
         reason: "debounced",
         newWindow: effectiveNewWindow,
       };
+    }
+    if (vsCodeLaunchLogger) {
+      vsCodeLaunchLogger({
+        event: "vscode-launch-debounced",
+        workspacePath,
+        debounceMs: LAUNCH_DEBOUNCE_MS,
+      });
     }
     return {
       skipped: true,

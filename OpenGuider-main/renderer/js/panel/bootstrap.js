@@ -155,6 +155,10 @@ export function createPanelController({
   const HANDOFF_POLL_TIMEOUT_MS = 90000;
   const HANDOFF_HISTORY_REFRESH_MS = 30000;
   let handoffHistoryRefreshTimer = null;
+  let panelEventsBound = false;
+  let panelIpcListenersBound = false;
+  let gamedevUiEngaged = false;
+  let lastGamedevOpenAt = 0;
 
   async function refreshBuildPipeline() {
     try {
@@ -571,14 +575,45 @@ export function createPanelController({
   }
 
   function resolveGamedevTaskText() {
-    const plan = String(dom.planGoal?.value || "").trim();
-    if (plan) {
-      return plan;
+    const planPanel = dom.planPanel;
+    const planVisible = planPanel && !planPanel.classList.contains("hidden");
+    if (planVisible && dom.planGoal) {
+      const planText = String(dom.planGoal.textContent || "").trim();
+      if (planText && planText !== "Active plan") {
+        return planText;
+      }
     }
     return String(dom.textInput?.value || "").trim();
   }
 
+  function logGamedevUi(active, payload = {}, source = "unknown") {
+    log("gamedev-ui", {
+      active,
+      modeActive: payload?.modeActive,
+      source,
+      engaged: gamedevUiEngaged,
+    });
+  }
+
+  function applyGamedevUiFromResult(result, source = "invoke") {
+    if (!result?.ok) {
+      return false;
+    }
+    gamedevUiEngaged = true;
+    logGamedevUi(true, { ...result, modeActive: true }, source);
+    setGamedevUiActive(true, { ...result, modeActive: true });
+    return true;
+  }
+
   function setGamedevUiActive(active, payload = {}) {
+    if (active) {
+      gamedevUiEngaged = true;
+    } else if (payload?.forceDeactivate === true || payload?.modeActive === false) {
+      gamedevUiEngaged = false;
+    } else if (gamedevUiEngaged) {
+      return;
+    }
+
     dom.gamedevBadge?.classList.toggle("hidden", !active);
     dom.btnGamedevCancel?.classList.toggle("hidden", !active);
     dom.btnGamedev?.classList.toggle("gamedev-active", active);
@@ -600,16 +635,62 @@ export function createPanelController({
   async function syncGamedevUiFromStatus() {
     try {
       const status = await api.invoke("get-gamedev-status");
-      setGamedevUiActive(status?.modeActive === true, status || {});
+      const active = status?.modeActive === true;
+      if (active) {
+        gamedevUiEngaged = true;
+      }
+      setGamedevUiActive(active, {
+        ...status,
+        forceDeactivate: !active,
+        modeActive: active,
+      });
     } catch {
-      setGamedevUiActive(false);
+      if (!gamedevUiEngaged) {
+        setGamedevUiActive(false, { forceDeactivate: true, modeActive: false });
+      }
     }
   }
 
+  function showGamedevLaunchFeedback(result, settings = {}) {
+    const launchResult = result?.launchResult || result?.vscode?.launchResult;
+    const verified = launchResult?.verified === true;
+    const skipped = launchResult?.skipped === true;
+
+    if (!verified && launchResult && !skipped && launchResult.verificationReason !== "spawn_ok") {
+      ui.showToast(
+        launchResult.verificationReason === "process_only"
+          ? "VS Code arka planda — Görev Yöneticisi'nden Code penceresine geçin"
+          : "VS Code başlatılamadı — ⌘ Çalışma Kısmı ile tekrar deneyin",
+        true,
+      );
+    }
+
+    ui.showWorkspaceStatus({
+      title: verified || skipped ? "Game Dev · VS Code açıldı" : "Game Dev · VS Code bekleniyor",
+      message: result?.handoffFileName
+        ? "Cline handoff hazır — Bridge görevi yükleyecek."
+        : "MCP config yazıldı. Cline'da gamedev-all-in-one MCP'yi başlatın.",
+      tone: verified || skipped ? "default" : "warning",
+      onFocus: () => focusWorkspaceVSCode(),
+    });
+
+    if (result?.dashboardUrl) {
+      ui.showToast(`Dashboard: ${result.dashboardUrl}`, false);
+    }
+  }
+
+  let gamedevSessionInFlight = false;
+
   async function openGamedevSession() {
-    if (!dom.btnGamedev || dom.btnGamedev.disabled) {
+    if (!dom.btnGamedev || dom.btnGamedev.disabled || gamedevSessionInFlight) {
       return;
     }
+
+    const now = Date.now();
+    if (now - lastGamedevOpenAt < 800) {
+      return;
+    }
+    lastGamedevOpenAt = now;
 
     const settings = await api.invoke("get-settings");
     if (settings?.gamedevEnabled === false) {
@@ -624,6 +705,7 @@ export function createPanelController({
 
     const taskText = resolveGamedevTaskText();
     dom.btnGamedev.disabled = true;
+    gamedevSessionInFlight = true;
 
     try {
       const probe = await api.invoke("probe-gamedev-mcp");
@@ -643,39 +725,43 @@ export function createPanelController({
           ui.showToast(result?.error || "Game Dev oturumu başlatılamadı", true);
           return;
         }
-        setGamedevUiActive(true, result);
+        applyGamedevUiFromResult(result, "start-gamedev-session");
         if (result.truncated) {
           ui.showToast("Görev özeti token tasarrufu için kısaltıldı", false);
         }
         ui.showToast(`Game Dev · ${result.engineLabel || "Unity"} — Cline handoff hazır`, false);
+        showGamedevLaunchFeedback(result, settings);
         if (result.handoffFileName) {
           await pollHandoffUntilSettled(result.workspacePath || settings.workspacePath, result.handoffFileName);
         }
         return;
       }
 
-      const toggle = await api.invoke("toggle-gamedev-mode");
-      if (!toggle?.ok) {
-        ui.showToast(toggle?.error || "Game Dev modu değiştirilemedi", true);
+      const activate = await api.invoke("activate-gamedev-mode");
+      if (!activate?.ok) {
+        ui.showToast(activate?.error || "Game Dev modu açılamadı", true);
         return;
       }
-      setGamedevUiActive(toggle.modeActive === true, toggle);
+      applyGamedevUiFromResult(activate, "activate-gamedev-mode");
+      showGamedevLaunchFeedback(activate, settings);
       ui.showToast(
-        toggle.modeActive
-          ? `Game Dev modu açık · ${toggle.engineLabel || "Unity"} (görev yazıp 🎮 ile handoff)`
-          : "Game Dev modu kapalı",
+        activate.alreadyActive
+          ? `Game Dev zaten açık · ${activate.engineLabel || "Unity"} — VS Code odaklandı`
+          : `Game Dev açıldı · ${activate.engineLabel || "Unity"} (görev yazıp 🎮 ile handoff)`,
         false,
       );
     } catch (error) {
+      log("openGamedevSession error", error);
       ui.showToast(error?.message || "Game Dev başlatılamadı", true);
     } finally {
       dom.btnGamedev.disabled = false;
+      gamedevSessionInFlight = false;
     }
   }
 
   async function cancelGamedevMode() {
     const result = await api.invoke("deactivate-gamedev-mode");
-    setGamedevUiActive(false);
+    setGamedevUiActive(false, { forceDeactivate: true, modeActive: false });
     if (result?.ok) {
       ui.showToast("Game Dev modu kapatıldı");
     } else if (result?.error) {
@@ -1025,6 +1111,11 @@ export function createPanelController({
   }
 
   function bindEvents() {
+    if (panelEventsBound) {
+      return;
+    }
+    panelEventsBound = true;
+
     const requiredControls = [
       ["textInput", dom.textInput],
       ["sendBtn", dom.sendBtn],
@@ -1327,6 +1418,11 @@ export function createPanelController({
   }
 
   function setupIPCListeners() {
+    if (panelIpcListenersBound) {
+      return;
+    }
+    panelIpcListenersBound = true;
+
     api.on("panel-opened", () => {
       dom.textInput?.focus();
     });
@@ -1417,12 +1513,12 @@ export function createPanelController({
       setGooseUiActive(false);
     });
 
-    api.on("gamedev-session-started", (payload) => {
-      setGamedevUiActive(true, payload || {});
-    });
-
     api.on("gamedev-mode-changed", (payload) => {
-      setGamedevUiActive(payload?.modeActive === true, payload || {});
+      if (payload?.modeActive !== false) {
+        return;
+      }
+      logGamedevUi(false, payload, "ipc:gamedev-mode-changed");
+      setGamedevUiActive(false, { ...payload, forceDeactivate: true, modeActive: false });
     });
 
     api.on("browser-agent-status-changed", (status) => {

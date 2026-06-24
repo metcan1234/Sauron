@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.9.1 — 2026-06-24
+
+### Fixed — Game Dev stabilite
+- Game Dev badge IPC yarışı: tek UI kaynağı (`applyGamedevUiFromResult`), deactivate dışında broadcast kaldırıldı
+- VS Code güvenilir açılış: `force` / focus-then-launch (⌘ Çalışma Kısmı ile aynı pattern)
+- `gamedevModeActive` electron-store'da kalıcı; ikinci 🎮 tıklaması modu kapatmaz
+- `resolveGamedevTaskText` yalnızca plan paneli görünürken plan metnini kullanır
+
+### Added
+- `predist:win` öncesi `gamedev-all-in-one` otomatik build + dist varlık kontrolü
+- Doctor: electron-core workspace için Unity proje yolu uyarısı
+
 ## 1.9.0 — 2026-06-24
 
 ### Added — Game Dev OS (FAZ 0–2)

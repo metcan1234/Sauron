@@ -55,4 +55,5 @@ test("store schema includes gamedev defaults", () => {
   assert.equal(schema.gamedevEnabled.default, true);
   assert.equal(schema.gamedevActiveEngine.default, "unity");
   assert.equal(schema.gamedevMcpEntryPath.default, "");
+  assert.equal(schema.gamedevModeActive.default, false);
 });

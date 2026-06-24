@@ -111,24 +111,39 @@ html, body {
 }
 
 .header-title {
+  display: none;
+}
+
+.header-center {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  pointer-events: none;
+  -webkit-app-region: drag;
+  overflow: hidden;
+}
+
+.header-center-title {
   font-weight: 600;
-  font-size: 17px;
-  letter-spacing: 2px;
+  font-size: 15px;
+  letter-spacing: 0.32em;
+  text-indent: 0.32em;
   text-transform: uppercase;
   line-height: 1;
-  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.78);
+  text-shadow: 0 0 14px rgba(198, 90, 58, 0.28);
   white-space: nowrap;
-  color: var(--accent);
-  text-shadow: 0 0 10px rgba(198, 90, 58, 0.35);
+  user-select: none;
   -webkit-font-smoothing: antialiased;
-  display: none;
 }
 
 .header-meta {
   display: flex;
   align-items: center;
   gap: 5px;
-  margin-left: auto;
   min-width: 0;
   flex-shrink: 1;
   -webkit-app-region: no-drag;
@@ -183,6 +198,16 @@ html, body {
 .agent-status[data-state="waiting_user"] {
   color: var(--success);
   border-color: rgba(16, 185, 129, 0.4);
+}
+
+.header-trail {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
+  min-width: 0;
+  -webkit-app-region: no-drag;
 }
 
 .header-actions {

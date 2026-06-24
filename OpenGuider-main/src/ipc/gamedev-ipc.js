@@ -1,9 +1,11 @@
 const {
+  activateGamedevMode,
   toggleGamedevMode,
   launchGamedevSession,
   getGamedevSessionInfo,
   deactivateGamedevMode,
 } = require("../sauron/gamedev-launcher");
+const { attachGamedevSessionStore } = require("../sauron/gamedev-session-state");
 const { getGamedevStatus } = require("../sauron/gamedev-status");
 const { probeGamedevMcpEntry } = require("../sauron/gamedev-path-resolver");
 const { summarizeGamedevLedger } = require("../sauron/gamedev-finops-ledger");
@@ -16,6 +18,8 @@ function registerGamedevIpc({
   panelWindow,
   store,
 }) {
+  attachGamedevSessionStore(store);
+
   function resolveWorkspacePath(workspacePath) {
     const fromArg = String(workspacePath || "").trim();
     if (fromArg) {
@@ -25,29 +29,26 @@ function registerGamedevIpc({
   }
 
   function broadcastGamedevEvent(event, payload) {
+    appLogger?.info?.("gamedev-broadcast", { event, payload });
     if (panelWindow && !panelWindow.isDestroyed()) {
       panelWindow.webContents.send(event, payload);
     }
   }
 
-  ipcMain.handle("toggle-gamedev-mode", async () => {
-    debugLog("ipc:toggle-gamedev-mode");
+  async function handleActivateGamedevMode() {
+    debugLog("ipc:activate-gamedev-mode");
     try {
       const settings = await getRuntimeSettings();
-      const result = await toggleGamedevMode(settings);
-      if (result.ok) {
-        broadcastGamedevEvent("gamedev-mode-changed", {
-          modeActive: result.modeActive,
-          engine: result.engine || settings.gamedevActiveEngine,
-          status: result.status || null,
-        });
-      }
+      const result = await activateGamedevMode(settings);
       return result;
     } catch (error) {
-      appLogger?.error?.("toggle-gamedev-mode-failed", { error: error?.message || error });
-      return { ok: false, error: error?.message || "Game Dev modu değiştirilemedi." };
+      appLogger?.error?.("activate-gamedev-mode-failed", { error: error?.message || error });
+      return { ok: false, error: error?.message || "Game Dev modu açılamadı." };
     }
-  });
+  }
+
+  ipcMain.handle("activate-gamedev-mode", handleActivateGamedevMode);
+  ipcMain.handle("toggle-gamedev-mode", handleActivateGamedevMode);
 
   ipcMain.handle("start-gamedev-session", async (_event, { taskText, workspacePath, engine } = {}) => {
     debugLog("ipc:start-gamedev-session");
@@ -59,17 +60,6 @@ function registerGamedevIpc({
         settings,
         engineOverride: engine || null,
       });
-
-      if (result.ok) {
-        broadcastGamedevEvent("gamedev-session-started", {
-          sessionId: result.handoffId,
-          engine: result.engine,
-          engineLabel: result.engineLabel,
-          handoffFileName: result.handoffFileName,
-          tokenPolicy: result.tokenPolicy,
-          status: result.status,
-        });
-      }
       return result;
     } catch (error) {
       appLogger?.error?.("start-gamedev-session-failed", { error: error?.message || error });
@@ -80,13 +70,14 @@ function registerGamedevIpc({
   ipcMain.handle("get-gamedev-status", async () => {
     const settings = await getRuntimeSettings();
     const probe = probeGamedevMcpEntry(settings);
-    const session = getGamedevSessionInfo();
+    const sessionInfo = getGamedevSessionInfo();
     const status = await getGamedevStatus(settings);
     const workspacePath = resolveWorkspacePath(null);
     const finops = workspacePath ? summarizeGamedevLedger(workspacePath) : null;
     return {
       ...status,
-      ...session,
+      session: sessionInfo.session,
+      modeActive: sessionInfo.modeActive === true,
       mcpEntryOk: probe.ok,
       enabled: settings.gamedevEnabled !== false,
       finops,

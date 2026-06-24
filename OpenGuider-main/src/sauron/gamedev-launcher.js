@@ -36,6 +36,14 @@ const {
 } = require("./gamedev-router");
 const { appendGamedevLedgerEvent } = require("./gamedev-finops-ledger");
 
+const RELIABLE_VSCODE_LAUNCH_OPTIONS = {
+  newWindow: false,
+  force: true,
+  skipRecovery: true,
+  skipVerification: true,
+  bypassDebounce: true,
+};
+
 function resolveWorkspacePath(workspacePath, settings = {}) {
   const fromArg = String(workspacePath || "").trim();
   if (fromArg) {
@@ -44,7 +52,30 @@ function resolveWorkspacePath(workspacePath, settings = {}) {
   return String(settings.workspacePath || "").trim();
 }
 
-async function toggleGamedevMode(settings = {}) {
+async function focusOrLaunchWorkspaceVSCode(workspacePath) {
+  const resolved = String(workspacePath || "").trim();
+  if (!resolved) {
+    return { ok: false, error: "Workspace path is required." };
+  }
+
+  const focused = await focusVSCodeWorkspace(resolved, {
+    allowLaunch: false,
+    verifyTimeoutMs: 4000,
+    skipPostVerifySettle: true,
+  });
+
+  const launchResult = focused?.verified
+    ? focused
+    : await launchVSCode(resolved, RELIABLE_VSCODE_LAUNCH_OPTIONS);
+
+  return {
+    ok: true,
+    launchResult,
+    action: focused?.verified ? "focus_existing" : (launchResult?.skipped ? "launch_skipped" : "launch"),
+  };
+}
+
+async function activateGamedevMode(settings = {}) {
   if (settings.gamedevEnabled === false) {
     return { ok: false, error: "Game Dev modu devre dışı. Ayarlar → Eklentiler." };
   }
@@ -54,33 +85,37 @@ async function toggleGamedevMode(settings = {}) {
     return { ok: false, error: probe.error };
   }
 
-  if (isGamedevModeActive()) {
-    setGamedevModeActive(false);
-    return {
-      ok: true,
-      modeActive: false,
-      toggled: true,
-    };
-  }
-
   const engine = normalizeGamedevEngine(settings.gamedevActiveEngine);
   const workspacePath = resolveWorkspacePath(null, settings);
-  if (workspacePath) {
-    writeGamedevMcpConfig(workspacePath, settings, engine);
-    seedGamedevRules(workspacePath, engine);
+  if (!workspacePath) {
+    return { ok: false, error: "Workspace path ayarlanmamış — Ayarlar → Çalışma Kısmı." };
   }
 
-  setGamedevModeActive(true, { engine, workspacePath });
+  writeGamedevMcpConfig(workspacePath, settings, engine);
+  seedGamedevRules(workspacePath, engine);
+  seedSauronRules(workspacePath);
+
+  const alreadyActive = isGamedevModeActive();
   const status = await getGamedevStatus(settings, engine);
+  const vscode = await focusOrLaunchWorkspaceVSCode(workspacePath);
+
+  setGamedevModeActive(true, { engine, workspacePath });
 
   return {
     ok: true,
     modeActive: true,
-    toggled: true,
+    alreadyActive,
     engine,
     engineLabel: GAMEDEV_ENGINE_LABELS[engine],
+    workspacePath,
     status,
+    vscode,
+    dashboardUrl: `http://127.0.0.1:${status.dashboardPort || 3100}`,
   };
+}
+
+async function toggleGamedevMode(settings = {}) {
+  return activateGamedevMode(settings);
 }
 
 async function launchGamedevSession({
@@ -176,7 +211,8 @@ async function launchGamedevSession({
   };
 
   const written = writeHandoff(resolvedWorkspace, payload);
-  const launchResult = await launchVSCode(resolvedWorkspace, settings);
+  const vscodeLaunch = await focusOrLaunchWorkspaceVSCode(resolvedWorkspace);
+  const launchResult = vscodeLaunch.launchResult || null;
   const status = await getGamedevStatus(settings, engine);
 
   updateGamedevSceneCache(resolvedWorkspace, {
@@ -215,7 +251,8 @@ async function launchGamedevSession({
     tokenPolicy: handoffMeta.tokenPolicy,
     truncated: handoffMeta.truncated,
     routing,
-    vscode: launchResult,
+    vscode: vscodeLaunch,
+    launchResult,
     status,
   };
   setLastGamedevSession(session);
@@ -238,8 +275,12 @@ async function launchGamedevSession({
     deltaHandoff: delta.deltaMode,
     planBullets,
     status,
-    vscode: launchResult,
-    focus: await focusVSCodeWorkspace(resolvedWorkspace, settings).catch(() => ({ ok: false })),
+    vscode: vscodeLaunch,
+    launchResult,
+    focus: await focusVSCodeWorkspace(resolvedWorkspace, {
+      allowLaunch: false,
+      verifyTimeoutMs: 4000,
+    }).catch(() => ({ ok: false })),
   };
 }
 
@@ -256,7 +297,9 @@ function deactivateGamedevMode() {
 }
 
 module.exports = {
+  activateGamedevMode,
   toggleGamedevMode,
+  focusOrLaunchWorkspaceVSCode,
   launchGamedevSession,
   getGamedevSessionInfo,
   deactivateGamedevMode,

@@ -128,6 +128,7 @@ const schema = {
   gamedevEnabled: { type: "boolean", default: true },
   gamedevActiveEngine: { type: "string", enum: ["unity", "unreal", "roblox", "blender"], default: "unity" },
   gamedevMcpEntryPath: { type: "string", default: "" },
+  gamedevModeActive: { type: "boolean", default: false },
 };
 function createStore() { return new Store({ schema, clearInvalidConfig: true }); }
 module.exports = { createStore, schema };

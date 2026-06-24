@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { probeGamedevMcpEntry } = require("./gamedev-path-resolver");
 const { getGamedevStatus } = require("./gamedev-status");
+const { detectWorkspaceLayout } = require("./workspace-detector");
 const {
   GAMEDEV_ENGINE_LABELS,
   normalizeGamedevEngine,
@@ -67,6 +68,16 @@ function appendGamedevChecks(checks, store, settings = {}) {
 
   const workspacePath = String(settings.workspacePath || store?.get?.("workspacePath") || "").trim();
   if (workspacePath) {
+    const layout = detectWorkspaceLayout(workspacePath);
+    if (layout.layout === "electron-core" || layout.isOpenGuider) {
+      push({
+        id: "gamedev-workspace-layout",
+        status: "warn",
+        message: "Çalışma Kısmı Sauron kaynak kodu — Game Dev için Unity proje klasörü gerekli",
+        fixHint: "Ayarlar → Çalışma Kısmı yolunu Unity proje klasörüne değiştirin (Assets/ içeren klasör).",
+      });
+    }
+
     const cursorMcp = path.join(workspacePath, ".cursor", "mcp.json");
     const vscodeMcp = path.join(workspacePath, ".vscode", "mcp.json");
     const hasConfig = fs.existsSync(cursorMcp) || fs.existsSync(vscodeMcp);

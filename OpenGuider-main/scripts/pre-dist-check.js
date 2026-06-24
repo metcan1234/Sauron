@@ -84,9 +84,50 @@ function ensureBridgeVsixPresent() {
   console.log(`Bridge VSIX found: ${vsixPath}`);
 }
 
+function ensureGamedevMcpBuilt() {
+  const extensionRoot = path.join(projectRoot, "extensions", "gamedev-all-in-one");
+  const entryPath = path.join(extensionRoot, "dist", "index.js");
+
+  if (!fs.existsSync(entryPath)) {
+    console.log("gamedev-all-in-one dist missing — building...");
+    const npmCi = spawnSync("npm", ["ci"], {
+      cwd: extensionRoot,
+      encoding: "utf8",
+      shell: process.platform === "win32",
+      windowsHide: true,
+    });
+    if (npmCi.stdout) process.stdout.write(npmCi.stdout);
+    if (npmCi.stderr) process.stderr.write(npmCi.stderr);
+    if (npmCi.status !== 0) {
+      console.error("gamedev-all-in-one npm ci failed");
+      process.exit(npmCi.status || 1);
+    }
+
+    const npmBuild = spawnSync("npm", ["run", "build"], {
+      cwd: extensionRoot,
+      encoding: "utf8",
+      shell: process.platform === "win32",
+      windowsHide: true,
+    });
+    if (npmBuild.stdout) process.stdout.write(npmBuild.stdout);
+    if (npmBuild.stderr) process.stderr.write(npmBuild.stderr);
+    if (npmBuild.status !== 0) {
+      console.error("gamedev-all-in-one npm run build failed");
+      process.exit(npmBuild.status || 1);
+    }
+  }
+
+  if (!fs.existsSync(entryPath)) {
+    console.error(`gamedev-all-in-one MCP entry missing after build: ${entryPath}`);
+    process.exit(1);
+  }
+  console.log(`gamedev-all-in-one MCP ready: ${entryPath}`);
+}
+
 function main() {
   runSyntaxChecks();
   runUnitTests();
+  ensureGamedevMcpBuilt();
   ensureBridgeVsixPresent();
   console.log("pre-dist-check passed");
 }
