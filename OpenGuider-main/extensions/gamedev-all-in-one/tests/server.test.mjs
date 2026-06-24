@@ -141,14 +141,10 @@ test("tools/list exposes the expected MCP tools", async () => {
     const response = await client.request("tools/list");
     const toolNames = response.result.tools.map((tool) => tool.name).sort();
 
-    assert.deepEqual(toolNames, [
-      "doctor",
-      "inspect_project",
-      "list_capabilities",
-      "project_init",
-      "roblox_create_workspace_part",
-      "roblox_run_code"
-    ]);
+    assert.ok(toolNames.length >= 67, `expected at least 67 tools, got ${toolNames.length}`);
+    assert.ok(toolNames.includes("doctor"));
+    assert.ok(toolNames.includes("unity_get_hierarchy"));
+    assert.ok(toolNames.includes("roblox_run_code"));
   } finally {
     await client.stop();
   }

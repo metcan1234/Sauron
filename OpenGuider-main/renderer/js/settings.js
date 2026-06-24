@@ -185,6 +185,10 @@ async function init() {
   const gamedevActiveEngineEl = document.getElementById("gamedevActiveEngine");
   if (gamedevEnabledEl) gamedevEnabledEl.checked = settings.gamedevEnabled !== false;
   if (gamedevActiveEngineEl) setSelectValue("gamedevActiveEngine", settings.gamedevActiveEngine || "unity");
+  const gamedevDefaultTemplateEl = document.getElementById("gamedevDefaultTemplate");
+  if (gamedevDefaultTemplateEl) setSelectValue("gamedevDefaultTemplate", settings.gamedevDefaultTemplate || "auto");
+  const gamedevPipelineAutoChainEl = document.getElementById("gamedevPipelineAutoChain");
+  if (gamedevPipelineAutoChainEl) gamedevPipelineAutoChainEl.checked = settings.gamedevPipelineAutoChain !== false;
   document.getElementById("awareAssistanceEnabled").checked = settings.awareAssistanceEnabled === true;
 
   setSelectValue("sttProvider", normalizeSttProvider(settings.sttProvider));
@@ -1386,6 +1390,8 @@ async function saveSettings() {
     codeAgentNativeEnabled:  document.getElementById("codeAgentNativeEnabled")?.checked === true,
     gamedevEnabled:          document.getElementById("gamedevEnabled")?.checked !== false,
     gamedevActiveEngine:     document.getElementById("gamedevActiveEngine")?.value || "unity",
+    gamedevDefaultTemplate:  document.getElementById("gamedevDefaultTemplate")?.value || "auto",
+    gamedevPipelineAutoChain: document.getElementById("gamedevPipelineAutoChain")?.checked !== false,
     gooseEnabled:            document.getElementById("gooseEnabled")?.checked !== false,
     gooseBinaryPath:         document.getElementById("gooseBinaryPath")?.value.trim() || "",
     gooseDefaultMode:        document.getElementById("gooseDefaultMode")?.value || "balanced",

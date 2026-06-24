@@ -2,11 +2,15 @@
 
 Game Dev, Sauron'da **4. kanal**dır — panel sohbeti, ⌘ Çalışma Kısmı ve 🪿 Goose'dan bağımsızdır.
 
+v2.0: Game pipeline, Unity genre templates, Game Studio UX. See [SAURON-GAMEDEV-ROADMAP.md](./SAURON-GAMEDEV-ROADMAP.md).
+
 ## Panel
 
 - **🎮** — Game Dev modu / handoff
+- **Şablon seçici** — Boş / Co-op Climb / Horror Co-op / Social Deduction
+- **Pipeline bar** — aktif faz (0-token, local state)
 - Görev metni **yoksa**: modu aç/kapa (MCP config workspace'e yazılır)
-- Görev metni **varsa**: MCP config + economy handoff + VS Code (Cline)
+- Görev metni **varsa**: pipeline faz hedefi + MCP config + economy handoff + VS Code (Cline)
 
 ## Token tasarrufu (gamedev kısıtlanmadan)
 

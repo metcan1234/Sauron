@@ -35,6 +35,7 @@ const PRELOAD_ON_CHANNELS = [
   "goose-session-cancelled",
   "gamedev-session-started",
   "gamedev-mode-changed",
+  "game-pipeline-updated",
 ];
 
 const PRELOAD_SEND_CHANNELS = [

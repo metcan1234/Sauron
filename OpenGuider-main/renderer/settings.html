@@ -641,10 +641,29 @@
             <label for="gamedevActiveEngine">Game Dev engine</label>
             <select id="gamedevActiveEngine" class="settings-select">
               <option value="unity">Unity</option>
-              <option value="unreal">Unreal</option>
+              <option value="unreal" disabled>Unreal (yakında)</option>
               <option value="roblox">Roblox</option>
               <option value="blender">Blender</option>
             </select>
+          </div>
+          <div class="form-group">
+            <label for="gamedevDefaultTemplate">Varsayılan şablon</label>
+            <select id="gamedevDefaultTemplate" class="settings-select">
+              <option value="auto">Otomatik (görevden)</option>
+              <option value="empty">Boş Unity</option>
+              <option value="co-op-climb">Co-op Climb</option>
+              <option value="horror-coop">Horror Co-op</option>
+              <option value="social-deduction">Social Deduction</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="gamedevPipelineAutoChain" class="plugin-checkbox" checked/>
+              <span class="toggle-copy">
+                <strong>Game Dev pipeline auto-chain</strong>
+                <span>Cline görevi bitince sonraki faz otomatik başlar.</span>
+              </span>
+            </label>
           </div>
           <p class="hint">Browser Agent aç/kapa: aşağıdaki Browser eklentisi kartında.</p>
         </section>

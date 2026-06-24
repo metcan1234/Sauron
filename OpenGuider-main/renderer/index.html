@@ -143,6 +143,18 @@
       <button class="mode-badge goose-cancel hidden" id="btn-goose-cancel" type="button" title="Goose oturumunu durdur">Durdur</button>
       <span class="mode-badge gamedev-badge hidden" id="gamedev-badge" title="Aktif Game Dev modu">🎮 Game Dev</span>
       <button class="mode-badge gamedev-cancel hidden" id="btn-gamedev-cancel" type="button" title="Game Dev modunu kapat">Kapat</button>
+      <div class="gamedev-studio-bar hidden" id="gamedev-studio-bar">
+        <label class="gamedev-studio-label" for="gamedev-template-select">Şablon</label>
+        <select id="gamedev-template-select" class="gamedev-template-select" title="Oyun şablonu">
+          <option value="auto">Otomatik (görevden)</option>
+          <option value="empty">Boş Unity</option>
+          <option value="co-op-climb">Co-op Climb</option>
+          <option value="horror-coop">Horror Co-op</option>
+          <option value="social-deduction">Social Deduction</option>
+        </select>
+        <span class="gamedev-pipeline-bar" id="gamedev-pipeline-bar" title="Aktif pipeline fazı"></span>
+        <a class="gamedev-dashboard-link" id="gamedev-dashboard-link" href="#" title="gamedev dashboard">Dashboard</a>
+      </div>
       <span class="code-agent-log hidden" id="code-agent-log" title="Son kod agent adımları"></span>
       <span class="screen-pending-badge hidden" id="screen-pending-badge" title="Gönderimde ekran görüntüsü eklenecek"></span>
     </div>
@@ -321,6 +333,29 @@
       <button class="confirm-btn ghost" id="sbs-btn-back" type="button">Geri</button>
       <button class="confirm-btn" id="sbs-btn-next" type="button">İleri</button>
       <button class="confirm-btn primary hidden" id="sbs-btn-finish" type="button">Pipeline başlat</button>
+    </div>
+  </div>
+</div>
+
+<div class="gamedev-setup-overlay hidden" id="gamedev-setup-overlay" role="dialog" aria-modal="true">
+  <div class="onboarding-modal gamedev-setup-modal">
+    <h3>Game Dev kurulum</h3>
+    <ol class="onboarding-steps">
+      <li>Ayarlar → <strong>Çalışma Kısmı yolu</strong> = Unity proje klasörünüz (Assets/ içeren).</li>
+      <li>Unity Package Manager → Git URL: CoplayDev unity-mcp bridge.</li>
+      <li>Şablon seçin ve Cline'da <strong>gamedev-all-in-one</strong> MCP'yi başlatın.</li>
+    </ol>
+    <label class="ws-label">Şablon
+      <select class="form-input" id="gamedev-setup-template">
+        <option value="auto">Otomatik</option>
+        <option value="co-op-climb">Co-op Climb</option>
+        <option value="horror-coop">Horror Co-op</option>
+        <option value="social-deduction">Social Deduction</option>
+        <option value="empty">Boş Unity</option>
+      </select>
+    </label>
+    <div class="onboarding-actions">
+      <button class="confirm-btn primary" id="gamedev-setup-done" type="button">Tamam, başlayalım</button>
     </div>
   </div>
 </div>

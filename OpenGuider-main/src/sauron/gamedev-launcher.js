@@ -11,7 +11,7 @@ const { mergeCostOptimizerConfig } = require("./finops/cost-optimizer-config");
 const { GAMEDEV_ENGINE_LABELS, normalizeGamedevEngine } = require("./gamedev-config");
 const { probeGamedevMcpEntry, resolveGamedevMcpEntryPath } = require("./gamedev-path-resolver");
 const { buildGamedevHandoffSummary } = require("./gamedev-task-optimizer");
-const { seedGamedevRules } = require("./gamedev-instructions");
+const { seedGamedevRules, seedGamedevGenreRules } = require("./gamedev-instructions");
 const { writeGamedevMcpConfig } = require("./gamedev-mcp-config");
 const { getGamedevStatus } = require("./gamedev-status");
 const {
@@ -35,6 +35,12 @@ const {
   resolveGamedevClineAgent,
 } = require("./gamedev-router");
 const { appendGamedevLedgerEvent } = require("./gamedev-finops-ledger");
+const { resolveGamedevGenre } = require("./gamedev-genre-router");
+const {
+  startGamePipeline,
+  getCurrentPhaseGoal,
+} = require("./game-pipeline");
+const { scaffoldUnityTemplate } = require("./scaffold-unity-template");
 
 const RELIABLE_VSCODE_LAUNCH_OPTIONS = {
   newWindow: false,
@@ -147,8 +153,30 @@ async function launchGamedevSession({
   const mcpEntryPath = resolveGamedevMcpEntryPath(settings);
   const notices = [];
   const routing = resolveGamedevMode(settings);
-  const delta = resolveGamedevDeltaHandoff(settings, resolvedWorkspace, rawTask);
-  const planBullets = buildGameDevPlanBullets(rawTask);
+
+  const genre = resolveGamedevGenre(rawTask, settings);
+  const pipelineId = String(settings.gamedevPipelineId || genre.pipelineId || "unity-empty-v1").trim();
+  const pipelineStart = startGamePipeline({
+    pipelineId,
+    workspacePath: resolvedWorkspace,
+    taskDescription: rawTask,
+  });
+  if (!pipelineStart.ok) {
+    return { ok: false, error: pipelineStart.error };
+  }
+
+  const phaseInfo = getCurrentPhaseGoal(resolvedWorkspace);
+  if (phaseInfo?.phase === 1 && genre.templateId) {
+    const scaffold = scaffoldUnityTemplate(resolvedWorkspace, genre.templateId);
+    if (scaffold.ok) {
+      notices.push(`Template scaffold: ${scaffold.label}`);
+      seedGamedevGenreRules(resolvedWorkspace, genre.genre, engine);
+    }
+  }
+
+  const effectiveTask = phaseInfo?.goal || rawTask;
+  const delta = resolveGamedevDeltaHandoff(settings, resolvedWorkspace, effectiveTask);
+  const planBullets = buildGameDevPlanBullets(effectiveTask);
 
   const mcpWrite = writeGamedevMcpConfig(resolvedWorkspace, settings, engine);
   if (!mcpWrite.ok) {
@@ -161,13 +189,16 @@ async function launchGamedevSession({
 
   const sceneHint = buildSceneCacheHandoffHint(resolvedWorkspace, engine);
   const handoffMeta = buildGamedevHandoffSummary({
-    taskText: rawTask,
+    taskText: effectiveTask,
     engine,
     workspacePath: resolvedWorkspace,
     settings,
     mcpEntryPath,
     notices: [
       ...notices,
+      ...(phaseInfo
+        ? [`Pipeline: ${phaseInfo.pipeline.label} — Faz ${phaseInfo.phase}/${phaseInfo.totalPhases}`]
+        : []),
       ...(delta.hint ? [delta.hint] : []),
       ...(sceneHint ? [sceneHint] : []),
       ...(planBullets ? [`Plan (0-token):\n${planBullets}`] : []),
@@ -188,9 +219,12 @@ async function launchGamedevSession({
     goal: handoffMeta.optimizedTask,
     createdAt: new Date().toISOString(),
     autoStart: true,
-    autoChain: false,
+    autoChain: settings.gamedevPipelineAutoChain !== false,
     complexityHint: "low",
     projectType: "game-unity",
+    pipelineId: phaseInfo?.pipeline?.id || null,
+    pipelinePhase: phaseInfo?.phase || null,
+    pipelineTotalPhases: phaseInfo?.totalPhases || null,
     gamedev: {
       engine,
       mcpServerId: mcpWrite.serverId,
@@ -199,6 +233,12 @@ async function launchGamedevSession({
       mcpTools: "full",
       mode: routing.mode,
       planBullets,
+      genre: genre.genre,
+      templateId: genre.templateId,
+      pipelineTemplateId: phaseInfo?.pipeline?.templateId || pipelineId,
+      pipelineRunId: phaseInfo?.pipeline?.id || null,
+      phase: phaseInfo?.phase || null,
+      totalPhases: phaseInfo?.totalPhases || null,
     },
     costContext: {
       coreModelTier: optimizer.coreModelTier,
@@ -221,7 +261,11 @@ async function launchGamedevSession({
     connectorConnected: status?.connector?.connected === true,
     status,
   });
-  recordGamedevHandoffContext(resolvedWorkspace, handoffMeta.optimizedTask);
+  recordGamedevHandoffContext(
+    resolvedWorkspace,
+    handoffMeta.optimizedTask,
+    phaseInfo ? `Game dev phase ${phaseInfo.phase}/${phaseInfo.totalPhases}` : "",
+  );
   appendGamedevLedgerEvent(resolvedWorkspace, {
     type: "session-start",
     engine,
@@ -230,7 +274,19 @@ async function launchGamedevSession({
     deltaHandoff: delta.deltaMode,
     handoffChars: handoffMeta.summary.length,
     mcpTools: "full",
+    pipelineId: phaseInfo?.pipeline?.id,
+    phase: phaseInfo?.phase,
   });
+  if (phaseInfo?.pipeline?.phases) {
+    const phaseDef = phaseInfo.pipeline.phases.find((p) => p.phase === phaseInfo.phase);
+    if (phaseDef?.verification?.mcp === "unity_play_mode") {
+      appendGamedevLedgerEvent(resolvedWorkspace, {
+        type: "mcp-tool",
+        tool: "unity_play_mode",
+        phase: phaseInfo.phase,
+      });
+    }
+  }
 
   setGamedevModeActive(true, {
     engine,
@@ -274,6 +330,9 @@ async function launchGamedevSession({
     routing,
     deltaHandoff: delta.deltaMode,
     planBullets,
+    genre,
+    pipeline: phaseInfo?.pipeline || pipelineStart.pipeline,
+    phase: phaseInfo,
     status,
     vscode: vscodeLaunch,
     launchResult,

@@ -9,6 +9,7 @@ const { attachGamedevSessionStore } = require("../sauron/gamedev-session-state")
 const { getGamedevStatus } = require("../sauron/gamedev-status");
 const { probeGamedevMcpEntry } = require("../sauron/gamedev-path-resolver");
 const { summarizeGamedevLedger } = require("../sauron/gamedev-finops-ledger");
+const { getGamePipelineStatus } = require("../sauron/game-pipeline");
 
 function registerGamedevIpc({
   ipcMain,
@@ -74,6 +75,7 @@ function registerGamedevIpc({
     const status = await getGamedevStatus(settings);
     const workspacePath = resolveWorkspacePath(null);
     const finops = workspacePath ? summarizeGamedevLedger(workspacePath) : null;
+    const gamePipeline = workspacePath ? getGamePipelineStatus(workspacePath) : null;
     return {
       ...status,
       session: sessionInfo.session,
@@ -81,6 +83,7 @@ function registerGamedevIpc({
       mcpEntryOk: probe.ok,
       enabled: settings.gamedevEnabled !== false,
       finops,
+      gamePipeline,
     };
   });
 

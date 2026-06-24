@@ -129,6 +129,11 @@ const schema = {
   gamedevActiveEngine: { type: "string", enum: ["unity", "unreal", "roblox", "blender"], default: "unity" },
   gamedevMcpEntryPath: { type: "string", default: "" },
   gamedevModeActive: { type: "boolean", default: false },
+  gamedevDefaultTemplate: { type: "string", default: "auto" },
+  gamedevPipelineAutoChain: { type: "boolean", default: true },
+  gamedevDefaultMode: { type: "string", enum: ["economy", "balanced", "premium"], default: "economy" },
+  gamedevPipelineId: { type: "string", default: "" },
+  gamedevSetupComplete: { type: "boolean", default: false },
 };
 function createStore() { return new Store({ schema, clearInvalidConfig: true }); }
 module.exports = { createStore, schema };

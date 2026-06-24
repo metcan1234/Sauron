@@ -120,6 +120,7 @@ const { registerBuildPipelineIpc } = require("./src/ipc/build-pipeline-ipc");
 const { registerCodeAgentIpc } = require("./src/ipc/code-agent-ipc");
 const { registerGooseIpc } = require("./src/ipc/goose-ipc");
 const { registerGamedevIpc } = require("./src/ipc/gamedev-ipc");
+const { registerGamePipelineIpc } = require("./src/ipc/game-pipeline-ipc");
 const { clearGooseBinaryCache } = require("./src/sauron/goose-binary-resolver");
 const { createWindowManager } = require("./src/main/window-manager");
 const { createTrayMenu } = require("./src/main/tray-menu");
@@ -1469,6 +1470,15 @@ function registerModularIpcHandlers() {
   });
 
   registerGamedevIpc({
+    ipcMain,
+    debugLog,
+    appLogger,
+    getRuntimeSettings,
+    panelWindow,
+    store,
+  });
+
+  registerGamePipelineIpc({
     ipcMain,
     debugLog,
     appLogger,

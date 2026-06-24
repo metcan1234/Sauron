@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.0.0 — 2026-06-24
+
+### Added — Game Dev Studio (FAZ 3–6)
+- **Game pipeline** engine: `unity-empty-v1`, `unity-co-op-climb-v1`, `unity-horror-coop-v1`, `unity-social-deduction-v1`
+- Unity genre templates with Netcode for GO skeleton (co-op climb, horror co-op, social deduction)
+- `gamedev-genre-router` — keyword + settings template resolution
+- Game Studio UI: template picker, pipeline bar, setup wizard, dashboard link
+- IPC: `game-pipeline-*` handlers; state in `.sauron/game-pipeline.json`
+- Docs: `SAURON-GAMEDEV-ROADMAP.md`
+
+### Preserved — Token economy v2
+- `mcpTools: "full"`, 0-token plan bullets, scene cache pointer, bounded handoff
+- `gamedevPipelineAutoChain` for phase progression
+
 ## 1.9.1 — 2026-06-24
 
 ### Fixed — Game Dev stabilite
