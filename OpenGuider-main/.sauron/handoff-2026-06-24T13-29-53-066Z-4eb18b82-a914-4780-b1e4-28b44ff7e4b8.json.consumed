@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "id": "2026-06-24T13-29-53-066Z-4eb18b82-a914-4780-b1e4-28b44ff7e4b8",
+  "source": "sauron-core",
+  "workspacePath": "C:\\Users\\Can\\OneDrive\\Desktop\\Sauron Core\\OpenGuider-main",
+  "taskSummary": "Clarified task (for Cline):\n`src` dizinindeki dosyaları listelemek için terminal komutunu çalıştır.\n\nOriginal context:\nWorkspace snapshot:\nlayout: electron-core\npackage: openguider\nscripts: start, terminal, debug, dev, test, test:unit, test:integration, test:vscode-launch, test:vscode-stability, predist:win, pack, dist\ndependencies: 11 prod, 5 dev\n.cline/\n  mcp.json\n.clinerules/\n  sauron-electron-dev.md\n  sauron-gamedev.md\n  sauron-self-improve.md\n  sauron-web-dev.md\n  sauron-workspace.md\n.cursor/\n  mcp.json\n.github/\n  workflows/\n.goose/\n  instructions.md\n.sauron/\n.vscode/\n  extensions.json\n  mcp.json\n  settings.json\nCore/\n  OpenGuider-main\ndocs/\n  adr/\n  agent-setup-cline.md\n  build-pipeline-tr.md\n  finops-cline-export-report.md\n  finops-cost-optimizer.md\n  MANUAL-TEST-CHECKLIST.md\n  open-guider-guide-en.m…\n\nChat session: list files in src\n\nLatest chat context:\nUser: list files in src",
+  "goal": "",
+  "sessionId": "513a833b-e78f-41f1-972a-f6be2d56eebb",
+  "createdAt": "2026-06-24T13:29:53.107Z",
+  "autoStart": true,
+  "autoChain": false,
+  "complexityHint": "low",
+  "costContext": {
+    "coreModelTier": "economy",
+    "optimizerEnabled": true,
+    "mode": "balanced",
+    "budgetGovernorActive": false,
+    "deltaHandoff": false,
+    "suggestedClineAgent": {
+      "providerId": "gemini",
+      "modelId": "gemini-2.5-flash",
+      "agentId": "gemini",
+      "reason": "complexity-low",
+      "walletFallbackFrom": null,
+      "allCloudExhausted": false
+    },
+    "governorTier": "none"
+  },
+  "projectType": "electron-core"
+}

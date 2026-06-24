@@ -1,0 +1,13 @@
+{
+  "id": "goose-1782234069387-e1977e87",
+  "timestamp": "2026-06-23T17:01:09.387Z",
+  "task": "list files in src",
+  "mode": "economy",
+  "status": "running",
+  "sessionId": "goose-1782234069385",
+  "provider": "ollama",
+  "model": "qwen2.5-coder:7b",
+  "binaryPath": "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\goose-package\\goose.exe",
+  "launchMethod": "windows-terminal",
+  "updatedAt": "2026-06-23T17:01:09.674Z"
+}

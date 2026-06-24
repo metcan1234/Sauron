@@ -536,8 +536,13 @@ export function createPanelController({
       return;
     }
 
-    if (!String(settings?.workspacePath || "").trim()) {
+    const wsPath = String(settings?.workspacePath || "").trim();
+    if (!wsPath) {
       ui.showToast("Workspace path ayarlanmamış — Ayarlar → Çalışma Kısmı", true);
+      return;
+    }
+    if (wsPath.toLowerCase().includes("\\temp\\") || wsPath.toLowerCase().includes("\\tmp\\")) {
+      ui.showToast("Workspace path geçici klasör (temp) olarak ayarlanmış. Ayarlar → Çalışma Kısmı'ndan gerçek proje klasörünü seçin.", true);
       return;
     }
 
@@ -840,8 +845,13 @@ export function createPanelController({
       return;
     }
 
-    if (!String(settings?.workspacePath || "").trim()) {
+    const wsPath = String(settings?.workspacePath || "").trim();
+    if (!wsPath) {
       ui.showToast("Workspace path ayarlanmamış — Ayarlar → Çalışma Kısmı", true);
+      return;
+    }
+    if (wsPath.toLowerCase().includes("\\temp\\") || wsPath.toLowerCase().includes("\\tmp\\")) {
+      ui.showToast("Workspace path geçici klasör (temp) olarak ayarlanmış. Game Dev için Unity/Unreal proje klasörü gerekli. Ayarlar → Çalışma Kısmı'ndan doğru klasörü seçin.", true);
       return;
     }
 

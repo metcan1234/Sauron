@@ -1,0 +1,41 @@
+{
+  "version": 2,
+  "id": "2026-06-24T13-09-44-220Z-93328bbf-e8c9-4ee3-9715-46b427205257",
+  "source": "sauron-gamedev",
+  "channel": "gamedev",
+  "workspacePath": "C:\\Users\\Can\\OneDrive\\Desktop\\Sauron Core\\OpenGuider-main",
+  "taskSummary": "[Sauron Game Dev handoff]\nEngine: unity\nTask: kırmızı bir küp yap\n\nUse the gamedev-all-in-one MCP server for ALL engine operations (scene, scripts, physics).\nMCP tool calls do not consume LLM context — prefer tools over reading project files.\nRead .clinerules/sauron-gamedev.md for token discipline.\nMCP entry: C:\\Users\\Can\\OneDrive\\Desktop\\Sauron Core\\OpenGuider-main\\extensions\\gamedev-all-in-one\\dist\\index.js\nWorkspace: C:\\Users\\Can\\OneDrive\\Desktop\\Sauron Core\\OpenGuider-main\n\n- MCP config: 4 dosya\n- Plan (0-token):\n1. kırmızı bir küp yap",
+  "goal": "kırmızı bir küp yap",
+  "createdAt": "2026-06-24T13:09:44.220Z",
+  "autoStart": true,
+  "autoChain": false,
+  "complexityHint": "low",
+  "projectType": "game-unity",
+  "gamedev": {
+    "engine": "unity",
+    "mcpServerId": "gamedev-all-in-one",
+    "mcpEntryPath": "C:\\Users\\Can\\OneDrive\\Desktop\\Sauron Core\\OpenGuider-main\\extensions\\gamedev-all-in-one\\dist\\index.js",
+    "tokenPolicy": {
+      "mcpTools": "full",
+      "llmTier": "economy",
+      "includeTranscript": false,
+      "handoffMaxChars": 4000,
+      "clarifySkipped": true
+    },
+    "mcpTools": "full",
+    "mode": "economy",
+    "planBullets": "1. kırmızı bir küp yap"
+  },
+  "costContext": {
+    "coreModelTier": "economy",
+    "optimizerEnabled": true,
+    "mode": "balanced",
+    "budgetGovernorActive": false,
+    "deltaHandoff": false,
+    "suggestedClineAgent": {
+      "providerId": "deepseek",
+      "modelId": "deepseek-chat",
+      "reason": "gamedev-low-complexity-script-fallback"
+    }
+  }
+}

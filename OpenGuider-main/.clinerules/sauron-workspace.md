@@ -1,4 +1,4 @@
-<!-- sauron-rules-version: 1.2 -->
+<!-- sauron-rules-version: 1.3 -->
 # Sauron Workspace — Cline Kuralları
 
 ## Token / Maliyet Disiplini
@@ -7,6 +7,13 @@
 3. Aynı bağlamı (dosya içeriği, önceki cevaplar) tekrar tekrar modele gönderme; oturum içi hafızayı kullan.
 4. Ucuz/yerel model (Ollama) yeterli olan basit işlerde (formatlama, küçük refactor, dosya arama) GPT/Gemini gibi pahalı modellere geçme; görev karmaşıklığına göre model seç.
 5. Bir günlük/oturumluk yaklaşık bir bütçe sınırın varsa, sınıra yaklaşınca kullanıcıyı uyar ve ucuz modele düşmeyi öner.
+
+## Token Verimliliği (Yetenek Kaybı Yok)
+- Dosyayı okumadan önce grep / list_files ile hedefi daralt; tam dosya okuma son çare.
+- Aynı dosyayı aynı oturumda ikinci kez tam okuma — diff veya satır aralığı kullan.
+- 3+ dosya değişecekse önce kısa plan, sonra dosya dosya uygula (tek seferde dev prompt yok).
+- Test/lint komutunu sadece anlamlı değişiklikten sonra çalıştır.
+- "devam et" dediğinde önceki bağlamı özetle, tüm transcript'i tekrar gönderme.
 
 ## Onay Kapıları (Approval Gates)
 6. Dosya yazma/silme işleminden önce mutlaka diff göster ve onay iste — "yolo" / oto-onay modu sadece kullanıcı açıkça etkinleştirirse kullanılsın.

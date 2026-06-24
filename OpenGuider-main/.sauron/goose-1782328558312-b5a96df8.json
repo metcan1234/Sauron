@@ -1,0 +1,13 @@
+{
+  "id": "goose-1782328558312-b5a96df8",
+  "timestamp": "2026-06-24T19:15:58.312Z",
+  "task": "selamalr",
+  "mode": "balanced",
+  "status": "running",
+  "sessionId": "goose-1782328558311",
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "binaryPath": "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\goose-package\\goose.exe",
+  "launchMethod": "windows-terminal",
+  "updatedAt": "2026-06-24T19:15:58.516Z"
+}

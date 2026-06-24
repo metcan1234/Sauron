@@ -130,7 +130,7 @@
           "high": "deepseek"
         },
         "cline": {
-          "low": "deepseek",
+          "low": "gemini",
           "medium": "deepseek",
           "high": "openai"
         }
