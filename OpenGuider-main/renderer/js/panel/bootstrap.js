@@ -802,7 +802,7 @@ export function createPanelController({
   }
 
   async function completeGamedevSetup() {
-    const template = doc.getElementById("gamedev-setup-template")?.value || "auto";
+    const template = doc.getElementById("gamedev-setup-template")?.value || "custom";
     await api.invoke("save-settings", {
       gamedevDefaultTemplate: template,
       gamedevSetupComplete: true,

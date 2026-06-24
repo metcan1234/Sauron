@@ -1,30 +1,57 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { resolveGamedevGenre } = require("../../src/sauron/gamedev-genre-router");
+const { resolveGamedevGenre, resolveAutoGenre } = require("../../src/sauron/gamedev-genre-router");
 
-test("resolveGamedevGenre matches co-op climb keywords", () => {
-  const result = resolveGamedevGenre("PEAK gibi tırmanma oyunu yap");
+test("resolveGamedevGenre strong signal still matches co-op climb", () => {
+  const result = resolveAutoGenre("PEAK gibi co-op climb oyunu yap");
   assert.equal(result.genre, "co-op-climb");
-  assert.equal(result.pipelineId, "unity-co-op-climb-v1");
+  assert.equal(result.reason, "strong-preset-signal");
 });
 
-test("resolveGamedevGenre matches horror keywords", () => {
-  const result = resolveGamedevGenre("zort gibi korku co-op");
-  assert.equal(result.genre, "horror-coop");
-});
-
-test("resolveGamedevGenre matches social deduction keywords", () => {
-  const result = resolveGamedevGenre("feign tarzı impostor oyunu");
+test("resolveGamedevGenre strong signal matches feign", () => {
+  const result = resolveAutoGenre("feign tarzı impostor oyunu");
   assert.equal(result.genre, "social-deduction");
 });
 
-test("resolveGamedevGenre uses configured template", () => {
+test("resolveGamedevGenre uses configured preset template", () => {
   const result = resolveGamedevGenre("anything", { gamedevDefaultTemplate: "horror-coop" });
   assert.equal(result.genre, "horror-coop");
-  assert.equal(result.reason, "configured-template");
+  assert.equal(result.reason, "configured-preset");
 });
 
-test("resolveGamedevGenre defaults to empty pipeline", () => {
-  const result = resolveGamedevGenre("hello world");
+test("resolveGamedevGenre custom template for any game idea", () => {
+  const result = resolveGamedevGenre("GTA tarzı açık dünya araba oyunu", { gamedevDefaultTemplate: "custom" });
+  assert.equal(result.genre, "empty");
   assert.equal(result.pipelineId, "unity-empty-v1");
+  assert.equal(result.adaptive, true);
+});
+
+test("resolveAutoGenre routes GTA open world to universal pipeline", () => {
+  const result = resolveAutoGenre("GTA 5 tarzı açık dünya sandbox şehir oyunu");
+  assert.equal(result.genre, "empty");
+  assert.equal(result.adaptive, true);
+  assert.ok(["multi-archetype-brief", "rich-universal-brief", "low-preset-confidence"].includes(result.reason));
+});
+
+test("resolveAutoGenre routes mobile math game to universal pipeline", () => {
+  const result = resolveAutoGenre("mobil matematik soru çözme eğitim oyunu android");
+  assert.equal(result.genre, "empty");
+  assert.equal(result.adaptive, true);
+});
+
+test("resolveAutoGenre ambiguous keywords prefer custom", () => {
+  const result = resolveAutoGenre("horror climb vote multiplayer");
+  assert.equal(result.genre, "empty");
+  assert.equal(result.adaptive, true);
+});
+
+test("resolveAutoGenre defaults unknown text to empty", () => {
+  const result = resolveAutoGenre("hello world");
+  assert.equal(result.pipelineId, "unity-empty-v1");
+  assert.equal(result.adaptive, true);
+});
+
+test("resolveGamedevGenre auto mode keeps weak climb mention on custom path", () => {
+  const result = resolveGamedevGenre("dağda yürüyüş simülasyonu", { gamedevDefaultTemplate: "auto" });
+  assert.equal(result.genre, "empty");
 });

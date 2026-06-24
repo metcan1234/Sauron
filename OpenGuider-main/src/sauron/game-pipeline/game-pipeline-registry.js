@@ -165,7 +165,7 @@ function listGamePipelines() {
 
 function resolvePipelineForTemplate(templateId) {
   const key = String(templateId || "").trim();
-  if (!key || key === "empty") {
+  if (!key || key === "empty" || key === "custom" || key === "universal" || key === "any") {
     return "unity-empty-v1";
   }
   const found = Object.values(GAME_PIPELINE_REGISTRY).find((p) => p.templateId === key);

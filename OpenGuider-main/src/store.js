@@ -129,7 +129,7 @@ const schema = {
   gamedevActiveEngine: { type: "string", enum: ["unity", "unreal", "roblox", "blender"], default: "unity" },
   gamedevMcpEntryPath: { type: "string", default: "" },
   gamedevModeActive: { type: "boolean", default: false },
-  gamedevDefaultTemplate: { type: "string", default: "auto" },
+  gamedevDefaultTemplate: { type: "string", default: "custom" },
   gamedevPipelineAutoChain: { type: "boolean", default: true },
   gamedevDefaultMode: { type: "string", enum: ["economy", "balanced", "premium"], default: "economy" },
   gamedevPipelineId: { type: "string", default: "" },

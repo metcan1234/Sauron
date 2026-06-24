@@ -186,7 +186,7 @@ async function init() {
   if (gamedevEnabledEl) gamedevEnabledEl.checked = settings.gamedevEnabled !== false;
   if (gamedevActiveEngineEl) setSelectValue("gamedevActiveEngine", settings.gamedevActiveEngine || "unity");
   const gamedevDefaultTemplateEl = document.getElementById("gamedevDefaultTemplate");
-  if (gamedevDefaultTemplateEl) setSelectValue("gamedevDefaultTemplate", settings.gamedevDefaultTemplate || "auto");
+  if (gamedevDefaultTemplateEl) setSelectValue("gamedevDefaultTemplate", settings.gamedevDefaultTemplate || "custom");
   const gamedevPipelineAutoChainEl = document.getElementById("gamedevPipelineAutoChain");
   if (gamedevPipelineAutoChainEl) gamedevPipelineAutoChainEl.checked = settings.gamedevPipelineAutoChain !== false;
   const gamedevUseLlmPlanEl = document.getElementById("gamedevUseLlmPlan");
@@ -1392,7 +1392,7 @@ async function saveSettings() {
     codeAgentNativeEnabled:  document.getElementById("codeAgentNativeEnabled")?.checked === true,
     gamedevEnabled:          document.getElementById("gamedevEnabled")?.checked !== false,
     gamedevActiveEngine:     document.getElementById("gamedevActiveEngine")?.value || "unity",
-    gamedevDefaultTemplate:  document.getElementById("gamedevDefaultTemplate")?.value || "auto",
+    gamedevDefaultTemplate:  document.getElementById("gamedevDefaultTemplate")?.value || "custom",
     gamedevPipelineAutoChain: document.getElementById("gamedevPipelineAutoChain")?.checked !== false,
     gamedevUseLlmPlan: document.getElementById("gamedevUseLlmPlan")?.checked === true,
     gooseEnabled:            document.getElementById("gooseEnabled")?.checked !== false,

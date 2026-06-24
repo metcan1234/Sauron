@@ -146,11 +146,12 @@
       <div class="gamedev-studio-bar hidden" id="gamedev-studio-bar">
         <label class="gamedev-studio-label" for="gamedev-template-select">Şablon</label>
         <select id="gamedev-template-select" class="gamedev-template-select" title="Oyun şablonu">
-          <option value="auto">Otomatik (görevden)</option>
+          <option value="custom">Özel oyun — her fikir (önerilen)</option>
+          <option value="auto">Otomatik (yalnızca net eşleşmede hızlı şablon)</option>
           <option value="empty">Boş Unity</option>
-          <option value="co-op-climb">Co-op Climb (PEAK tarzı)</option>
-          <option value="horror-coop">Horror Co-op (Zort tarzı)</option>
-          <option value="social-deduction">Social Deduction (Feign tarzı)</option>
+          <option value="co-op-climb">Hızlı şablon: Co-op Climb</option>
+          <option value="horror-coop">Hızlı şablon: Horror Co-op</option>
+          <option value="social-deduction">Hızlı şablon: Social Deduction</option>
         </select>
         <label class="gamedev-studio-label" for="gamedev-master-prompt">Oyun planım</label>
         <textarea id="gamedev-master-prompt" class="gamedev-master-prompt" rows="2" placeholder="Uzun oyun planınız (brief olarak kaydedilir)…"></textarea>
@@ -355,11 +356,12 @@
     <div class="gamedev-setup-step hidden" id="gamedev-setup-step-3">
       <label class="ws-label">Şablon
         <select class="form-input" id="gamedev-setup-template">
-          <option value="auto">Otomatik</option>
-          <option value="co-op-climb">Co-op Climb (PEAK)</option>
-          <option value="horror-coop">Horror Co-op (Zort)</option>
-          <option value="social-deduction">Social Deduction (Feign)</option>
+          <option value="custom">Özel oyun — her fikir (önerilen)</option>
+          <option value="auto">Otomatik (net eşleşmede hızlı şablon)</option>
           <option value="empty">Boş Unity</option>
+          <option value="co-op-climb">Hızlı şablon: Co-op Climb</option>
+          <option value="horror-coop">Hızlı şablon: Horror Co-op</option>
+          <option value="social-deduction">Hızlı şablon: Social Deduction</option>
         </select>
       </label>
       <p>Oyun planınız <code>.sauron/game-design-brief.json</code> olarak kaydedilir; handoff'ta yalnızca kısa özet gider.</p>

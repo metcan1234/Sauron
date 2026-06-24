@@ -30,11 +30,12 @@ function buildGamedevRulesContent(engine = "unity") {
 | Script | \`${toolPrefix}_script\` | — |
 | Scene | \`${toolPrefix}_scene\` | — |
 
-## Prompt Fabrikası (v2.2)
+## Prompt Fabrikası (v2.2+)
 1. Oyun planı: \`.sauron/game-design-brief.json\` — handoff'ta yalnızca pointer + 1 satır özet.
-2. Faz hedefleri brief'ten türetilir; registry sabit metin değil.
-3. Wire recipe pointer: \`.sauron/unity-wire-recipes/{genre}-phase{N}.json\`
-4. Pipeline state: \`.sauron/game-pipeline.json\`
+2. **Her oyun fikri desteklenir** (GTA, puzzle, eğitim, mobil, RPG…) — brief archetype analizi + evrensel faz hedefleri.
+3. Hazır şablonlar (climb/horror/social) yalnızca kullanıcı seçerse veya çok güçlü tek-genre sinyali varsa.
+4. Wire recipe pointer: \`.sauron/unity-wire-recipes/{genre}-phase{N}.json\`
+5. Pipeline state: \`.sauron/game-pipeline.json\`
 
 ## Token tasarrufu
 1. MCP tool çağrıları LLM token harcamaz.

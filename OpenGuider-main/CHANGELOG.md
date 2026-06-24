@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.2.1 — 2026-06-24
+
+### Added — Universal game adaptation
+- **Evrensel pipeline (varsayılan)**: `custom` şablon — GTA, puzzle, eğitim, mobil ve tüm oyun fikirleri için `unity-empty-v1` + brief analizi
+- **`gamedev-brief-analyzer`**: archetype/mechanic tespiti (open-world, educational, puzzle, mobile, RPG, …)
+- **Evrensel faz derleme**: her faz hedefi brief'ten türetilir; PEAK/Feign/Zort yalnızca bilinçli seçim veya güçlü tek-genre sinyalinde
+- **Akıllı auto mod**: belirsiz/çoklu keyword → custom; zengin brief → custom; hızlı şablonlar opt-in
+
+### Changed
+- Varsayılan şablon: `auto` → `custom`
+- UI: "Özel oyun — her fikir (önerilen)"; hızlı şablonlar ayrı etiketlendi
+
 ## 2.2.0 — 2026-06-24
 
 ### Added — Prompt Fabrikası (Game Dev v2.2)

@@ -137,15 +137,16 @@ async function launchGamedevSession({
     workspacePath: resolvedWorkspace,
     taskDescription: rawTask || effectiveMaster.slice(0, 200),
     masterPrompt: effectiveMaster,
-    settings,
+    settings: { ...settings, _gamedevAdaptive: genre.adaptive === true },
     streamAIResponse,
+    adaptive: genre.adaptive === true,
   });
   if (!pipelineStart.ok) {
     return { ok: false, error: pipelineStart.error };
   }
 
   const phaseInfo = getCurrentPhaseGoal(resolvedWorkspace);
-  if (phaseInfo?.phase === 1 && genre.templateId) {
+  if (phaseInfo?.phase === 1 && genre.presetScaffold && genre.templateId) {
     const scaffold = scaffoldUnityTemplate(resolvedWorkspace, genre.templateId);
     if (scaffold.ok) {
       notices.push(`Template scaffold: ${scaffold.label}`);

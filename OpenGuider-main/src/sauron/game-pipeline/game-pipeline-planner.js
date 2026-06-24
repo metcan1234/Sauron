@@ -16,7 +16,10 @@ async function planGamePipeline(pipelineId, options = {}) {
   const taskDescription = String(options.taskDescription || "").trim();
   const masterPrompt = String(options.masterPrompt || taskDescription).trim();
   const workspacePath = String(options.workspacePath || "").trim();
-  const settings = options.settings || {};
+  const settings = {
+    ...(options.settings || {}),
+    _gamedevAdaptive: options.adaptive === true || template.genre === "empty",
+  };
   const streamAIResponse = options.streamAIResponse || null;
 
   let phases = template.phases.map((phase) => ({
@@ -46,11 +49,15 @@ async function planGamePipeline(pipelineId, options = {}) {
       };
     }
   } else if (taskDescription) {
+    const { analyzeGameBrief, buildUniversalPhaseGoal } = require("../gamedev-brief-analyzer");
+    const analysis = analyzeGameBrief(taskDescription);
+    const totalPhases = template.phases.length;
     phases = template.phases.map((phase) => {
-      const injectPhase = template.id === "unity-empty-v1" ? 3 : 2;
-      const goalText = phase.phase >= injectPhase
-        ? `${phase.goal} (brief: ${taskDescription.slice(0, 120)})`
-        : phase.goal;
+      const goalText = template.genre === "empty"
+        ? buildUniversalPhaseGoal(phase.phase, totalPhases, analysis)
+        : (phase.phase >= 2
+          ? `${phase.goal} (brief: ${taskDescription.slice(0, 120)})`
+          : phase.goal);
       return {
         ...phase,
         goal: goalText.slice(0, 280),

@@ -3,7 +3,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { prepareLlmCall, recordLlmUsage } = require("./finops/llm-tracker");
 const { estimateTokens } = require("./finops/token-counter");
-const { appendGamedevLedgerEvent } = require("./gamedev-finops-ledger");
+const { analyzeGameBrief, buildUniversalPhaseGoal } = require("./gamedev-brief-analyzer");
 
 const BRIEF_FILENAME = "game-design-brief.json";
 const BRIEF_POINTER = `.sauron/${BRIEF_FILENAME}`;
@@ -82,7 +82,7 @@ function writeGameDesignBrief(workspacePath, {
   const storedPrompt = fullPrompt.slice(0, maxChars);
 
   const brief = {
-    version: 1,
+    version: 2,
     masterPrompt: storedPrompt,
     taskText: String(taskText || "").trim().slice(0, 600),
     genre,
@@ -90,6 +90,7 @@ function writeGameDesignBrief(workspacePath, {
     phaseGoals: Array.isArray(phaseGoals) ? phaseGoals : [],
     compiledBy,
     briefHash: hashBriefText(storedPrompt),
+    archetypes: analyzeGameBrief(storedPrompt).archetypes,
     truncated,
     updatedAt: new Date().toISOString(),
   };
@@ -130,25 +131,40 @@ function extractBriefKeywords(text) {
   return keywords.slice(0, 8);
 }
 
-function compilePhaseGoalsHeuristic({ masterPrompt, templatePhases, genre }) {
+function compilePhaseGoalsHeuristic({ masterPrompt, templatePhases, genre, adaptive = false }) {
   const genreKey = String(genre || "empty").trim();
-  const hints = GENRE_PHASE_HINTS[genreKey] || GENRE_PHASE_HINTS.empty;
+  const useUniversal = adaptive === true || genreKey === "empty";
+  const analysis = analyzeGameBrief(masterPrompt);
   const keywords = extractBriefKeywords(masterPrompt);
   const keywordSuffix = keywords.length > 0 ? ` (brief: ${keywords.slice(0, 3).join(", ")})` : "";
-  const promptSnippet = String(masterPrompt || "").trim().slice(0, 100);
+  const promptSnippet = analysis.phaseSnippet;
+
+  if (useUniversal) {
+    const totalPhases = (templatePhases || []).length;
+    return (templatePhases || []).map((phase) => {
+      const goal = buildUniversalPhaseGoal(phase.phase, totalPhases, analysis);
+      return {
+        ...phase,
+        goal: goal.slice(0, PHASE_GOAL_MAX_CHARS),
+        estimatedTokens: estimateTokens(goal),
+        compiledMode: "universal",
+      };
+    });
+  }
+
+  const hints = GENRE_PHASE_HINTS[genreKey] || GENRE_PHASE_HINTS.empty;
 
   return (templatePhases || []).map((phase, index) => {
     const hint = hints[index] || phase.goal;
     let goal = hint;
-    if (phase.phase === 3 && promptSnippet && genreKey === "empty") {
-      goal = `${hint}\n\nUser task: ${promptSnippet}`;
-    } else if (phase.phase >= 2 && promptSnippet && genreKey !== "empty") {
-      goal = `${hint}${keywordSuffix}`;
+    if (phase.phase >= 2 && promptSnippet) {
+      goal = `${hint}${keywordSuffix}. Brief: ${promptSnippet.slice(0, 80)}`;
     }
     return {
       ...phase,
       goal: goal.slice(0, PHASE_GOAL_MAX_CHARS),
       estimatedTokens: estimateTokens(goal),
+      compiledMode: "preset",
     };
   });
 }
@@ -230,6 +246,7 @@ async function compileGamedevBrief({
     masterPrompt: combined,
     templatePhases,
     genre,
+    adaptive: settings._gamedevAdaptive === true || genre === "empty",
   });
   let compiledBy = "heuristic";
 
@@ -289,4 +306,5 @@ module.exports = {
   compileGamedevBrief,
   shouldRecompileBrief,
   hashBriefText,
+  analyzeGameBrief,
 };

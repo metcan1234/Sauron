@@ -47,6 +47,7 @@ async function startGamePipeline({
   settings = {},
   streamAIResponse = null,
   forceRestart = false,
+  adaptive = false,
 } = {}) {
   const resolvedPath = String(workspacePath || "").trim();
   if (!resolvedPath) {
@@ -65,6 +66,7 @@ async function startGamePipeline({
     workspacePath: resolvedPath,
     settings,
     streamAIResponse,
+    adaptive,
   });
   if (!planned.ok) {
     return planned;
