@@ -41,3 +41,14 @@ test("detectMicroGuideIntent suggests for açmamda without yardım et", () => {
   const result = detectMicroGuideIntent("whatsapp açmamda bana yardım");
   assert.equal(result.shouldSuggest, true);
 });
+
+test("detectMicroGuideIntent suggests for ekranımdaki kişiye bak", () => {
+  const result = detectMicroGuideIntent("ekranımdaki kişiye bak");
+  assert.equal(result.shouldSuggest, true);
+  assert.equal(result.reason, "screen_guidance");
+});
+
+test("detectMicroGuideIntent suggests for ekranımda gördüğün şeyleri yaz", () => {
+  const result = detectMicroGuideIntent("ekranımda gördüğün şeyleri yaz");
+  assert.equal(result.shouldSuggest, true);
+});

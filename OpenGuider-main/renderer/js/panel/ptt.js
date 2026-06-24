@@ -6,8 +6,21 @@ export function createPttController({
   state,
   ui,
 }) {
-  function startPTT() {
+  async function startPTT() {
     if (state.isRecording()) {
+      return;
+    }
+
+    let sttReady;
+    try {
+      sttReady = await api.invoke("get-stt-readiness");
+    } catch (error) {
+      ui.showToast(error?.message || "Ses tanıma yapılandırılamadı.", true);
+      return;
+    }
+
+    if (!sttReady?.ok) {
+      ui.showToast(sttReady?.message || "Ses tanıma için API anahtarı gerekli — Ayarlar → Ses", true);
       return;
     }
 
@@ -18,13 +31,13 @@ export function createPttController({
     dom.waveform.style.display = "flex";
     dom.pttBtn.childNodes[0].textContent = "";
     api.send("update-widget-state", "listening");
-    const sttProvider = resolveSttProvider(state.getSetting("sttProvider"));
-    log("stt:start", sttProvider);
+    const sttProvider = sttReady.provider === "whisper" ? "whisper" : "assemblyai";
+    log("stt:start", sttProvider, { preferred: sttReady.preferred });
 
     if (sttProvider === "assemblyai") {
-      startAssemblyAI();
-    } else if (sttProvider === "whisper") {
-      startWhisper();
+      void startAssemblyAI();
+    } else {
+      void startWhisper();
     }
 
     ui.startWaveformAnimation();
@@ -50,11 +63,6 @@ export function createPttController({
 
     state.runPttCleanup();
     log("stt:stop");
-  }
-
-  function resolveSttProvider(provider) {
-    if (provider === "whisper") return "whisper";
-    return "assemblyai";
   }
 
   async function startAssemblyAI() {
@@ -104,7 +112,7 @@ export function createPttController({
 
       socket.onerror = (event) => {
         log("stt:assemblyai ws error", event);
-        ui.showToast("AssemblyAI connection error", true);
+        ui.showToast("AssemblyAI bağlantı hatası", true);
         doCleanup();
         stopPTT();
       };
@@ -112,7 +120,6 @@ export function createPttController({
       socket.onclose = (event) => {
         log("stt:assemblyai ws closed", { code: event.code, reason: event.reason });
         doCleanup();
-        // If still recording when socket closes unexpectedly, stop PTT gracefully.
         if (state.isRecording()) {
           stopPTT();
         }
@@ -126,9 +133,8 @@ export function createPttController({
         }
       });
     } catch (error) {
-      ui.showToast("AssemblyAI error: " + error.message, true);
+      ui.showToast("AssemblyAI hatası: " + error.message, true);
       log("stt:assemblyai error", error);
-      // Force-reset recording state even if stopPTT early-returns.
       state.setRecording(false);
       dom.pttBtn.classList.remove("recording");
       dom.waveform.style.display = "none";
@@ -150,40 +156,28 @@ export function createPttController({
 
       mediaRecorder.addEventListener("stop", async () => {
         const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
-        const formData = new FormData();
-        formData.append("file", audioBlob, "audio.webm");
-        formData.append("model", state.getSetting("whisperModel") || "whisper-1");
-
-        if (state.getSetting("sttLanguage")) {
-          const languageCode = state.getSetting("sttLanguage").split("-")[0];
-          formData.append("language", languageCode);
-        }
-
         dom.textInput.placeholder = "Transcribing...";
         log("stt:whisper upload start");
 
         try {
-          const baseUrl = (state.getSetting("whisperBaseUrl") || "https://api.openai.com/v1")
-            .replace(/\/+$/, "");
-          const endpoint = baseUrl.endsWith("/audio/transcriptions")
-            ? baseUrl
-            : `${baseUrl}/audio/transcriptions`;
+          const arrayBuffer = await audioBlob.arrayBuffer();
+          const bytes = new Uint8Array(arrayBuffer);
+          let binary = "";
+          for (let index = 0; index < bytes.length; index += 1) {
+            binary += String.fromCharCode(bytes[index]);
+          }
+          const audioBase64 = btoa(binary);
+          const language = state.getSetting("sttLanguage") || "";
 
-          const response = await fetch(endpoint, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${state.getSetting("whisperApiKey")}`,
-            },
-            body: formData,
+          const result = await api.invoke("transcribe-whisper-audio", {
+            audioBase64,
+            mimeType: "audio/webm",
+            fileName: "audio.webm",
+            language,
           });
 
-          if (!response.ok) {
-            throw new Error(`Whisper Error ${response.status}: ${await response.text()}`);
-          }
-
-          const data = await response.json();
-          if (data.text) {
-            messaging.sendMessage(data.text);
+          if (result?.text) {
+            messaging.sendMessage(result.text);
           }
         } catch (error) {
           ui.showToast("Transcription failed: " + error.message, true);

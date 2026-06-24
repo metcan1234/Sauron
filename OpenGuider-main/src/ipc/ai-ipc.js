@@ -381,7 +381,66 @@ function registerAiIpc({
       const json = await resp.json();
       return json.token;
     }
-    throw new Error("No AssemblyAI API key configured. Go to Settings → Voice and add your key.");
+    throw new Error("AssemblyAI API anahtarı yok. Ayarlar → Ses bölümünden key girin.");
+  });
+
+  ipcMain.handle("get-stt-readiness", async () => {
+    debugLog("ipc:get-stt-readiness");
+    const settings = await getRuntimeSettings();
+    const { resolveSttReadiness } = require("../sauron/stt-readiness");
+    return resolveSttReadiness(settings);
+  });
+
+  ipcMain.handle("transcribe-whisper-audio", async (_event, payload = {}) => {
+    debugLog("ipc:transcribe-whisper-audio");
+    const settings = await getRuntimeSettings();
+    const { resolveWhisperApiKey } = require("../sauron/stt-readiness");
+    const apiKey = resolveWhisperApiKey(settings);
+    if (!apiKey) {
+      throw new Error("Whisper/OpenAI API anahtarı yok. Ayarlar → Ses bölümünden key girin.");
+    }
+
+    const audioBase64 = String(payload.audioBase64 || "").trim();
+    if (!audioBase64) {
+      throw new Error("Ses verisi alınamadı.");
+    }
+
+    const buffer = Buffer.from(audioBase64, "base64");
+    const baseUrl = String(settings.whisperBaseUrl || "https://api.openai.com/v1").replace(/\/+$/, "");
+    const endpoint = baseUrl.endsWith("/audio/transcriptions")
+      ? baseUrl
+      : `${baseUrl}/audio/transcriptions`;
+
+    const form = new FormData();
+    form.append(
+      "file",
+      new Blob([buffer], { type: payload.mimeType || "audio/webm" }),
+      payload.fileName || "audio.webm",
+    );
+    form.append("model", settings.whisperModel || "whisper-1");
+    const language = String(payload.language || "").trim();
+    if (language) {
+      form.append("language", language.split("-")[0]);
+    }
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: form,
+    });
+
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => "");
+      throw new Error(`Whisper Error ${response.status}: ${errBody || response.statusText}`);
+    }
+
+    const data = await response.json();
+    return {
+      ok: true,
+      text: String(data.text || "").trim(),
+    };
   });
 
   ipcMain.handle("get-ollama-models", async () => {

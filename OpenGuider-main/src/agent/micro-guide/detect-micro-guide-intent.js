@@ -17,6 +17,12 @@ const POSITIVE_PATTERNS = [
   /\bwhere\s+is\b/i,
   /\bhelp\s+me\s+(open|find|click)\b/i,
   /\bshow\s+me\s+where\b/i,
+  /\bekran(ı|im|ımda|ımdaki|da)\b/i,
+  /\bgördü(ğün|klerini|ğünü)\b/i,
+  /\bbak\b.*\b(ekran|kişi|pencere|ekranda)\b/i,
+  /\b(ekran|screen)\s*(da|de|ımda|imde)\b.*\b(gör|yaz|söyle|anlat|bak)\b/i,
+  /\bwhat\s+do\s+you\s+see\b/i,
+  /\bon\s+my\s+screen\b/i,
 ];
 
 const NEGATIVE_PATTERNS = [

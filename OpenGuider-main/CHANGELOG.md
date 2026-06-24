@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.2.9 — 2026-06-24
+
+### Fixed — Mikro rehber + ses (PTT)
+- **⏺ Kayıt butonu**: Whisper artık main process IPC ile çalışır; boş API key ile renderer'dan 401 gitmez
+- **STT fallback**: Whisper key yoksa AssemblyAI'ye (veya tersi) otomatik düşer; key yoksa net Türkçe uyarı
+- **OpenAI key**: Whisper seçiliyken `openaiApiKey` de kabul edilir
+- **Mikro rehber intent**: "ekranımdaki…", "ekranımda gördüğün…" gibi Türkçe ekran cümleleri mikro-tura yönlendirilir
+
 ## 2.2.8 — 2026-06-24
 
 ### Fixed — Goose DeepSeek provider
