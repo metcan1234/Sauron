@@ -6,9 +6,9 @@ const path = require("path");
 const { buildGamedevHandoffSummary } = require("../../src/sauron/gamedev-task-optimizer");
 const { startGamePipeline, getCurrentPhaseGoal } = require("../../src/sauron/game-pipeline");
 
-test("gamedev pipeline phase goal produces bounded handoff with mcpTools full", () => {
+test("gamedev pipeline phase goal produces bounded handoff with mcpTools full", async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "sauron-gamedev-handoff-"));
-  startGamePipeline({
+  await startGamePipeline({
     pipelineId: "unity-co-op-climb-v1",
     workspacePath: tmp,
     taskDescription: "peak style climb",

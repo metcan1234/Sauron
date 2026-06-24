@@ -18,6 +18,7 @@ function registerGamedevIpc({
   getRuntimeSettings,
   panelWindow,
   store,
+  streamAIResponse,
 }) {
   attachGamedevSessionStore(store);
 
@@ -51,15 +52,17 @@ function registerGamedevIpc({
   ipcMain.handle("activate-gamedev-mode", handleActivateGamedevMode);
   ipcMain.handle("toggle-gamedev-mode", handleActivateGamedevMode);
 
-  ipcMain.handle("start-gamedev-session", async (_event, { taskText, workspacePath, engine } = {}) => {
+  ipcMain.handle("start-gamedev-session", async (_event, { taskText, masterPrompt, workspacePath, engine } = {}) => {
     debugLog("ipc:start-gamedev-session");
     try {
       const settings = await getRuntimeSettings();
       const result = await launchGamedevSession({
         workspacePath: resolveWorkspacePath(workspacePath),
         taskText,
+        masterPrompt: masterPrompt || settings.gamedevMasterPrompt || "",
         settings,
         engineOverride: engine || null,
+        streamAIResponse,
       });
       return result;
     } catch (error) {
@@ -72,9 +75,9 @@ function registerGamedevIpc({
     const settings = await getRuntimeSettings();
     const probe = probeGamedevMcpEntry(settings);
     const sessionInfo = getGamedevSessionInfo();
-    const status = await getGamedevStatus(settings);
     const workspacePath = resolveWorkspacePath(null);
-    const finops = workspacePath ? summarizeGamedevLedger(workspacePath) : null;
+    const status = await getGamedevStatus(settings, settings.gamedevActiveEngine, workspacePath);
+    const finops = workspacePath ? summarizeGamedevLedger(workspacePath) : status.finops;
     const gamePipeline = workspacePath ? getGamePipelineStatus(workspacePath) : null;
     return {
       ...status,
@@ -82,7 +85,7 @@ function registerGamedevIpc({
       modeActive: sessionInfo.modeActive === true,
       mcpEntryOk: probe.ok,
       enabled: settings.gamedevEnabled !== false,
-      finops,
+      finops: finops ? { ...status.finops, ...finops } : status.finops,
       gamePipeline,
     };
   });

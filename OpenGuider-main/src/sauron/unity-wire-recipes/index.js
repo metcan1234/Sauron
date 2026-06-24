@@ -27,11 +27,8 @@ function loadWireRecipe(recipeId) {
 }
 
 function resolveWireRecipePointer(genre, phase) {
-  const genreKey = String(genre || "").trim();
+  const genreKey = String(genre || "").trim() || "empty";
   const phaseNum = Number(phase) || 1;
-  if (!genreKey || genreKey === "empty") {
-    return phaseNum === 2 ? "empty-phase2" : null;
-  }
   const candidate = `${genreKey}-phase${phaseNum}`;
   const recipePath = path.join(RECIPES_DIR, `${candidate}.json`);
   if (fs.existsSync(recipePath)) {

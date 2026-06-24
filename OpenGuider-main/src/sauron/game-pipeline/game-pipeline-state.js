@@ -52,10 +52,12 @@ function clearTaskCompleteArtifact(workspacePath) {
   }
 }
 
-async function runGameVerification(workspacePath, verification) {
+async function runGameVerification(workspacePath, verification, options = {}) {
   if (!verification) {
     return { ok: true, skipped: true };
   }
+
+  const strict = options.strict === true;
 
   if (verification.artifact) {
     const artifact = readTaskCompleteArtifact(workspacePath);
@@ -66,7 +68,22 @@ async function runGameVerification(workspacePath, verification) {
   }
 
   if (verification.mcp === "unity_play_mode") {
-    const { runUnityPlayModeVerification } = require("../gamedev-mcp-proxy");
+    const { runUnityPlayModeVerification, probeUnityBridge } = require("../gamedev-mcp-proxy");
+    const probe = await probeUnityBridge();
+    if (!probe.connected) {
+      if (strict) {
+        return {
+          ok: false,
+          skipped: false,
+          error: "Unity bridge bağlı değil — son faz playtest doğrulaması başarısız.",
+        };
+      }
+      return {
+        ok: true,
+        skipped: true,
+        warn: probe.error || "Unity bridge not connected",
+      };
+    }
     return runUnityPlayModeVerification("play");
   }
 

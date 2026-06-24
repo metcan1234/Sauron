@@ -1476,6 +1476,7 @@ function registerModularIpcHandlers() {
     getRuntimeSettings,
     panelWindow,
     store,
+    streamAIResponse,
   });
 
   registerGamePipelineIpc({
@@ -1485,6 +1486,7 @@ function registerModularIpcHandlers() {
     getRuntimeSettings,
     panelWindow,
     store,
+    streamAIResponse,
   });
 
   registerBrowserIpc({

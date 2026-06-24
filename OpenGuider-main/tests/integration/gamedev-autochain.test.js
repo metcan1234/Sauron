@@ -10,7 +10,7 @@ const {
 
 test("game pipeline auto-chain integration produces phase 2 handoff", async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "sauron-gamedev-chain-"));
-  const started = startGamePipeline({
+  const started = await startGamePipeline({
     pipelineId: "unity-social-deduction-v1",
     workspacePath: tmp,
     taskDescription: "feign style social game",

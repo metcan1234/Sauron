@@ -83,9 +83,14 @@ function writeWireRecipeToWorkspace(workspacePath, genre) {
     return;
   }
   fs.mkdirSync(recipesDest, { recursive: true });
-  const prefix = `${genre}-`;
+  const prefixes = [genre, "empty"];
   for (const file of fs.readdirSync(recipesSrc)) {
-    if (file.startsWith(prefix) || file === "empty-phase2.json") {
+    if (!file.endsWith(".json")) {
+      continue;
+    }
+    const base = file.replace(/\.json$/, "");
+    const match = prefixes.some((prefix) => base === prefix || base.startsWith(`${prefix}-phase`));
+    if (match) {
       fs.copyFileSync(path.join(recipesSrc, file), path.join(recipesDest, file));
     }
   }

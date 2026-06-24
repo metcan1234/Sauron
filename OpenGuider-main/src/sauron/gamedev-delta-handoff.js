@@ -1,7 +1,9 @@
 const { shouldUseDeltaHandoff, updateHandoffContextCache } = require("./handoff-context-cache");
+const { hashBriefText } = require("./gamedev-prompt-compiler");
 
-function resolveGamedevDeltaHandoff(settings, workspacePath, goalText) {
-  const useDelta = shouldUseDeltaHandoff(settings, workspacePath, goalText);
+function resolveGamedevDeltaHandoff(settings, workspacePath, goalText, briefHash = null) {
+  const briefKey = briefHash ? `brief:${briefHash}` : goalText;
+  const useDelta = shouldUseDeltaHandoff(settings, workspacePath, briefKey);
   return {
     deltaMode: useDelta,
     hint: useDelta

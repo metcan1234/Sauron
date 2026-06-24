@@ -56,6 +56,7 @@ export function queryPanelDom(doc = document) {
     btnGamedevCancel: doc.getElementById("btn-gamedev-cancel"),
     gamedevStudioBar: doc.getElementById("gamedev-studio-bar"),
     gamedevTemplateSelect: doc.getElementById("gamedev-template-select"),
+    gamedevMasterPrompt: doc.getElementById("gamedev-master-prompt"),
     gamedevPipelineBar: doc.getElementById("gamedev-pipeline-bar"),
     gamedevDashboardLink: doc.getElementById("gamedev-dashboard-link"),
     gamedevSetupOverlay: doc.getElementById("gamedev-setup-overlay"),

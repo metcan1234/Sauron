@@ -1,5 +1,5 @@
 const { getGamePipeline } = require("./game-pipeline-registry");
-const { planGamePipeline } = require("./game-pipeline-planner");
+const { planGamePipeline, getPhasesFromPipelineState } = require("./game-pipeline-planner");
 const {
   readGamePipelineState,
   writeGamePipelineState,
@@ -14,9 +14,9 @@ function getCurrentPhaseDef(pipelineState) {
   if (!pipelineState) {
     return null;
   }
-  const template = getGamePipeline(pipelineState.templateId);
+  const phases = getPhasesFromPipelineState(pipelineState);
   const currentPhase = Number(pipelineState.currentPhase) || 1;
-  return template?.phases?.find((p) => p.phase === currentPhase) || null;
+  return phases.find((p) => p.phase === currentPhase) || null;
 }
 
 function getCurrentPhaseGoal(workspacePath) {
@@ -26,21 +26,26 @@ function getCurrentPhaseGoal(workspacePath) {
   if (!phaseDef || !state) {
     return null;
   }
+  const phases = getPhasesFromPipelineState(state);
   return {
-    pipeline: { ...state, label: template?.label, phases: template?.phases },
+    pipeline: { ...state, label: template?.label || state.label, phases },
     phase: phaseDef.phase,
     goal: phaseDef.goal,
     totalPhases: state.totalPhases,
     templateId: state.templateId,
     genre: state.genre,
     templateScaffold: state.templateScaffold,
+    briefMeta: state.briefMeta || null,
   };
 }
 
-function startGamePipeline({
+async function startGamePipeline({
   pipelineId,
   workspacePath,
   taskDescription = "",
+  masterPrompt = "",
+  settings = {},
+  streamAIResponse = null,
   forceRestart = false,
 } = {}) {
   const resolvedPath = String(workspacePath || "").trim();
@@ -54,7 +59,13 @@ function startGamePipeline({
     return { ok: true, pipeline: existing, resumed: true, phase };
   }
 
-  const planned = planGamePipeline(pipelineId, { taskDescription });
+  const planned = await planGamePipeline(pipelineId, {
+    taskDescription,
+    masterPrompt: masterPrompt || taskDescription,
+    workspacePath: resolvedPath,
+    settings,
+    streamAIResponse,
+  });
   if (!planned.ok) {
     return planned;
   }
@@ -121,12 +132,15 @@ async function advanceGamePipelineAfterComplete(workspacePath, settings = {}, de
   }
 
   const currentPhase = Number(pipelineState.currentPhase) || 1;
-  const template = getGamePipeline(pipelineState.templateId);
-  const phaseDef = template?.phases?.find((p) => p.phase === currentPhase);
+  const phases = getPhasesFromPipelineState(pipelineState);
+  const phaseDef = phases.find((p) => p.phase === currentPhase);
 
   let verificationResult = { ok: true, skipped: true };
+  const isFinalPhase = currentPhase >= pipelineState.totalPhases;
   if (phaseDef?.verification) {
-    verificationResult = await runGameVerification(resolvedPath, phaseDef.verification);
+    verificationResult = await runGameVerification(resolvedPath, phaseDef.verification, {
+      strict: isFinalPhase,
+    });
   }
 
   if (!verificationResult.ok) {
@@ -166,7 +180,7 @@ async function advanceGamePipelineAfterComplete(workspacePath, settings = {}, de
   }
 
   const nextPhase = currentPhase + 1;
-  const nextPhaseDef = template.phases.find((p) => p.phase === nextPhase);
+  const nextPhaseDef = phases.find((p) => p.phase === nextPhase);
   pipelineState.currentPhase = nextPhase;
   writeGamePipelineState(resolvedPath, pipelineState);
 

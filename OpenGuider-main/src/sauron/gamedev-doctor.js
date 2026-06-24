@@ -87,6 +87,43 @@ function appendGamedevChecks(checks, store, settings = {}) {
       message: hasConfig ? "Workspace MCP config yazılmış" : "Workspace MCP config henüz yok",
       fixHint: hasConfig ? "" : "Panelde 🎮 veya Oyun yap butonuna basın — config otomatik yazılır.",
     });
+
+    try {
+      const { readGameDesignBrief } = require("./gamedev-prompt-compiler");
+      const { listWireRecipeFiles } = require("./unity-wire-recipes");
+      const brief = readGameDesignBrief(workspacePath);
+      push({
+        id: "gamedev-brief",
+        status: brief ? "pass" : "warn",
+        message: brief
+          ? `Oyun planı brief: ${String(brief.masterPrompt || "").slice(0, 60)}…`
+          : "Oyun planı brief henüz yok",
+        fixHint: brief ? "" : "Game Studio'da Oyun planım yazıp 🎮 ile oturum başlatın.",
+      });
+
+      const recipeCount = listWireRecipeFiles().length;
+      push({
+        id: "gamedev-wire-recipes",
+        status: recipeCount >= 21 ? "pass" : "warn",
+        message: `Wire recipe kapsamı: ${recipeCount} dosya`,
+        fixHint: recipeCount >= 21 ? "" : "Sauron sürümünü güncelleyin — wire recipe paketi eksik.",
+      });
+
+      const templateMarker = path.join(workspacePath, ".sauron", "gamedev-template.json");
+      if (fs.existsSync(templateMarker)) {
+        const assetsRoot = path.join(workspacePath, "Assets", "SauronGameDev");
+        const hasPrefabs = fs.existsSync(assetsRoot) && fs.readdirSync(assetsRoot, { withFileTypes: true })
+          .some((entry) => entry.isDirectory() && fs.existsSync(path.join(assetsRoot, entry.name, "Prefabs")));
+        push({
+          id: "gamedev-prefab-scaffold",
+          status: hasPrefabs ? "pass" : "warn",
+          message: hasPrefabs ? "Genre prefab klasörü mevcut" : "Prefab scaffold henüz kopyalanmadı",
+          fixHint: hasPrefabs ? "" : "Faz 1 scaffold veya şablon seçimi ile prefab'lar kopyalanır.",
+        });
+      }
+    } catch {
+      // optional brief/recipe checks
+    }
   }
 }
 

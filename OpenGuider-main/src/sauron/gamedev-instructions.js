@@ -18,7 +18,7 @@ function buildGamedevRulesContent(engine = "unity") {
 # Sauron Game Dev — MCP Kuralları (${label})
 
 ## Altın kural
-**LLM düşünür (az), MCP yapar (çok).** 67 MCP tool'un tamamı kullanılabilir — kısıtlama yok.
+**LLM düşünür (az), MCP yapar (çok).** 74 MCP tool'un tamamı kullanılabilir — kısıtlama yok.
 
 ## Tool-first
 | Görev | MCP tool | Dosya okuma |
@@ -27,13 +27,21 @@ function buildGamedevRulesContent(engine = "unity") {
 | Obje | \`${toolPrefix}_create_*\` | — |
 | Fizik | \`${toolPrefix}_*physics*\`, rigidbody, raycast | — |
 | Playtest | \`${toolPrefix}_play_mode\` veya eşdeğeri | — |
+| Script | \`${toolPrefix}_script\` | — |
+| Scene | \`${toolPrefix}_scene\` | — |
+
+## Prompt Fabrikası (v2.2)
+1. Oyun planı: \`.sauron/game-design-brief.json\` — handoff'ta yalnızca pointer + 1 satır özet.
+2. Faz hedefleri brief'ten türetilir; registry sabit metin değil.
+3. Wire recipe pointer: \`.sauron/unity-wire-recipes/{genre}-phase{N}.json\`
+4. Pipeline state: \`.sauron/game-pipeline.json\`
 
 ## Token tasarrufu
 1. MCP tool çağrıları LLM token harcamaz.
 2. Plan: handoff maddelerini takip et; transcript tekrar gönderme.
 3. Scene cache: \`.sauron/gamedev-scene-cache.json\`
-4. Delta handoff: aynı hedefte workspace tree tekrar yok.
-5. Economy model plan için yeterli.
+4. Delta handoff: aynı brief hash'te workspace tree tekrar yok.
+5. Economy model plan için yeterli; opsiyonel \`game-dev-plan\` LLM yalnızca ayarlarda açıksa.
 
 ## Onay
 Sahne silme, play mode, commit/push → kullanıcı onayı.

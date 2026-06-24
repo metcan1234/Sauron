@@ -5,6 +5,9 @@ const {
   normalizeGamedevEngine,
 } = require("./gamedev-config");
 const { probeGamedevMcpEntry } = require("./gamedev-path-resolver");
+const { readGameDesignBrief } = require("./gamedev-prompt-compiler");
+const { readGamePipelineState } = require("./game-pipeline/game-pipeline-state");
+const { summarizeGamedevLedger } = require("./gamedev-finops-ledger");
 
 function fetchDashboardStatus(port = GAMEDEV_DASHBOARD_PORT, timeoutMs = 2500) {
   return new Promise((resolve) => {
@@ -58,11 +61,19 @@ function pickConnectorStatus(data, engine) {
   };
 }
 
-async function getGamedevStatus(settings = {}, engine = "unity") {
+async function getGamedevStatus(settings = {}, engine = "unity", workspacePath = null) {
   const normalized = normalizeGamedevEngine(engine || settings.gamedevActiveEngine);
   const mcpProbe = probeGamedevMcpEntry(settings);
   const dashboard = await fetchDashboardStatus(GAMEDEV_DASHBOARD_PORT);
   const connector = pickConnectorStatus(dashboard.data, normalized);
+  const resolvedWorkspace = String(workspacePath || settings.workspacePath || "").trim();
+  const finops = resolvedWorkspace ? summarizeGamedevLedger(resolvedWorkspace) : null;
+  const brief = resolvedWorkspace ? readGameDesignBrief(resolvedWorkspace) : null;
+  const pipelineState = resolvedWorkspace ? readGamePipelineState(resolvedWorkspace) : null;
+  const phaseTokensEst = pipelineState?.totalEstimatedTokens || pipelineState?.phases?.reduce(
+    (sum, p) => sum + (p.estimatedTokens || 0),
+    0,
+  ) || 0;
 
   return {
     engine: normalized,
@@ -71,7 +82,19 @@ async function getGamedevStatus(settings = {}, engine = "unity") {
     mcpEntryOk: mcpProbe.ok,
     dashboardRunning: dashboard.ok,
     dashboardPort: GAMEDEV_DASHBOARD_PORT,
+    dashboardUrl: `http://127.0.0.1:${GAMEDEV_DASHBOARD_PORT}`,
     connector,
+    brief: brief ? {
+      pointer: ".sauron/game-design-brief.json",
+      summary: String(brief.masterPrompt || "").slice(0, 120),
+      compiledBy: brief.compiledBy,
+      briefHash: brief.briefHash,
+    } : null,
+    finops: finops ? {
+      ...finops,
+      phaseTokensEst,
+      briefCompiledBy: brief?.compiledBy || null,
+    } : { phaseTokensEst, briefCompiledBy: brief?.compiledBy || null },
     tokenPolicy: {
       mcpTools: "full",
       llmHandoff: "economy",

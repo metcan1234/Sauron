@@ -14,6 +14,7 @@ function registerGamePipelineIpc({
   getRuntimeSettings,
   panelWindow,
   store,
+  streamAIResponse,
 }) {
   function resolveWorkspacePath(workspacePath) {
     const fromArg = String(workspacePath || "").trim();
@@ -61,10 +62,14 @@ function registerGamePipelineIpc({
         scaffoldResult = scaffoldUnityTemplate(resolved, pipeline.templateId);
       }
 
-      const result = startGamePipeline({
+      const settings = await getRuntimeSettings();
+      const result = await startGamePipeline({
         pipelineId,
         workspacePath: resolved,
         taskDescription,
+        masterPrompt: settings.gamedevMasterPrompt || taskDescription,
+        settings,
+        streamAIResponse,
         forceRestart: forceRestart === true,
       });
 

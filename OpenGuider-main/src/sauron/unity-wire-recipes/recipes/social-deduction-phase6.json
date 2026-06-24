@@ -1,0 +1,10 @@
+{
+  "id": "social-deduction-phase6",
+  "genre": "social-deduction",
+  "phase": 6,
+  "steps": [
+    "unity_load_scene",
+    "unity_play_mode",
+    "unity_get_hierarchy"
+  ]
+}

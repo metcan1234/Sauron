@@ -37,6 +37,8 @@ const {
 const { appendGamedevLedgerEvent } = require("./gamedev-finops-ledger");
 const { resolveGamedevGenre } = require("./gamedev-genre-router");
 const { resolveWireRecipePointer } = require("./unity-wire-recipes");
+const { buildBriefHandoffHint, BRIEF_POINTER, readGameDesignBrief, hashBriefText } = require("./gamedev-prompt-compiler");
+const { tryExecuteWireRecipe } = require("./gamedev-wire-executor");
 const {
   startGamePipeline,
   getCurrentPhaseGoal,
@@ -97,8 +99,10 @@ async function toggleGamedevMode(settings = {}) {
 async function launchGamedevSession({
   workspacePath,
   taskText,
+  masterPrompt = "",
   settings = {},
   engineOverride = null,
+  streamAIResponse = null,
 } = {}) {
   if (settings.gamedevEnabled === false) {
     return { ok: false, error: "Game Dev modu devre dışı. Ayarlar → Eklentiler." };
@@ -110,8 +114,10 @@ async function launchGamedevSession({
   }
 
   const rawTask = String(taskText || "").trim();
-  if (!rawTask) {
-    return { ok: false, error: "Game Dev için görev metni gerekli." };
+  const rawMaster = String(masterPrompt || settings.gamedevMasterPrompt || "").trim();
+  const effectiveMaster = rawMaster || rawTask;
+  if (!effectiveMaster) {
+    return { ok: false, error: "Game Dev için görev veya oyun planı gerekli." };
   }
 
   const probe = probeGamedevMcpEntry(settings);
@@ -124,12 +130,15 @@ async function launchGamedevSession({
   const notices = [];
   const routing = resolveGamedevMode(settings);
 
-  const genre = resolveGamedevGenre(rawTask, settings);
+  const genre = resolveGamedevGenre(effectiveMaster, settings);
   const pipelineId = String(settings.gamedevPipelineId || genre.pipelineId || "unity-empty-v1").trim();
-  const pipelineStart = startGamePipeline({
+  const pipelineStart = await startGamePipeline({
     pipelineId,
     workspacePath: resolvedWorkspace,
-    taskDescription: rawTask,
+    taskDescription: rawTask || effectiveMaster.slice(0, 200),
+    masterPrompt: effectiveMaster,
+    settings,
+    streamAIResponse,
   });
   if (!pipelineStart.ok) {
     return { ok: false, error: pipelineStart.error };
@@ -145,8 +154,28 @@ async function launchGamedevSession({
   }
 
   const effectiveTask = phaseInfo?.goal || rawTask;
+  const brief = readGameDesignBrief(resolvedWorkspace);
   const wireRecipePointer = phaseInfo ? resolveWireRecipePointer(phaseInfo.genre || genre.genre, phaseInfo.phase) : null;
-  const delta = resolveGamedevDeltaHandoff(settings, resolvedWorkspace, effectiveTask);
+  if (wireRecipePointer) {
+    const wireRun = await tryExecuteWireRecipe(wireRecipePointer);
+    if (wireRun.ok && !wireRun.skipped) {
+      notices.push(`Wire recipe executed: ${wireRecipePointer} (${wireRun.stepsRun || 0} steps)`);
+      appendGamedevLedgerEvent(resolvedWorkspace, {
+        type: "mcp-tool",
+        count: wireRun.stepsRun || 0,
+        source: "wire-executor",
+        recipeId: wireRecipePointer,
+      });
+    } else if (wireRun.skipped) {
+      notices.push(`Wire recipe deferred: ${wireRecipePointer}`);
+    }
+  }
+  const delta = resolveGamedevDeltaHandoff(
+    settings,
+    resolvedWorkspace,
+    effectiveTask,
+    brief?.briefHash || hashBriefText(effectiveMaster),
+  );
   const planBullets = buildGameDevPlanBullets(effectiveTask);
 
   const mcpWrite = writeGamedevMcpConfig(resolvedWorkspace, settings, engine);
@@ -159,6 +188,7 @@ async function launchGamedevSession({
   seedGamedevRules(resolvedWorkspace, engine);
 
   const sceneHint = buildSceneCacheHandoffHint(resolvedWorkspace, engine);
+  const briefHint = buildBriefHandoffHint(pipelineStart.pipeline?.briefMeta?.briefSummary || effectiveMaster.slice(0, 120));
   const handoffMeta = buildGamedevHandoffSummary({
     taskText: effectiveTask,
     engine,
@@ -170,6 +200,7 @@ async function launchGamedevSession({
       ...(phaseInfo
         ? [`Pipeline: ${phaseInfo.pipeline.label} — Faz ${phaseInfo.phase}/${phaseInfo.totalPhases}`]
         : []),
+      briefHint,
       ...(delta.hint ? [delta.hint] : []),
       ...(sceneHint ? [sceneHint] : []),
       ...(planBullets ? [`Plan (0-token):\n${planBullets}`] : []),
@@ -198,6 +229,7 @@ async function launchGamedevSession({
     pipelinePhase: phaseInfo?.phase || null,
     pipelineTotalPhases: phaseInfo?.totalPhases || null,
     wireRecipe: wireRecipePointer,
+    briefPointer: BRIEF_POINTER,
     gamedev: {
       engine,
       mcpServerId: mcpWrite.serverId,
@@ -213,6 +245,7 @@ async function launchGamedevSession({
       phase: phaseInfo?.phase || null,
       totalPhases: phaseInfo?.totalPhases || null,
       wireRecipe: wireRecipePointer,
+      briefPointer: BRIEF_POINTER,
     },
     costContext: {
       coreModelTier: optimizer.coreModelTier,

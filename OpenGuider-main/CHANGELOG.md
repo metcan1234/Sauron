@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.2.0 — 2026-06-24
+
+### Added — Prompt Fabrikası (Game Dev v2.2)
+- **`gamedev-prompt-compiler`**: master prompt → `.sauron/game-design-brief.json` + customized phase goals (0-token heuristic default; optional `game-dev-plan` LLM)
+- **Master Prompt UI**: Game Studio “Oyun planım” textarea + `gamedevUseLlmPlan` settings toggle
+- **Brief pointer handoff**: full brief never embedded — pointer + ~120 char summary only
+- **Wire recipes**: 21 genre×phase recipes + optional `gamedev-wire-executor` (MCP 0-token)
+- **Template depth**: genre prefab stubs, Editor Host/Join debug menu
+- **Instructions v3.1**: 74 tools, brief, wire, pipeline pointers
+- **FinOps badge**: brief compile source + phase token estimate in status
+- **Doctor**: brief file, wire recipe coverage, prefab scaffold checks
+- **Playtest gate**: final phase requires Unity bridge for `unity_play_mode` verification
+
+### Fixed
+- **Pipeline phases bug**: runtime uses `pipelineState.phases` (compiler output) instead of registry template only
+
+### Preserved
+- `mcpTools: "full"`, bounded handoff, build/goose/⌘ channels unchanged
+
 ## 2.1.0 — 2026-06-24
 
 ### Added — Game Dev Production System

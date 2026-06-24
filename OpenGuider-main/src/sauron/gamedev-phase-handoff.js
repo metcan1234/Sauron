@@ -20,6 +20,7 @@ const {
 } = require("./gamedev-router");
 const { appendGamedevLedgerEvent } = require("./gamedev-finops-ledger");
 const { resolveWireRecipePointer } = require("./unity-wire-recipes");
+const { buildBriefHandoffHint, BRIEF_POINTER, readGameDesignBrief, hashBriefText } = require("./gamedev-prompt-compiler");
 const { getGamedevStatus } = require("./gamedev-status");
 const { scaffoldUnityTemplate } = require("./scaffold-unity-template");
 
@@ -86,6 +87,8 @@ async function writeGamedevPhaseHandoff({
   }
 
   const wireRecipePointer = resolveWireRecipePointer(pipelineState.genre, phaseDef.phase);
+  const brief = readGameDesignBrief(resolvedWorkspace);
+  const briefHint = buildBriefHandoffHint(brief?.masterPrompt?.slice(0, 120) || pipelineState.masterPrompt?.slice(0, 120));
   const overrides = buildGamePhaseHandoffOverrides({
     pipelineState,
     phaseDef,
@@ -94,7 +97,12 @@ async function writeGamedevPhaseHandoff({
     wireRecipePointer,
   });
   const effectiveTask = overrides.goal;
-  const delta = resolveGamedevDeltaHandoff(settings, resolvedWorkspace, effectiveTask);
+  const delta = resolveGamedevDeltaHandoff(
+    settings,
+    resolvedWorkspace,
+    effectiveTask,
+    brief?.briefHash || hashBriefText(brief?.masterPrompt || pipelineState.masterPrompt || effectiveTask),
+  );
   const planBullets = buildGameDevPlanBullets(effectiveTask);
 
   const mcpWrite = writeGamedevMcpConfig(resolvedWorkspace, settings, engine);
@@ -120,6 +128,7 @@ async function writeGamedevPhaseHandoff({
       ...(sceneHint ? [sceneHint] : []),
       ...(planBullets ? [`Plan (0-token):\n${planBullets}`] : []),
       ...(wireRecipePointer ? [`Wire recipe pointer: ${wireRecipePointer}`] : []),
+      briefHint,
     ],
   });
 
@@ -145,6 +154,7 @@ async function writeGamedevPhaseHandoff({
     pipelineTotalPhases: pipelineState.totalPhases,
     parentHandoffId,
     wireRecipe: wireRecipePointer,
+    briefPointer: BRIEF_POINTER,
     gamedev: {
       engine,
       mcpServerId: mcpWrite.serverId,
@@ -160,6 +170,7 @@ async function writeGamedevPhaseHandoff({
       phase: phaseDef.phase,
       totalPhases: pipelineState.totalPhases,
       wireRecipe: wireRecipePointer,
+      briefPointer: BRIEF_POINTER,
     },
     costContext: {
       coreModelTier: optimizer.coreModelTier,

@@ -51,6 +51,7 @@ public static class SauronTemplateBootstrap
 
         EnsureNetworkManager(genreRoot);
         EnsureGenreObjects(genreRoot);
+        EnsureHostJoinDebugUi(genreRoot);
     }
 
     static string FindSauronGenreRoot()
@@ -121,6 +122,44 @@ public static class SauronTemplateBootstrap
             platform.transform.localScale = new Vector3(4f, 0.5f, 4f);
             Undo.RegisterCreatedObjectUndo(platform, "Sauron ClimbPlatform");
         }
+    }
+
+    static void EnsureHostJoinDebugUi(string genreRoot)
+    {
+        if (GameObject.Find("SauronHostJoinUI") != null)
+        {
+            return;
+        }
+
+        var uiRoot = new GameObject("SauronHostJoinUI");
+        var genre = Path.GetFileName(genreRoot).ToLowerInvariant();
+        var hostBtn = new GameObject("HostButton");
+        hostBtn.transform.SetParent(uiRoot.transform);
+        hostBtn.transform.localPosition = new Vector3(-1.5f, 0f, 0f);
+        var joinBtn = new GameObject("JoinButton");
+        joinBtn.transform.SetParent(uiRoot.transform);
+        joinBtn.transform.localPosition = new Vector3(1.5f, 0f, 0f);
+        uiRoot.transform.position = new Vector3(0f, 3f, 0f);
+        Undo.RegisterCreatedObjectUndo(uiRoot, "Sauron Host/Join UI");
+
+        Debug.Log($"[Sauron] {genre} scaffold ready — use Sauron/Host Game or Sauron/Join Game from menu.");
+    }
+
+    [MenuItem("Sauron/Host Game")]
+    static void SauronHostGame()
+    {
+        Debug.Log("[Sauron] Host Game — wire Netcode NetworkManager in play mode.");
+        var genreRoot = FindSauronGenreRoot();
+        if (genreRoot != null)
+        {
+            EnsureNetworkManager(genreRoot);
+        }
+    }
+
+    [MenuItem("Sauron/Join Game")]
+    static void SauronJoinGame()
+    {
+        Debug.Log("[Sauron] Join Game — connect client via Netcode transport.");
     }
 }
 #endif

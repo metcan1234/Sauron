@@ -19,22 +19,22 @@ test("listGamePipelines includes unity genre pipelines", () => {
   assert.ok(ids.includes("unity-social-deduction-v1"));
 });
 
-test("planGamePipeline creates active state", () => {
-  const planned = planGamePipeline("unity-empty-v1", { taskDescription: "red cube" });
+test("planGamePipeline creates active state", async () => {
+  const planned = await planGamePipeline("unity-empty-v1", { taskDescription: "red cube" });
   assert.equal(planned.ok, true);
   assert.equal(planned.pipeline.status, "active");
   assert.equal(planned.pipeline.totalPhases, 4);
 });
 
-test("startGamePipeline resumes active pipeline", () => {
+test("startGamePipeline resumes active pipeline", async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "sauron-game-pipeline-"));
-  const first = startGamePipeline({
+  const first = await startGamePipeline({
     pipelineId: "unity-co-op-climb-v1",
     workspacePath: tmp,
     taskDescription: "climb mountain",
   });
   assert.equal(first.ok, true);
-  const second = startGamePipeline({
+  const second = await startGamePipeline({
     pipelineId: "unity-horror-coop-v1",
     workspacePath: tmp,
   });
@@ -42,12 +42,12 @@ test("startGamePipeline resumes active pipeline", () => {
   assert.equal(second.pipeline.templateId, "unity-co-op-climb-v1");
   const phase = getCurrentPhaseGoal(tmp);
   assert.equal(phase.phase, 1);
-  assert.match(phase.goal, /playable|Verify/i);
+  assert.match(phase.goal, /playable|Verify|scaffold/i);
 });
 
-test("advanceGamePipeline moves to next phase after task complete artifact", () => {
+test("advanceGamePipeline moves to next phase after task complete artifact", async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "sauron-game-pipeline-adv-"));
-  const started = startGamePipeline({
+  const started = await startGamePipeline({
     pipelineId: "unity-empty-v1",
     workspacePath: tmp,
   });

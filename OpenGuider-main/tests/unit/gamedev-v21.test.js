@@ -15,7 +15,7 @@ const { scaffoldUnityTemplate } = require("../../src/sauron/scaffold-unity-templ
 
 test("advanceGamePipelineAfterComplete writes next phase handoff", async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "sauron-game-adv-handoff-"));
-  const started = startGamePipeline({
+  const started = await startGamePipeline({
     pipelineId: "unity-empty-v1",
     workspacePath: tmp,
   });
@@ -44,7 +44,7 @@ test("advanceGamePipelineAfterComplete writes next phase handoff", async () => {
 
 test("writeGamedevPhaseHandoff keeps mcpTools full and bounded summary", async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "sauron-phase-handoff-"));
-  const started = startGamePipeline({
+  const started = await startGamePipeline({
     pipelineId: "unity-co-op-climb-v1",
     workspacePath: tmp,
   });
@@ -59,6 +59,7 @@ test("writeGamedevPhaseHandoff keeps mcpTools full and bounded summary", async (
   assert.equal(written.ok, true);
   const handoff = JSON.parse(fs.readFileSync(written.handoffPath, "utf8"));
   assert.equal(handoff.gamedev.mcpTools, "full");
+  assert.equal(handoff.briefPointer, ".sauron/game-design-brief.json");
   assert.equal(handoff.complexityHint, "low");
   assert.ok(handoff.taskSummary.length <= 4000);
 });
@@ -76,6 +77,12 @@ test("scaffoldUnityTemplate copies scene and shared assets", () => {
   assert.equal(result.ok, true);
   assert.ok(fs.existsSync(path.join(tmp, "Assets", "SauronGameDev", "co-op-climb", "Scenes", "Main.unity")));
   assert.ok(fs.existsSync(path.join(tmp, "Assets", "SauronGameDev", "_shared", "Editor", "SauronTemplateBootstrap.cs")));
+});
+
+test("listWireRecipeFiles covers genre pipelines", () => {
+  const { listWireRecipeFiles } = require("../../src/sauron/unity-wire-recipes");
+  const files = listWireRecipeFiles();
+  assert.ok(files.length >= 21);
 });
 
 test("probeUnityBridge returns structured result when offline", async () => {

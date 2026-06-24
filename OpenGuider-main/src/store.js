@@ -134,6 +134,9 @@ const schema = {
   gamedevDefaultMode: { type: "string", enum: ["economy", "balanced", "premium"], default: "economy" },
   gamedevPipelineId: { type: "string", default: "" },
   gamedevSetupComplete: { type: "boolean", default: false },
+  gamedevMasterPrompt: { type: "string", default: "" },
+  gamedevUseLlmPlan: { type: "boolean", default: false },
+  gamedevBriefMaxChars: { type: "number", default: 8000 },
 };
 function createStore() { return new Store({ schema, clearInvalidConfig: true }); }
 module.exports = { createStore, schema };

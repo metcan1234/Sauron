@@ -606,6 +606,10 @@ export function createPanelController({
     }
   }
 
+  function resolveGamedevMasterPrompt() {
+    return String(dom.gamedevMasterPrompt?.value || "").trim();
+  }
+
   function resolveGamedevTaskText() {
     const planPanel = dom.planPanel;
     const planVisible = planPanel && !planPanel.classList.contains("hidden");
@@ -661,7 +665,7 @@ export function createPanelController({
       dom.gamedevBadge.textContent = `🎮 Game Dev · ${engineLabel}${phaseSuffix} ${dot}`;
       const finops = payload.finops || payload.status?.finops;
       const finopsHint = finops
-        ? `MCP: ${finops.mcpToolCalls || 0} · LLM est: ${finops.llmTokensEst || 0}`
+        ? `MCP: ${finops.mcpToolCalls || 0} · LLM est: ${finops.llmTokensEst || 0} · Faz est: ${finops.phaseTokensEst || 0}`
         : "";
       dom.gamedevBadge.title = finopsHint
         || payload.tokenPolicy?.note
@@ -669,9 +673,11 @@ export function createPanelController({
     }
     if (active && dom.gamedevPipelineBar) {
       const phase = payload.phase || payload.gamePipeline?.phase || payload.status?.gamePipeline?.phase;
+      const briefSummary = payload.status?.brief?.summary || payload.brief?.summary || "";
+      const briefLine = briefSummary ? ` · ${briefSummary.slice(0, 40)}` : "";
       dom.gamedevPipelineBar.textContent = phase
-        ? `Faz ${phase.phase}/${phase.totalPhases}: ${String(phase.goal || "").slice(0, 48)}`
-        : "";
+        ? `Faz ${phase.phase}/${phase.totalPhases}: ${String(phase.goal || "").slice(0, 48)}${briefLine}`
+        : briefSummary ? briefSummary.slice(0, 80) : "";
     }
     if (active && dom.gamedevDashboardLink) {
       const url = payload.dashboardUrl || payload.status?.dashboardUrl || "http://127.0.0.1:3100";
@@ -840,6 +846,14 @@ export function createPanelController({
     }
 
     const taskText = resolveGamedevTaskText();
+    const masterPrompt = resolveGamedevMasterPrompt();
+    if (!taskText && !masterPrompt) {
+      ui.showToast("Kısa görev veya Oyun planım yazın", true);
+      return;
+    }
+    if (masterPrompt) {
+      await api.invoke("save-settings", { gamedevMasterPrompt: masterPrompt });
+    }
     dom.btnGamedev.disabled = true;
     gamedevSessionInFlight = true;
 
@@ -855,8 +869,8 @@ export function createPanelController({
         return;
       }
 
-      if (taskText) {
-        const result = await api.invoke("start-gamedev-session", { taskText });
+      if (taskText || masterPrompt) {
+        const result = await api.invoke("start-gamedev-session", { taskText, masterPrompt });
         if (!result?.ok) {
           ui.showToast(result?.error || "Game Dev oturumu başlatılamadı", true);
           return;
@@ -1447,6 +1461,11 @@ export function createPanelController({
       await api.invoke("save-settings", { gamedevDefaultTemplate: value });
     });
 
+    dom.gamedevMasterPrompt?.addEventListener("blur", async () => {
+      const value = resolveGamedevMasterPrompt();
+      await api.invoke("save-settings", { gamedevMasterPrompt: value });
+    });
+
     dom.gamedevDashboardLink?.addEventListener("click", (event) => {
       event.preventDefault();
       const url = dom.gamedevDashboardLink?.href || "http://127.0.0.1:3100";
@@ -1788,6 +1807,9 @@ export function createPanelController({
       updatePlanActionButtons(session);
       const assistantMode = normalizeAssistantMode(settings?.assistantMode);
       state.setSetting("assistantMode", assistantMode);
+      if (dom.gamedevMasterPrompt && settings?.gamedevMasterPrompt) {
+        dom.gamedevMasterPrompt.value = settings.gamedevMasterPrompt;
+      }
       ui.renderPanelModeState({
         assistantMode,
         sessionSnapshot: state.getSessionSnapshot(),

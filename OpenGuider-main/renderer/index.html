@@ -152,6 +152,8 @@
           <option value="horror-coop">Horror Co-op (Zort tarzı)</option>
           <option value="social-deduction">Social Deduction (Feign tarzı)</option>
         </select>
+        <label class="gamedev-studio-label" for="gamedev-master-prompt">Oyun planım</label>
+        <textarea id="gamedev-master-prompt" class="gamedev-master-prompt" rows="2" placeholder="Uzun oyun planınız (brief olarak kaydedilir)…"></textarea>
         <span class="gamedev-pipeline-bar" id="gamedev-pipeline-bar" title="Aktif pipeline fazı"></span>
         <a class="gamedev-dashboard-link" id="gamedev-dashboard-link" href="#" title="gamedev dashboard">Dashboard</a>
       </div>
@@ -360,6 +362,7 @@
           <option value="empty">Boş Unity</option>
         </select>
       </label>
+      <p>Oyun planınız <code>.sauron/game-design-brief.json</code> olarak kaydedilir; handoff'ta yalnızca kısa özet gider.</p>
       <p id="gamedev-setup-doctor-status" class="gamedev-setup-status"></p>
     </div>
     <div class="onboarding-actions">
