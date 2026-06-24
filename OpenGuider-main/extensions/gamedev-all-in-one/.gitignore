@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.git_disabled/
+generated_imgs/
+token-usage-output.txt
+.DS_Store
+*.log
+process.md
+.opencode
+.specify
+specs/main
+# local project state
+.roblox-mcp/

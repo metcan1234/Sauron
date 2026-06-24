@@ -50,3 +50,9 @@ test("store schema includes goose defaults", () => {
   assert.equal(schema.gooseFinopsShareGlobalBudget.default, true);
   assert.equal(schema.gooseShowModeHint.default, true);
 });
+
+test("store schema includes gamedev defaults", () => {
+  assert.equal(schema.gamedevEnabled.default, true);
+  assert.equal(schema.gamedevActiveEngine.default, "unity");
+  assert.equal(schema.gamedevMcpEntryPath.default, "");
+});

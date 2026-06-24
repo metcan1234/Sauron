@@ -33,6 +33,8 @@ const PRELOAD_ON_CHANNELS = [
   "code-agent-error",
   "goose-session-started",
   "goose-session-cancelled",
+  "gamedev-session-started",
+  "gamedev-mode-changed",
 ];
 
 const PRELOAD_SEND_CHANNELS = [

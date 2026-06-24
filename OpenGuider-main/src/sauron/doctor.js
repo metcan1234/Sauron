@@ -11,6 +11,7 @@ const {
 } = require("../plugins/browser/sidecar");
 const { hasAgentCredential } = require("./finops/agent-matrix");
 const { isCursorCliPath } = require("./vscode-launcher");
+const { appendGamedevChecks } = require("./gamedev-doctor");
 const { discoverGooseBinary, isLikelyGooseDesktopPath } = require("./goose-binary-resolver");
 
 const SOLO_READINESS_IDS = new Set([
@@ -836,11 +837,15 @@ function runSauronDoctor(store, options = {}) {
 
   pushCheck(checks, checkBridgeVsix());
 
+  const workspacePath = String(store?.get?.("workspacePath") || "").trim();
   const runtimeSettings = {
     browserAgentEnabled: store?.get?.("browserAgentEnabled") !== false,
     webStudioEnabled: store?.get?.("webStudioEnabled") !== false,
     selfBuildEnabled: store?.get?.("selfBuildEnabled") !== false,
     codeAgentNativeEnabled: store?.get?.("codeAgentNativeEnabled") === true,
+    gamedevEnabled: store?.get?.("gamedevEnabled") !== false,
+    gamedevActiveEngine: store?.get?.("gamedevActiveEngine") || "unity",
+    workspacePath,
     ...(options.settings || {}),
   };
 
@@ -848,7 +853,6 @@ function runSauronDoctor(store, options = {}) {
     selfBuildEnabled: runtimeSettings.selfBuildEnabled,
   });
 
-  const workspacePath = String(store?.get?.("workspacePath") || "").trim();
   pushCheck(checks, checkSauronDir(workspacePath));
   pushCheck(checks, checkFinOpsHandoffCache(workspacePath));
   pushCheck(checks, checkFinOpsRulesVersion(workspacePath));
@@ -856,6 +860,7 @@ function runSauronDoctor(store, options = {}) {
   appendBrowserAgentChecks(checks, runtimeSettings);
   appendWebStudioCheck(checks, store, runtimeSettings);
   appendGooseChecks(checks, store, runtimeSettings);
+  appendGamedevChecks(checks, store, runtimeSettings);
   appendCodeAgentChecks(checks, store, runtimeSettings);
   pushCheck(checks, checkAiCredentials(runtimeSettings));
 

@@ -1,6 +1,6 @@
 {
   "name": "openguider",
-  "version": "1.8.1",
+  "version": "1.9.0",
   "description": "Sauron AI Companion",
   "author": {
     "name": "Mehmet Can Bayatlı"
@@ -61,6 +61,18 @@
       {
         "from": "../sauron-vscode-bridge/dist/sauron-vscode-bridge.vsix",
         "to": "bridge/sauron-vscode-bridge.vsix"
+      },
+      {
+        "from": "extensions/gamedev-all-in-one/dist",
+        "to": "gamedev-all-in-one/dist"
+      },
+      {
+        "from": "extensions/gamedev-all-in-one/node_modules",
+        "to": "gamedev-all-in-one/node_modules"
+      },
+      {
+        "from": "extensions/gamedev-all-in-one/package.json",
+        "to": "gamedev-all-in-one/package.json"
       }
     ],
     "afterPack": "scripts/after-pack.js",

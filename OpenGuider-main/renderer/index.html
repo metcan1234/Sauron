@@ -25,6 +25,7 @@
       <button class="icon-btn hidden" id="btn-web-preview" data-i18n="webPreview" data-i18n-attr="title" title="Önizleme">👁</button>
       <button class="icon-btn hidden" id="btn-code-studio" title="Code Studio">&lt;/&gt;</button>
       <button class="icon-btn goose-btn" id="btn-goose" title="Goose Kısmı — terminal ajanı">🪿</button>
+      <button class="icon-btn gamedev-btn" id="btn-gamedev" title="Game Dev — gamedev-all-in-one MCP">🎮</button>
       <button class="icon-btn workspace-btn" id="btn-workspace" data-i18n="workspace" data-i18n-attr="title" title="Çalışma Kısmı">⌘</button>
       <button class="icon-btn" id="btn-settings" data-i18n="settings" data-i18n-attr="title" title="Ayarlar">⚙</button>
       <button class="icon-btn" id="btn-close" data-i18n="hide" data-i18n-attr="title" title="Gizle" style="-webkit-app-region:no-drag">✕</button>
@@ -54,6 +55,7 @@
         <div class="empty-state-cta" id="empty-state-cta">
           <button type="button" class="empty-state-cta-btn primary" id="empty-cta-micro-guide">Ekranımda yardım et</button>
           <button type="button" class="empty-state-cta-btn" id="empty-cta-workspace">Kod yaz / Çalışma Kısmı</button>
+          <button type="button" class="empty-state-cta-btn gamedev-cta" id="empty-cta-gamedev">🎮 Oyun yap (Game Dev)</button>
           <button type="button" class="empty-state-cta-btn hidden" id="empty-cta-code-agent">Projede kod yaz</button>
           <p class="empty-state-advanced">Gelişmiş: Web Studio, Browser agent → Ayarlar</p>
         </div>
@@ -135,6 +137,8 @@
       <span class="mode-badge code-agent-badge hidden" id="code-agent-badge" title="Aktif kod agent">Kod · Agent</span>
       <span class="mode-badge goose-badge hidden" id="goose-badge" title="Aktif Goose oturumu">🪿 Goose</span>
       <button class="mode-badge goose-cancel hidden" id="btn-goose-cancel" type="button" title="Goose oturumunu durdur">Durdur</button>
+      <span class="mode-badge gamedev-badge hidden" id="gamedev-badge" title="Aktif Game Dev modu">🎮 Game Dev</span>
+      <button class="mode-badge gamedev-cancel hidden" id="btn-gamedev-cancel" type="button" title="Game Dev modunu kapat">Kapat</button>
       <span class="code-agent-log hidden" id="code-agent-log" title="Son kod agent adımları"></span>
       <span class="screen-pending-badge hidden" id="screen-pending-badge" title="Gönderimde ekran görüntüsü eklenecek"></span>
     </div>

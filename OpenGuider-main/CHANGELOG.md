@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.9.0 — 2026-06-24
+
+### Added — Game Dev OS (FAZ 0–2)
+- **🎮 Game Dev** header button + empty-state **Oyun yap** CTA (visibility fixes)
+- `gamedev-all-in-one` MCP bundled in Windows installer (`extraResources`)
+- MCP config writes to `.cursor`, `.vscode`, `.cline`, and workspace `mcp.json`
+- Token economy v2: scene cache, delta handoff, economy routing, FinOps ledger
+- Game Dev Doctor checks (MCP entry, engine, Unity bridge hint)
+- `sauron-gamedev.md` v2 tool-first playbook (auto-seeded in workspace)
+- `game-dev-plan` FinOps economy operation
+
+### Fixed
+- Header `overflow` clipping 🎮 button on narrow panels
+- `gamedev-all-in-one` Windows `npm run build` (cross-platform copy)
+
 ## 1.5.0 — 2026-06-21
 
 ### Added

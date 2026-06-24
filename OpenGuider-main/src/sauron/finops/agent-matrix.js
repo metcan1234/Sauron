@@ -69,6 +69,7 @@ const ECONOMY_VISION_OPERATIONS = new Set([
   "code-read-summarize",
   "code-agent-summarize",
   "code-agent-plan",
+  "game-dev-plan",
 ]);
 
 function normalizeHint(hint) {

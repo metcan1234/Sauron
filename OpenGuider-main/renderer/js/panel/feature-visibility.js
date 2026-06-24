@@ -8,11 +8,14 @@ export function applyOptionalFeatureVisibility(doc, settings = {}) {
   const selfBuildOn = settings.selfBuildEnabled !== false;
   const codeAgentOn = isCodeAgentEnabled(settings);
   const gooseOn = isGooseEnabled(settings);
+  const gamedevOn = isGamedevEnabled(settings);
 
   doc.getElementById("btn-web-preview")?.classList.toggle("hidden", !webStudioOn);
   doc.getElementById("btn-code-studio")?.classList.toggle("hidden", !codeAgentOn);
   doc.getElementById("btn-goose")?.classList.toggle("hidden", !gooseOn);
+  doc.getElementById("btn-gamedev")?.classList.toggle("hidden", !gamedevOn);
   doc.getElementById("empty-cta-code-agent")?.classList.toggle("hidden", !codeAgentOn);
+  doc.getElementById("empty-cta-gamedev")?.classList.toggle("hidden", !gamedevOn);
   doc.getElementById("web-studio-overlay")?.classList.toggle("feature-disabled", !webStudioOn);
   doc.getElementById("self-build-overlay")?.classList.toggle("feature-disabled", !selfBuildOn);
 
@@ -29,6 +32,7 @@ export function applyOptionalFeatureVisibility(doc, settings = {}) {
     if (selfBuildOn) parts.push("Self-Build");
     if (codeAgentOn) parts.push("Kod Agent");
     if (gooseOn) parts.push("Goose");
+    if (gamedevOn) parts.push("Game Dev");
     if (parts.length === 0) {
       advancedEl.classList.add("hidden");
     } else {
@@ -52,4 +56,8 @@ export function isCodeAgentEnabled(settings = {}) {
 
 export function isGooseEnabled(settings = {}) {
   return settings.gooseEnabled !== false;
+}
+
+export function isGamedevEnabled(settings = {}) {
+  return settings.gamedevEnabled !== false;
 }

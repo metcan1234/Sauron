@@ -125,6 +125,9 @@ const schema = {
   gooseBudgetWarnAt: { type: "number", default: 0.8 },
   gooseFinopsShareGlobalBudget: { type: "boolean", default: true },
   gooseShowModeHint: { type: "boolean", default: true },
+  gamedevEnabled: { type: "boolean", default: true },
+  gamedevActiveEngine: { type: "string", enum: ["unity", "unreal", "roblox", "blender"], default: "unity" },
+  gamedevMcpEntryPath: { type: "string", default: "" },
 };
 function createStore() { return new Store({ schema, clearInvalidConfig: true }); }
 module.exports = { createStore, schema };

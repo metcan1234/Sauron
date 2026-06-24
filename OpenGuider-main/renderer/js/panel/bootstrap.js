@@ -570,6 +570,119 @@ export function createPanelController({
     }
   }
 
+  function resolveGamedevTaskText() {
+    const plan = String(dom.planGoal?.value || "").trim();
+    if (plan) {
+      return plan;
+    }
+    return String(dom.textInput?.value || "").trim();
+  }
+
+  function setGamedevUiActive(active, payload = {}) {
+    dom.gamedevBadge?.classList.toggle("hidden", !active);
+    dom.btnGamedevCancel?.classList.toggle("hidden", !active);
+    dom.btnGamedev?.classList.toggle("gamedev-active", active);
+    if (active && dom.gamedevBadge) {
+      const engineLabel = payload.engineLabel || payload.engine || "Unity";
+      const connector = payload.status?.connector;
+      const dot = connector?.connected ? "🟢" : "🟡";
+      dom.gamedevBadge.textContent = `🎮 Game Dev · ${engineLabel} ${dot}`;
+      const finops = payload.finops || payload.status?.finops;
+      const finopsHint = finops
+        ? `MCP: ${finops.mcpToolCalls || 0} · LLM est: ${finops.llmTokensEst || 0}`
+        : "";
+      dom.gamedevBadge.title = finopsHint
+        || payload.tokenPolicy?.note
+        || "MCP tool calls are local — minimal LLM token usage.";
+    }
+  }
+
+  async function syncGamedevUiFromStatus() {
+    try {
+      const status = await api.invoke("get-gamedev-status");
+      setGamedevUiActive(status?.modeActive === true, status || {});
+    } catch {
+      setGamedevUiActive(false);
+    }
+  }
+
+  async function openGamedevSession() {
+    if (!dom.btnGamedev || dom.btnGamedev.disabled) {
+      return;
+    }
+
+    const settings = await api.invoke("get-settings");
+    if (settings?.gamedevEnabled === false) {
+      ui.showToast("Game Dev devre dışı — Ayarlar → Eklentiler", true);
+      return;
+    }
+
+    if (!String(settings?.workspacePath || "").trim()) {
+      ui.showToast("Workspace path ayarlanmamış — Ayarlar → Çalışma Kısmı", true);
+      return;
+    }
+
+    const taskText = resolveGamedevTaskText();
+    dom.btnGamedev.disabled = true;
+
+    try {
+      const probe = await api.invoke("probe-gamedev-mcp");
+      if (!probe?.ok) {
+        ui.showErrorBanner({
+          title: "gamedev-all-in-one bulunamadı",
+          message: probe?.error || "extensions/gamedev-all-in-one/dist/index.js eksik.",
+          actionLabel: "Ayarları aç",
+          onAction: () => api.invoke("open-settings"),
+        });
+        return;
+      }
+
+      if (taskText) {
+        const result = await api.invoke("start-gamedev-session", { taskText });
+        if (!result?.ok) {
+          ui.showToast(result?.error || "Game Dev oturumu başlatılamadı", true);
+          return;
+        }
+        setGamedevUiActive(true, result);
+        if (result.truncated) {
+          ui.showToast("Görev özeti token tasarrufu için kısaltıldı", false);
+        }
+        ui.showToast(`Game Dev · ${result.engineLabel || "Unity"} — Cline handoff hazır`, false);
+        if (result.handoffFileName) {
+          await pollHandoffUntilSettled(result.workspacePath || settings.workspacePath, result.handoffFileName);
+        }
+        return;
+      }
+
+      const toggle = await api.invoke("toggle-gamedev-mode");
+      if (!toggle?.ok) {
+        ui.showToast(toggle?.error || "Game Dev modu değiştirilemedi", true);
+        return;
+      }
+      setGamedevUiActive(toggle.modeActive === true, toggle);
+      ui.showToast(
+        toggle.modeActive
+          ? `Game Dev modu açık · ${toggle.engineLabel || "Unity"} (görev yazıp 🎮 ile handoff)`
+          : "Game Dev modu kapalı",
+        false,
+      );
+    } catch (error) {
+      ui.showToast(error?.message || "Game Dev başlatılamadı", true);
+    } finally {
+      dom.btnGamedev.disabled = false;
+    }
+  }
+
+  async function cancelGamedevMode() {
+    const result = await api.invoke("deactivate-gamedev-mode");
+    setGamedevUiActive(false);
+    if (result?.ok) {
+      ui.showToast("Game Dev modu kapatıldı");
+    } else if (result?.error) {
+      ui.showToast(result.error, true);
+    }
+  }
+
   function getActionShortcutMap() {
     return [
       { settingKey: "previousStepShortcut", action: () => api.invoke("previous-step"), button: dom.btnPlanPrev, title: t("shortcutPlanPrev") },
@@ -955,6 +1068,9 @@ export function createPanelController({
     doc.getElementById("empty-cta-workspace")?.addEventListener("click", () => {
       void openWorkspaceHandoff();
     });
+    doc.getElementById("empty-cta-gamedev")?.addEventListener("click", () => {
+      void openGamedevSession();
+    });
     doc.getElementById("empty-cta-code-agent")?.addEventListener("click", async () => {
       const goal = await ui.promptDialog({
         title: "Kod agent",
@@ -1074,6 +1190,14 @@ export function createPanelController({
 
     dom.btnGooseCancel?.addEventListener("click", () => {
       void cancelGooseSession();
+    });
+
+    dom.btnGamedev?.addEventListener("click", () => {
+      void openGamedevSession();
+    });
+
+    dom.btnGamedevCancel?.addEventListener("click", () => {
+      void cancelGamedevMode();
     });
 
     if (dom.workspaceStatusFocus) {
@@ -1293,6 +1417,14 @@ export function createPanelController({
       setGooseUiActive(false);
     });
 
+    api.on("gamedev-session-started", (payload) => {
+      setGamedevUiActive(true, payload || {});
+    });
+
+    api.on("gamedev-mode-changed", (payload) => {
+      setGamedevUiActive(payload?.modeActive === true, payload || {});
+    });
+
     api.on("browser-agent-status-changed", (status) => {
       const statusText = String(status || "");
       if (!statusText.startsWith("crashed")) {
@@ -1405,6 +1537,7 @@ export function createPanelController({
       await ensureRuntimePermissions();
       await updateWorkspaceButtonState();
       applyOptionalFeatureVisibility(doc, settings);
+      await syncGamedevUiFromStatus();
       startHandoffHistoryRefresh();
       await ui.refreshFinOpsBadge();
       dom.textInput.focus();

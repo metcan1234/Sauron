@@ -15,4 +15,6 @@ test("panel html contains core controls and error/onboarding blocks", () => {
   assert.match(html, /id="btn-plan-regenerate"/);
   assert.match(html, /id="error-banner"/);
   assert.match(html, /id="onboarding-overlay"/);
+  assert.match(html, /id="btn-gamedev"/);
+  assert.match(html, /id="empty-cta-gamedev"/);
 });

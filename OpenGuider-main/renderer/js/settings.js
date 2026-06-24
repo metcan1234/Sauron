@@ -181,6 +181,10 @@ async function init() {
   if (webStudioEnabledEl) webStudioEnabledEl.checked = settings.webStudioEnabled !== false;
   if (selfBuildEnabledEl) selfBuildEnabledEl.checked = settings.selfBuildEnabled !== false;
   if (codeAgentNativeEnabledEl) codeAgentNativeEnabledEl.checked = settings.codeAgentNativeEnabled === true;
+  const gamedevEnabledEl = document.getElementById("gamedevEnabled");
+  const gamedevActiveEngineEl = document.getElementById("gamedevActiveEngine");
+  if (gamedevEnabledEl) gamedevEnabledEl.checked = settings.gamedevEnabled !== false;
+  if (gamedevActiveEngineEl) setSelectValue("gamedevActiveEngine", settings.gamedevActiveEngine || "unity");
   document.getElementById("awareAssistanceEnabled").checked = settings.awareAssistanceEnabled === true;
 
   setSelectValue("sttProvider", normalizeSttProvider(settings.sttProvider));
@@ -1380,6 +1384,8 @@ async function saveSettings() {
     webStudioEnabled:        document.getElementById("webStudioEnabled")?.checked !== false,
     selfBuildEnabled:        document.getElementById("selfBuildEnabled")?.checked !== false,
     codeAgentNativeEnabled:  document.getElementById("codeAgentNativeEnabled")?.checked === true,
+    gamedevEnabled:          document.getElementById("gamedevEnabled")?.checked !== false,
+    gamedevActiveEngine:     document.getElementById("gamedevActiveEngine")?.value || "unity",
     gooseEnabled:            document.getElementById("gooseEnabled")?.checked !== false,
     gooseBinaryPath:         document.getElementById("gooseBinaryPath")?.value.trim() || "",
     gooseDefaultMode:        document.getElementById("gooseDefaultMode")?.value || "balanced",

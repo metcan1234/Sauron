@@ -82,7 +82,7 @@ html, body {
   -webkit-app-region: drag;
   flex-shrink: 0;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   background: var(--surface);
 }
 
@@ -121,6 +121,7 @@ html, body {
   color: var(--accent);
   text-shadow: 0 0 10px rgba(198, 90, 58, 0.35);
   -webkit-font-smoothing: antialiased;
+  display: none;
 }
 
 .header-meta {
@@ -188,6 +189,9 @@ html, body {
   display: flex;
   gap: 4px;
   flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 100%;
   -webkit-app-region: no-drag;
 }
 
@@ -592,6 +596,11 @@ html, body {
   margin-top: 18px;
   pointer-events: auto;
   max-width: 320px;
+}
+
+.empty-state-cta-btn.gamedev-cta {
+  border-color: rgba(168, 85, 247, 0.55);
+  color: #e9d5ff;
 }
 
 .empty-state-cta-btn {
@@ -2760,6 +2769,29 @@ kbd {
 
 .icon-btn.workspace-btn.workspace-warning {
   box-shadow: 0 0 0 1px rgba(234, 179, 8, 0.45);
+}
+
+.icon-btn.gamedev-btn {
+  background: rgba(168, 85, 247, 0.1);
+  border-color: rgba(168, 85, 247, 0.45);
+}
+
+.icon-btn.gamedev-btn.gamedev-active {
+  background: rgba(168, 85, 247, 0.18);
+  border-color: rgba(168, 85, 247, 0.65);
+  color: #e9d5ff;
+}
+
+.mode-badge.gamedev-badge {
+  background: rgba(168, 85, 247, 0.12);
+  border-color: rgba(168, 85, 247, 0.35);
+  color: #e9d5ff;
+}
+
+.mode-badge.gamedev-cancel {
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border);
 }
 
 .chat-drawer-footer {
