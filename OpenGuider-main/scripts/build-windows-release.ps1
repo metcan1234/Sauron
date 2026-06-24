@@ -30,5 +30,5 @@ $Artifact = Join-Path $Root "release" "Sauron-$Version-win-x64.exe"
 if (Test-Path $Artifact) {
   Write-Host "Release artifact: $Artifact"
 } else {
-  Write-Warning "Expected installer not found at $Artifact — check release/ folder."
+  Write-Warning "Expected installer not found at $Artifact - check release/ folder."
 }
