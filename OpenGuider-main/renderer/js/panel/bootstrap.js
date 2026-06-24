@@ -519,11 +519,17 @@ export function createPanelController({
   }
 
   async function openGooseSession() {
+    log("[Goose] openGooseSession called");
     if (!dom.btnGoose || dom.btnGoose.disabled) {
+      log("[Goose] Button disabled or not found");
       return;
     }
 
     const settings = await api.invoke("get-settings");
+    log("[Goose] Settings loaded", { workspacePath: settings?.workspacePath, gooseEnabled: settings?.gooseEnabled });
+    if (settings?.workspaceRepaired?.to) {
+      ui.showToast(`Çalışma Kısmı düzeltildi: ${settings.workspaceRepaired.to}`, false);
+    }
     if (settings?.gooseEnabled === false) {
       ui.showToast("Goose Kısmı devre dışı — Ayarlar → AI Ajanları", true);
       return;
@@ -537,12 +543,10 @@ export function createPanelController({
     }
 
     const wsPath = String(settings?.workspacePath || "").trim();
+    log("[Goose] Workspace path check", { wsPath, isTemp: wsPath.toLowerCase().includes("\\temp\\") || wsPath.toLowerCase().includes("\\tmp\\") });
     if (!wsPath) {
+      log("[Goose] Workspace path empty");
       ui.showToast("Workspace path ayarlanmamış — Ayarlar → Çalışma Kısmı", true);
-      return;
-    }
-    if (wsPath.toLowerCase().includes("\\temp\\") || wsPath.toLowerCase().includes("\\tmp\\")) {
-      ui.showToast("Workspace path geçici klasör (temp) olarak ayarlanmış. Ayarlar → Çalışma Kısmı'ndan gerçek proje klasörünü seçin.", true);
       return;
     }
 
@@ -829,33 +833,47 @@ export function createPanelController({
   }
 
   async function openGamedevSession(options = {}) {
+    log("[GameDev] openGamedevSession called", { options, gamedevSessionInFlight });
     if (!dom.btnGamedev || dom.btnGamedev.disabled || gamedevSessionInFlight) {
+      log("[GameDev] Button disabled or session in flight");
       return;
     }
 
     const now = Date.now();
     if (now - lastGamedevOpenAt < 800) {
+      log("[GameDev] Debounced (too fast)");
       return;
     }
     lastGamedevOpenAt = now;
 
     const settings = await api.invoke("get-settings");
+    log("[GameDev] Settings loaded", { workspacePath: settings?.workspacePath, gamedevEnabled: settings?.gamedevEnabled, gamedevSetupComplete: settings?.gamedevSetupComplete });
+    if (settings?.workspaceRepaired?.to) {
+      ui.showToast(`Çalışma Kısmı düzeltildi: ${settings.workspaceRepaired.to}`, false);
+    }
     if (settings?.gamedevEnabled === false) {
       ui.showToast("Game Dev devre dışı — Ayarlar → Eklentiler", true);
       return;
     }
 
     const wsPath = String(settings?.workspacePath || "").trim();
+    log("[GameDev] Workspace path check", { wsPath, isTemp: wsPath.toLowerCase().includes("\\temp\\") || wsPath.toLowerCase().includes("\\tmp\\") });
     if (!wsPath) {
       ui.showToast("Workspace path ayarlanmamış — Ayarlar → Çalışma Kısmı", true);
       return;
     }
-    if (wsPath.toLowerCase().includes("\\temp\\") || wsPath.toLowerCase().includes("\\tmp\\")) {
-      ui.showToast("Workspace path geçici klasör (temp) olarak ayarlanmış. Game Dev için Unity/Unreal proje klasörü gerekli. Ayarlar → Çalışma Kısmı'ndan doğru klasörü seçin.", true);
-      return;
-    }
 
-    if (!options.skipSetupCheck && !settings?.gamedevSetupComplete && dom.gamedevSetupOverlay) {
+    const masterPrompt = resolveGamedevMasterPrompt();
+    const savedMasterPrompt = String(settings?.gamedevMasterPrompt || "").trim();
+    const effectiveMasterPrompt = masterPrompt || savedMasterPrompt;
+    const taskText = effectiveMasterPrompt ? resolveGamedevTaskText() : "";
+
+    if (
+      !options.skipSetupCheck
+      && effectiveMasterPrompt
+      && !settings?.gamedevSetupComplete
+      && dom.gamedevSetupOverlay
+    ) {
       showGamedevSetupWizard(settings);
       return;
     }
@@ -863,11 +881,6 @@ export function createPanelController({
     if (dom.gamedevTemplateSelect && settings?.gamedevDefaultTemplate) {
       dom.gamedevTemplateSelect.value = settings.gamedevDefaultTemplate;
     }
-
-    const masterPrompt = resolveGamedevMasterPrompt();
-    const savedMasterPrompt = String(settings?.gamedevMasterPrompt || "").trim();
-    const effectiveMasterPrompt = masterPrompt || savedMasterPrompt;
-    const taskText = effectiveMasterPrompt ? resolveGamedevTaskText() : "";
 
     if (masterPrompt) {
       await api.invoke("save-settings", { gamedevMasterPrompt: masterPrompt });
@@ -920,6 +933,9 @@ export function createPanelController({
       }
       applyGamedevUiFromResult(activate, "activate-gamedev-mode");
       showGamedevLaunchFeedback(activate, settings);
+      if (!settings?.gamedevSetupComplete) {
+        await api.invoke("save-settings", { gamedevSetupComplete: true });
+      }
       ui.showToast(
         activate.alreadyActive
           ? `Game Dev zaten açık · ${activate.engineLabel || "Unity"} — VS Code odaklandı`
@@ -1819,6 +1835,9 @@ export function createPanelController({
     try {
       applyI18nToDocument(doc);
       const settings = await api.invoke("get-settings");
+      if (settings?.workspaceRepaired?.to) {
+        ui.showToast(`Çalışma Kısmı otomatik ayarlandı: ${settings.workspaceRepaired.to}`, false);
+      }
       const session = await api.invoke("get-active-session");
       state.setSettings(settings);
       state.setSessionSnapshot(session);

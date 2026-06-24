@@ -40,7 +40,8 @@ test("spawnGooseProcess opens held-open terminal with real goose binary", async 
   const result = await spawnGooseProcess({
     binaryPath,
     workspacePath,
-    args: ["--version"],
+    args,
+    sessionId: "integration-test",
     env: {
       ...process.env,
       GOOSE_TELEMETRY_OFF: "1",
@@ -48,7 +49,13 @@ test("spawnGooseProcess opens held-open terminal with real goose binary", async 
   });
 
   assert.ok(result.pid);
-  assert.ok(["windows-terminal", "cmd", "direct"].includes(result.terminal));
-  assert.match(result.argv.join(" "), /cmd\.exe/);
-  assert.match(result.argv.join(" "), /\/k/);
+  assert.ok(["windows-terminal", "cmd", "direct", "powershell"].includes(result.terminal));
+  const argvJoined = result.argv.join(" ");
+  if (result.launchMethod === "powershell-launcher") {
+    assert.match(argvJoined, /powershell\.exe/i);
+    assert.match(argvJoined, /launch\.ps1/i);
+  } else {
+    assert.match(argvJoined, /cmd\.exe/);
+    assert.match(argvJoined, /\/k/);
+  }
 });

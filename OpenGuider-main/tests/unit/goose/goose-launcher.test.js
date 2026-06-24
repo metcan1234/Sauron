@@ -10,7 +10,11 @@ const {
   buildGooseCliArgs: buildSpawnCliArgs,
   buildHeldOpenCommandArgs,
   findWindowsTerminalPathSync,
+  splitGooseSystemArg,
+  shouldUseWindowsPowerShellLauncher,
+  writeGooseWindowsLauncher,
 } = require("../../../src/sauron/goose-terminal-spawn");
+const fs = require("fs");
 
 test("buildGooseCliArgs uses -t for task and --system for instructions", () => {
   const args = buildGooseCliArgs({
@@ -92,4 +96,49 @@ test("findWindowsTerminalPathSync resolves wt via where.exe on windows", () => {
   } else {
     assert.equal(wtPath, null);
   }
+});
+
+test("splitGooseSystemArg extracts multiline --system payload", () => {
+  const args = ["run", "-t", "hello", "--system", "## Balanced\n- kural"];
+  const { cliArgs, systemInstructions } = splitGooseSystemArg(args);
+  assert.deepEqual(cliArgs, ["run", "-t", "hello"]);
+  assert.match(systemInstructions, /Balanced/);
+});
+
+test("shouldUseWindowsPowerShellLauncher enables for multiline system text on win32", () => {
+  const args = buildSpawnCliArgs({
+    taskText: "hello",
+    providerConfig: { provider: "ollama", model: "x" },
+    systemInstructions: "## Mod\n- satir",
+  });
+  if (process.platform === "win32") {
+    assert.equal(shouldUseWindowsPowerShellLauncher(args), true);
+  } else {
+    assert.equal(shouldUseWindowsPowerShellLauncher(args), false);
+  }
+});
+
+test("writeGooseWindowsLauncher writes system file and ps1 without inline --system", () => {
+  const args = buildSpawnCliArgs({
+    taskText: "list files",
+    providerConfig: { provider: "ollama", model: "qwen2.5-coder:7b" },
+    systemInstructions: "## Balanced Modu\n- gereksiz tekrar yapma.\n## Workspace\n- Proje kökü: SauronWorkspace",
+  });
+  const launcher = writeGooseWindowsLauncher({
+    binaryPath: "C:\\Users\\Can\\OneDrive\\Desktop\\EVERYTHİNG\\goose-package\\goose.exe",
+    workspacePath: "C:\\SauronWorkspace",
+    gooseArgs: args,
+    sessionId: "test-session",
+  });
+  assert.ok(fs.existsSync(launcher.ps1Path));
+  assert.ok(fs.existsSync(launcher.systemFile));
+  assert.ok(fs.existsSync(launcher.launchConfigPath));
+  const ps1 = fs.readFileSync(launcher.ps1Path, "utf8");
+  const config = JSON.parse(fs.readFileSync(launcher.launchConfigPath, "utf8"));
+  assert.match(ps1, /launch\.json/);
+  assert.match(ps1, /ConvertFrom-Json/);
+  assert.doesNotMatch(ps1, /EVERYTH/);
+  assert.match(config.binaryPath, /goose\.exe$/i);
+  assert.ok(Array.isArray(config.cliArgs));
+  fs.rmSync(launcher.launchDir, { recursive: true, force: true });
 });

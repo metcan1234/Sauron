@@ -13,6 +13,10 @@ const GOOSE_CLI_PREFERRED_PATHS = [
   () => path.join(process.env.USERPROFILE || "", ".local", "bin", "goose.exe"),
   () => path.join(process.env.USERPROFILE || "", "goose", "goose.exe"),
   () => path.join(process.env.USERPROFILE || "", ".cargo", "bin", "goose.exe"),
+  () => path.join(process.env.USERPROFILE || "", "OneDrive", "Desktop", "EVERYTHİNG", "goose-package", "goose.exe"),
+  () => path.join(process.env.USERPROFILE || "", "OneDrive", "Desktop", "EVERYTHING", "goose-package", "goose.exe"),
+  () => path.join(process.env.USERPROFILE || "", "Desktop", "EVERYTHİNG", "goose-package", "goose.exe"),
+  () => path.join(process.env.USERPROFILE || "", "Desktop", "EVERYTHING", "goose-package", "goose.exe"),
 ];
 
 const GOOSE_DESKTOP_PATH_MARKERS = [
@@ -281,23 +285,26 @@ function walkForBinary(dir, depth = 0, maxDepth = 4, matches = []) {
 function collectGooseBinaryCandidates(settings = {}) {
   const candidates = [];
   const seen = new Set();
+  const skipAutoDiscovery = process.env.SAURON_SKIP_GOOSE_AUTODISCOVERY === "1";
 
   const override = String(settings.gooseBinaryPath || "").trim();
   if (override) {
     addCandidate(candidates, seen, override, settings);
   }
 
-  for (const resolver of GOOSE_CLI_PREFERRED_PATHS) {
-    addCandidate(candidates, seen, resolver(), settings);
-  }
+  if (!skipAutoDiscovery) {
+    for (const resolver of GOOSE_CLI_PREFERRED_PATHS) {
+      addCandidate(candidates, seen, resolver(), settings);
+    }
 
-  if (cachedCliBinaryPath) {
-    addCandidate(candidates, seen, cachedCliBinaryPath, settings);
-  }
+    if (cachedCliBinaryPath) {
+      addCandidate(candidates, seen, cachedCliBinaryPath, settings);
+    }
 
-  for (const root of getDefaultSearchRoots()) {
-    for (const found of walkForBinary(root, 0, 3)) {
-      addCandidate(candidates, seen, found, settings);
+    for (const root of getDefaultSearchRoots()) {
+      for (const found of walkForBinary(root, 0, 3)) {
+        addCandidate(candidates, seen, found, settings);
+      }
     }
   }
 

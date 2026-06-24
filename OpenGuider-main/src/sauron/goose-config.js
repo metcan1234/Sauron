@@ -14,7 +14,7 @@ const GOOSE_TOKEN_MODES = {
     estimatedCostTl: 0,
   },
   balanced: {
-    provider: "deepseek",
+    provider: "openai",
     model: "deepseek-chat",
     fallbackProvider: "openai",
     fallbackModel: "gpt-4o-mini",

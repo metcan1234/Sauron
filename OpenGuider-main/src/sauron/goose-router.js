@@ -21,8 +21,23 @@ function resolveModeProviderConfig(mode, settings = {}) {
     providerConfig = { ...base, provider: "ollama", model };
   } else if (key === "balanced") {
     const deepseekModel = String(settings.deepseekModelCustom || base.model || "deepseek-chat").trim();
+    const deepseekBaseUrl = String(settings.deepseekBaseUrl || "https://api.deepseek.com")
+      .trim()
+      .replace(/\/$/, "");
+    const deepseekHost = deepseekBaseUrl.endsWith("/v1")
+      ? deepseekBaseUrl
+      : `${deepseekBaseUrl}/v1`;
     if (String(settings.deepseekApiKey || "").trim()) {
-      providerConfig = { ...base, provider: "deepseek", model: deepseekModel };
+      providerConfig = {
+        ...base,
+        provider: "openai",
+        model: deepseekModel,
+        envOverrides: {
+          OPENAI_API_KEY: String(settings.deepseekApiKey).trim(),
+          GOOSE_PROVIDER__HOST: deepseekHost,
+        },
+        routeNote: "deepseek-openai-compat",
+      };
     } else if (String(settings.openrouterApiKey || "").trim()) {
       providerConfig = {
         ...base,
@@ -125,6 +140,8 @@ async function resolveGooseMode(taskText, settings = {}) {
 
   if (providerConfig.fallbackReason) {
     notices.push("DeepSeek/OpenAI anahtarı yok — OpenAI fallback kullanılıyor.");
+  } else if (providerConfig.routeNote === "deepseek-openai-compat") {
+    notices.push("DeepSeek, Goose OpenAI uyumlu endpoint üzerinden kullanılıyor.");
   } else if (providerConfig.routeNote === "openrouter-openai-compat") {
     notices.push("OpenRouter, OpenAI uyumlu endpoint üzerinden kullanılıyor.");
   }

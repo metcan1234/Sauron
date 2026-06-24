@@ -47,6 +47,10 @@ function registerGooseIpc({
         modeOverride: mode || null,
       });
 
+      if (result.ok && result.binaryPath && !settings.gooseBinaryPath) {
+        store.set("gooseBinaryPath", result.binaryPath);
+      }
+
       if (result.ok) {
         broadcastGooseEvent("goose-session-started", {
           sessionId: result.sessionId,

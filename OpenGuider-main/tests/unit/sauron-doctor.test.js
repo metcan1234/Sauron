@@ -5,6 +5,7 @@ const os = require("os");
 const path = require("path");
 
 const { runSauronDoctor, computeReadinessReport, checkVscodeNotCursor } = require("../../src/sauron/doctor");
+const { clearGooseBinaryCache } = require("../../src/sauron/goose-binary-resolver");
 
 test("runSauronDoctor returns structured checks", () => {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "sauron-doctor-"));
@@ -119,17 +120,29 @@ test("runSauronDoctor includes ai-credentials check", () => {
 });
 
 test("runSauronDoctor warns when goose binary missing", () => {
+  clearGooseBinaryCache();
+  const prevSkip = process.env.SAURON_SKIP_GOOSE_AUTODISCOVERY;
+  process.env.SAURON_SKIP_GOOSE_AUTODISCOVERY = "1";
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "sauron-doctor-goose-"));
-  const store = {
-    get(key) {
-      if (key === "workspacePath") return workspace;
-      if (key === "gooseBinaryPath") return "";
-      return null;
-    },
-  };
-  const result = runSauronDoctor(store, { settings: { gooseEnabled: true } });
-  const gooseBinary = result.checks.find((entry) => entry.id === "goose-binary");
-  assert.equal(gooseBinary?.status, "warn");
-  assert.match(gooseBinary?.message, /bulunamadı/i);
-  fs.rmSync(workspace, { recursive: true, force: true });
+  try {
+    const store = {
+      get(key) {
+        if (key === "workspacePath") return workspace;
+        if (key === "gooseBinaryPath") return "";
+        return null;
+      },
+    };
+    const result = runSauronDoctor(store, { settings: { gooseEnabled: true } });
+    const gooseBinary = result.checks.find((entry) => entry.id === "goose-binary");
+    assert.equal(gooseBinary?.status, "warn");
+    assert.match(gooseBinary?.message, /bulunamadı/i);
+  } finally {
+    if (prevSkip === undefined) {
+      delete process.env.SAURON_SKIP_GOOSE_AUTODISCOVERY;
+    } else {
+      process.env.SAURON_SKIP_GOOSE_AUTODISCOVERY = prevSkip;
+    }
+    clearGooseBinaryCache();
+    fs.rmSync(workspace, { recursive: true, force: true });
+  }
 });

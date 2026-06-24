@@ -135,6 +135,7 @@ async function launchGoose({ workspacePath, taskText, settings = {}, modeOverrid
       workspacePath: canonicalWorkspace,
       args: gooseArgs,
       env,
+      sessionId,
     });
   } catch (error) {
     return {

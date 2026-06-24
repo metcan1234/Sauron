@@ -1,5 +1,34 @@
 # Changelog
 
+## 2.2.8 — 2026-06-24
+
+### Fixed — Goose DeepSeek provider
+- Goose CLI `deepseek` provider tanımıyor → Balanced mod artık **openai** + `GOOSE_PROVIDER__HOST=https://api.deepseek.com/v1` kullanıyor
+- `Unknown provider: deepseek` hatası giderildi
+
+## 2.2.7 — 2026-06-24
+
+### Fixed — Goose PowerShell launcher (Turkish paths)
+- **EVERYTHİNG/goose.exe**: Yol artık `launch.json` (UTF-8) üzerinden okunuyor; ps1 içine gömülü İ karakteri bozulmuyor
+- PowerShell 5.1 için `launch.ps1` UTF-8 BOM ile yazılıyor
+- Goose binary yolu spawn öncesi `resolveBinaryPathOnDisk` ile doğrulanıyor
+
+## 2.2.6 — 2026-06-24
+
+### Fixed — Goose terminal spawn (Windows)
+- **Çok satırlı `--system`**: Windows Terminal + `cmd /k` zinciri artık talimat metnini exe sanmıyor
+- PowerShell launcher (`launch.ps1`) sistem talimatlarını dosyadan okuyup Goose'a güvenli argv ile iletir
+- `0x80070002` / "The system cannot find the file specified" hatası giderildi
+
+## 2.2.5 — 2026-06-24
+
+### Fixed — Workspace auto-repair (Goose + Game Dev)
+- **Temp workspace otomatik düzeltme**: `AppData\Local\Temp\sauron-temp_*` veya Sauron kaynak kodu algılanınca `Desktop/SauronWorkspace` oluşturulur ve kaydedilir
+- **Game Dev**: Oyun planı olmadan 🎮 → VS Code açılır (kurulum sihirbazı yalnızca handoff oturumunda)
+- **Başarılı Game Dev activate** → `gamedevSetupComplete` otomatik true
+- **Goose**: EVERYTHİNG/goose-package yolu otomatik aranır; bulununca `gooseBinaryPath` kaydedilir
+- **pick-workspace-folder**: Sauron kaynak kodu seçimi engellenir
+
 ## 2.2.3 — 2026-06-24
 
 ### Fixed — Game Dev button reliability

@@ -44,6 +44,7 @@ const {
   focusVSCodeWorkspace,
 } = require("./src/sauron/handoff");
 const { checkWorkspacePrerequisites } = require("./src/sauron/workspace-setup");
+const { resolveUsableWorkspacePath, describeWorkspacePathIssue, isTempWorkspacePath } = require("./src/sauron/workspace-path-validator");
 const { bootstrapWorkspace } = require("./src/sauron/workspace-bootstrap");
 const { installWorkspaceStack } = require("./src/sauron/workspace-stack-installer");
 const { runSauronDoctor } = require("./src/sauron/doctor");
@@ -1509,11 +1510,47 @@ function setupIPC() {
     debugLog("ipc:get-settings");
     const nextSettings = await secureStore.fillSecrets(store.store);
     const guarded = applyPlatformSettingsGuards(nextSettings);
-    return guarded.normalizedSettings;
+    const ws = resolveUsableWorkspacePath(guarded.normalizedSettings.workspacePath);
+    let workspaceRepaired = null;
+    if (ws.changed) {
+      store.set("workspacePath", ws.workspacePath);
+      guarded.normalizedSettings.workspacePath = ws.workspacePath;
+      workspaceRepaired = {
+        from: ws.previousPath,
+        to: ws.workspacePath,
+        issue: ws.issue,
+        message: ws.message,
+      };
+      appLogger.info("workspace-auto-repaired", workspaceRepaired);
+    }
+    return {
+      ...guarded.normalizedSettings,
+      workspaceRepaired,
+    };
   });
   ipcMain.handle("save-settings", async (_e, newSettings) => {
     debugLog("ipc:save-settings", Object.keys(newSettings || {}));
     const incomingSettings = newSettings || {};
+    if (incomingSettings.workspacePath != null) {
+      const trimmed = String(incomingSettings.workspacePath || "").trim();
+      if (!trimmed || isTempWorkspacePath(trimmed)) {
+        const repaired = resolveUsableWorkspacePath(trimmed);
+        incomingSettings.workspacePath = repaired.workspacePath;
+        if (repaired.changed) {
+          appLogger.info("workspace-save-repaired", {
+            from: trimmed,
+            to: repaired.workspacePath,
+            issue: repaired.issue,
+          });
+        }
+      } else {
+        const issue = describeWorkspacePathIssue(trimmed);
+        if (!issue.valid && issue.issue === "sauron-source") {
+          const repaired = resolveUsableWorkspacePath(trimmed);
+          incomingSettings.workspacePath = repaired.workspacePath;
+        }
+      }
+    }
     const guardedInput = applyPlatformSettingsGuards(incomingSettings);
     Object.assign(
       guardedInput.normalizedSettings,

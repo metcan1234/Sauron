@@ -1,4 +1,6 @@
 const fs = require("fs");
+const { resolveUsableWorkspacePath, describeWorkspacePathIssue } = require("../sauron/workspace-path-validator");
+const { detectWorkspaceLayout } = require("../sauron/workspace-detector");
 const {
   markHandoffLaunchVerified,
   recordVerifiedLaunch,
@@ -71,8 +73,26 @@ function registerWorkspaceIpc({
       return { ok: false, canceled: true };
     }
     const selectedPath = result.filePaths[0];
+    const issue = describeWorkspacePathIssue(selectedPath);
+    if (!issue.valid && issue.issue === "sauron-source") {
+      return {
+        ok: false,
+        error: "Sauron kaynak kodu seçilemez — Unity/Unreal veya boş proje klasörü seçin.",
+      };
+    }
     store.set("workspacePath", selectedPath);
     return { ok: true, path: selectedPath };
+  });
+
+  ipcMain.handle("inspect-workspace-path", async (_event, { workspacePath } = {}) => {
+    const wp = String(workspacePath || store.get("workspacePath") || "").trim();
+    const layout = detectWorkspaceLayout(wp);
+    const issue = describeWorkspacePathIssue(wp);
+    return {
+      workspacePath: wp,
+      layout: layout.layout,
+      ...issue,
+    };
   });
 
   ipcMain.handle("install-workspace-stack", async (_event, options = {}) => {
