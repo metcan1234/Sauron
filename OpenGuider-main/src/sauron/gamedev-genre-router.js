@@ -1,5 +1,6 @@
 const { resolvePipelineForTemplate } = require("./game-pipeline/game-pipeline-registry");
 const { detectArchetypes } = require("./gamedev-brief-analyzer");
+const { normalizeGamedevEngine } = require("./gamedev-config");
 
 const PRESET_GENRES = ["co-op-climb", "horror-coop", "social-deduction"];
 const CUSTOM_TEMPLATE_ALIASES = new Set(["empty", "custom", "universal", "any", ""]);
@@ -48,10 +49,13 @@ function hasStrongPresetSignal(text, genre) {
 }
 
 function resolveCustomPipeline(reason, extra = {}) {
+  const engine = normalizeGamedevEngine(extra.engine || "unity");
+  const pipelineId = engine === "unreal" ? "unreal-empty-v1" : "unity-empty-v1";
   return {
     genre: "empty",
+    engine,
     templateId: null,
-    pipelineId: "unity-empty-v1",
+    pipelineId,
     reason,
     adaptive: true,
     presetScaffold: false,
@@ -59,26 +63,31 @@ function resolveCustomPipeline(reason, extra = {}) {
   };
 }
 
-function resolvePresetPipeline(genre, reason, score = 0) {
+function resolvePresetPipeline(genre, reason, score = 0, engine = "unity") {
   return {
     genre,
+    engine: normalizeGamedevEngine(engine),
     templateId: genre,
-    pipelineId: resolvePipelineForTemplate(genre),
+    pipelineId: resolvePipelineForTemplate(genre, engine),
     reason,
     score,
     adaptive: false,
-    presetScaffold: true,
+    presetScaffold: normalizeGamedevEngine(engine) === "unity",
   };
 }
 
-function resolveConfiguredTemplate(configured) {
+function resolveConfiguredTemplate(configured, engine = "unity") {
+  const normalizedEngine = normalizeGamedevEngine(engine);
+  if (normalizedEngine === "unreal") {
+    return resolveCustomPipeline("configured-unreal", { engine: "unreal" });
+  }
   if (CUSTOM_TEMPLATE_ALIASES.has(configured)) {
-    return resolveCustomPipeline("configured-custom");
+    return resolveCustomPipeline("configured-custom", { engine: normalizedEngine });
   }
   if (PRESET_GENRES.includes(configured)) {
-    return resolvePresetPipeline(configured, "configured-preset");
+    return resolvePresetPipeline(configured, "configured-preset", 0, normalizedEngine);
   }
-  return resolveCustomPipeline("configured-fallback");
+  return resolveCustomPipeline("configured-fallback", { engine: normalizedEngine });
 }
 
 function scoreAllPresets(text) {
@@ -89,10 +98,19 @@ function scoreAllPresets(text) {
   return scores;
 }
 
-function resolveAutoGenre(text) {
+function resolveAutoGenre(text, engine = "unity") {
+  const normalizedEngine = normalizeGamedevEngine(engine);
   const trimmed = String(text || "").trim();
+
+  if (normalizedEngine === "unreal") {
+    return resolveCustomPipeline("unreal-engine-default", {
+      engine: "unreal",
+      archetypes: trimmed ? detectArchetypes(trimmed) : [],
+    });
+  }
+
   if (!trimmed) {
-    return resolveCustomPipeline("default-empty");
+    return resolveCustomPipeline("default-empty", { engine: normalizedEngine });
   }
 
   const archetypes = detectArchetypes(trimmed);
@@ -100,7 +118,7 @@ function resolveAutoGenre(text) {
 
   // Rich, multi-archetype briefs → universal custom pipeline (GTA, math+mobile, etc.)
   if (archetypes.length >= 2) {
-    return resolveCustomPipeline("multi-archetype-brief", { archetypes });
+    return resolveCustomPipeline("multi-archetype-brief", { archetypes, engine: normalizedEngine });
   }
 
   if (wordCount >= RICH_BRIEF_WORD_THRESHOLD && archetypes.length === 1) {
@@ -115,7 +133,7 @@ function resolveAutoGenre(text) {
       return false;
     });
     if (!presetOverlap) {
-      return resolveCustomPipeline("rich-universal-brief", { archetypes });
+      return resolveCustomPipeline("rich-universal-brief", { archetypes, engine: normalizedEngine });
     }
   }
 
@@ -126,32 +144,33 @@ function resolveAutoGenre(text) {
   const activeMatches = ranked.filter(([, score]) => score > 0);
 
   if (hasStrongPresetSignal(trimmed, bestGenre) && bestScore > 0) {
-    return resolvePresetPipeline(bestGenre, "strong-preset-signal", bestScore);
+    return resolvePresetPipeline(bestGenre, "strong-preset-signal", bestScore, normalizedEngine);
   }
 
   if (activeMatches.length > 1 && bestScore - secondScore < AMBIGUITY_GAP) {
-    return resolveCustomPipeline("ambiguous-preset-keywords", { scores });
+    return resolveCustomPipeline("ambiguous-preset-keywords", { scores, engine: normalizedEngine });
   }
 
   if (bestScore < PRESET_MIN_SCORE) {
-    return resolveCustomPipeline("low-preset-confidence", { scores, archetypes });
+    return resolveCustomPipeline("low-preset-confidence", { scores, archetypes, engine: normalizedEngine });
   }
 
   if (wordCount >= RICH_BRIEF_WORD_THRESHOLD) {
-    return resolveCustomPipeline("rich-brief-prefer-custom", { scores, archetypes });
+    return resolveCustomPipeline("rich-brief-prefer-custom", { scores, archetypes, engine: normalizedEngine });
   }
 
-  return resolvePresetPipeline(bestGenre, "keyword-match", bestScore);
+  return resolvePresetPipeline(bestGenre, "keyword-match", bestScore, normalizedEngine);
 }
 
 function resolveGamedevGenre(taskText, settings = {}) {
+  const engine = normalizeGamedevEngine(settings.gamedevActiveEngine);
   const configured = String(settings.gamedevDefaultTemplate || "custom").trim();
 
   if (configured && configured !== "auto") {
-    return resolveConfiguredTemplate(configured);
+    return resolveConfiguredTemplate(configured, engine);
   }
 
-  return resolveAutoGenre(taskText);
+  return resolveAutoGenre(taskText, engine);
 }
 
 function isAdaptivePipeline(genreResult) {

@@ -5,7 +5,7 @@ const { GAMEDEV_ENGINE_PORTS } = require("./gamedev-config");
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_TIMEOUT_MS = 8000;
 
-function probeUnityBridge({ host = DEFAULT_HOST, port = GAMEDEV_ENGINE_PORTS.unity, timeoutMs = 2000 } = {}) {
+function probeBridge({ host = DEFAULT_HOST, port, timeoutMs = 2000 } = {}) {
   return new Promise((resolve) => {
     const socket = new net.Socket();
     let settled = false;
@@ -31,7 +31,15 @@ function probeUnityBridge({ host = DEFAULT_HOST, port = GAMEDEV_ENGINE_PORTS.uni
   });
 }
 
-function dispatchUnityCommand(method, params = {}, { host = DEFAULT_HOST, port = GAMEDEV_ENGINE_PORTS.unity, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+function probeUnityBridge({ host = DEFAULT_HOST, port = GAMEDEV_ENGINE_PORTS.unity, timeoutMs = 2000 } = {}) {
+  return probeBridge({ host, port, timeoutMs });
+}
+
+function probeUnrealBridge({ host = DEFAULT_HOST, port = GAMEDEV_ENGINE_PORTS.unreal, timeoutMs = 2000 } = {}) {
+  return probeBridge({ host, port, timeoutMs });
+}
+
+function dispatchBridgeCommand(method, params = {}, { host = DEFAULT_HOST, port = GAMEDEV_ENGINE_PORTS.unity, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   return new Promise((resolve) => {
     const socket = new net.Socket();
     const id = randomUUID();
@@ -104,7 +112,7 @@ async function runUnityPlayModeVerification(action = "play") {
     };
   }
 
-  const playResult = await dispatchUnityCommand("play_mode", { action });
+  const playResult = await dispatchBridgeCommand("play_mode", { action }, { port: GAMEDEV_ENGINE_PORTS.unity });
   if (!playResult.ok) {
     return {
       ok: false,
@@ -116,14 +124,50 @@ async function runUnityPlayModeVerification(action = "play") {
 
   if (action === "play") {
     await new Promise((r) => setTimeout(r, 1500));
-    await dispatchUnityCommand("play_mode", { action: "stop" });
+    await dispatchBridgeCommand("play_mode", { action: "stop" }, { port: GAMEDEV_ENGINE_PORTS.unity });
   }
 
   return { ok: true, skipped: false, result: playResult };
 }
 
+async function runUnrealPlayModeVerification(action = "play") {
+  const probe = await probeUnrealBridge();
+  if (!probe.connected) {
+    return {
+      ok: true,
+      skipped: true,
+      warn: probe.error || "Unreal bridge not connected",
+    };
+  }
+
+  const playResult = await dispatchBridgeCommand("play_mode", { action }, { port: GAMEDEV_ENGINE_PORTS.unreal });
+  if (!playResult.ok) {
+    return {
+      ok: false,
+      skipped: false,
+      error: playResult.error || "unreal_play_mode failed",
+      result: playResult,
+    };
+  }
+
+  if (action === "play") {
+    await new Promise((r) => setTimeout(r, 1500));
+    await dispatchBridgeCommand("play_mode", { action: "stop" }, { port: GAMEDEV_ENGINE_PORTS.unreal });
+  }
+
+  return { ok: true, skipped: false, result: playResult };
+}
+
+function dispatchUnityCommand(method, params = {}, options = {}) {
+  return dispatchBridgeCommand(method, params, { ...options, port: options.port || GAMEDEV_ENGINE_PORTS.unity });
+}
+
 module.exports = {
+  probeBridge,
   probeUnityBridge,
+  probeUnrealBridge,
+  dispatchBridgeCommand,
   dispatchUnityCommand,
   runUnityPlayModeVerification,
+  runUnrealPlayModeVerification,
 };

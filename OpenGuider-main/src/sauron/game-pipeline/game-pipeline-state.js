@@ -67,6 +67,26 @@ async function runGameVerification(workspacePath, verification, options = {}) {
     return { ok: true, skipped: true, artifact: false };
   }
 
+  if (verification.mcp === "unreal_play_mode") {
+    const { runUnrealPlayModeVerification, probeUnrealBridge } = require("../gamedev-mcp-proxy");
+    const probe = await probeUnrealBridge();
+    if (!probe.connected) {
+      if (strict) {
+        return {
+          ok: false,
+          skipped: false,
+          error: "Unreal bridge bağlı değil — son faz playtest doğrulaması başarısız.",
+        };
+      }
+      return {
+        ok: true,
+        skipped: true,
+        warn: probe.error || "Unreal bridge not connected",
+      };
+    }
+    return runUnrealPlayModeVerification("play");
+  }
+
   if (verification.mcp === "unity_play_mode") {
     const { runUnityPlayModeVerification, probeUnityBridge } = require("../gamedev-mcp-proxy");
     const probe = await probeUnityBridge();

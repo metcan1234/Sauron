@@ -12,7 +12,24 @@ const { UNITY_BRIDGE_PACKAGE_URL } = require("./gamedev-doctor");
 function buildGamedevRulesContent(engine = "unity") {
   const normalized = normalizeGamedevEngine(engine);
   const label = GAMEDEV_ENGINE_LABELS[normalized] || normalized;
-  const toolPrefix = normalized;
+
+  const toolTable = normalized === "unreal"
+    ? `| Görev | MCP tool | Dosya okuma |
+|-------|----------|-------------|
+| Sahne | \`unreal_get_world_outliner\` | Manuel level tarama yok |
+| Obje | \`unreal_spawn_actor\`, \`unreal_set_actor_transform\` | — |
+| Blueprint | \`unreal_blueprint\`, \`unreal_compile_blueprint\` | — |
+| Playtest | \`unreal_play_mode\` (PIE) | — |
+| Asset | \`unreal_asset\`, \`unreal_import_asset\` | — |
+| Console | \`unreal_console_command\` | — |`
+    : `| Görev | MCP tool | Dosya okuma |
+|-------|----------|-------------|
+| Sahne | \`unity_get_hierarchy\` | Assets tarama yok |
+| Obje | \`unity_create_*\` | — |
+| Fizik | \`unity_*physics*\`, rigidbody, raycast | — |
+| Playtest | \`unity_play_mode\` | — |
+| Script | \`unity_script\` | — |
+| Scene | \`unity_scene\` | — |`;
 
   return `<!-- sauron-gamedev-version: ${GAMEDEV_INSTRUCTIONS_VERSION} -->
 # Sauron Game Dev — MCP Kuralları (${label})
@@ -21,20 +38,13 @@ function buildGamedevRulesContent(engine = "unity") {
 **LLM düşünür (az), MCP yapar (çok).** 74 MCP tool'un tamamı kullanılabilir — kısıtlama yok.
 
 ## Tool-first
-| Görev | MCP tool | Dosya okuma |
-|-------|----------|-------------|
-| Sahne | \`${toolPrefix}_get_hierarchy\` (veya eşdeğeri) | Assets tarama yok |
-| Obje | \`${toolPrefix}_create_*\` | — |
-| Fizik | \`${toolPrefix}_*physics*\`, rigidbody, raycast | — |
-| Playtest | \`${toolPrefix}_play_mode\` veya eşdeğeri | — |
-| Script | \`${toolPrefix}_script\` | — |
-| Scene | \`${toolPrefix}_scene\` | — |
+${toolTable}
 
 ## Prompt Fabrikası (v2.2+)
 1. Oyun planı: \`.sauron/game-design-brief.json\` — handoff'ta yalnızca pointer + 1 satır özet.
 2. **Her oyun fikri desteklenir** (GTA, puzzle, eğitim, mobil, RPG…) — brief archetype analizi + evrensel faz hedefleri.
-3. Hazır şablonlar (climb/horror/social) yalnızca kullanıcı seçerse veya çok güçlü tek-genre sinyali varsa.
-4. Wire recipe pointer: \`.sauron/unity-wire-recipes/{genre}-phase{N}.json\`
+3. Hazır şablonlar (climb/horror/social) yalnızca Unity + kullanıcı seçerse veya çok güçlü tek-genre sinyali varsa.
+4. Wire recipe pointer: \`.sauron/unity-wire-recipes/{genre}-phase{N}.json\` (Unity)
 5. Pipeline state: \`.sauron/game-pipeline.json\`
 
 ## Token tasarrufu
@@ -51,7 +61,11 @@ Sahne silme, play mode, commit/push → kullanıcı onayı.
 Aktif: **${label}**. Diğer engine tool'larını bu görevde kullanma.
 
 ## Bridge
-${normalized === "unity" ? `Unity Package Manager Git URL: ${UNITY_BRIDGE_PACKAGE_URL}` : "Engine editörü + MCP bridge eklentisi açık olmalı."}
+${normalized === "unity"
+    ? `Unity Package Manager Git URL: ${UNITY_BRIDGE_PACKAGE_URL}`
+    : normalized === "unreal"
+      ? "Unreal Editor açık + MCP bridge TCP 55557. Çalışma Kısmı .uproject klasörü olmalı."
+      : "Engine editörü + MCP bridge eklentisi açık olmalı."}
 `;
 }
 

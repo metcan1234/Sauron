@@ -88,6 +88,7 @@ async function activateGamedevMode(settings = {}) {
     workspacePath,
     status,
     vscode,
+    launchResult: vscode?.launchResult || null,
     dashboardUrl: `http://127.0.0.1:${status.dashboardPort || 3100}`,
   };
 }
@@ -131,7 +132,7 @@ async function launchGamedevSession({
   const routing = resolveGamedevMode(settings);
 
   const genre = resolveGamedevGenre(effectiveMaster, settings);
-  const pipelineId = String(settings.gamedevPipelineId || genre.pipelineId || "unity-empty-v1").trim();
+  const pipelineId = String(genre.pipelineId || settings.gamedevPipelineId || "unity-empty-v1").trim();
   const pipelineStart = await startGamePipeline({
     pipelineId,
     workspacePath: resolvedWorkspace,
@@ -146,7 +147,10 @@ async function launchGamedevSession({
   }
 
   const phaseInfo = getCurrentPhaseGoal(resolvedWorkspace);
-  if (phaseInfo?.phase === 1 && genre.presetScaffold && genre.templateId) {
+  const activePipeline = phaseInfo?.pipeline || pipelineStart.pipeline;
+  const projectType = activePipeline?.projectType || (engine === "unreal" ? "game-unreal" : "game-unity");
+
+  if (phaseInfo?.phase === 1 && genre.presetScaffold && genre.templateId && engine === "unity") {
     const scaffold = scaffoldUnityTemplate(resolvedWorkspace, genre.templateId);
     if (scaffold.ok) {
       notices.push(`Template scaffold: ${scaffold.label}`);
@@ -225,7 +229,7 @@ async function launchGamedevSession({
     autoStart: true,
     autoChain: settings.gamedevPipelineAutoChain !== false,
     complexityHint: "low",
-    projectType: "game-unity",
+    projectType,
     pipelineId: phaseInfo?.pipeline?.id || null,
     pipelinePhase: phaseInfo?.phase || null,
     pipelineTotalPhases: phaseInfo?.totalPhases || null,

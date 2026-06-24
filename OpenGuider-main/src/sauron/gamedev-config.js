@@ -3,7 +3,7 @@ const { getProjectRoot, isPackaged } = require("../app-paths");
 
 const GAMEDEV_INSTRUCTIONS_DIR = ".clinerules";
 const GAMEDEV_INSTRUCTIONS_FILE = "sauron-gamedev.md";
-const GAMEDEV_INSTRUCTIONS_VERSION = "3.1";
+const GAMEDEV_INSTRUCTIONS_VERSION = "3.2";
 
 const GAMEDEV_ENGINES = ["unity", "unreal", "roblox", "blender"];
 

@@ -55,3 +55,19 @@ test("resolveGamedevGenre auto mode keeps weak climb mention on custom path", ()
   const result = resolveGamedevGenre("dağda yürüyüş simülasyonu", { gamedevDefaultTemplate: "auto" });
   assert.equal(result.genre, "empty");
 });
+
+test("resolveGamedevGenre routes unreal engine to unreal-empty pipeline", () => {
+  const result = resolveGamedevGenre("açık dünya araba oyunu", {
+    gamedevActiveEngine: "unreal",
+    gamedevDefaultTemplate: "custom",
+  });
+  assert.equal(result.engine, "unreal");
+  assert.equal(result.pipelineId, "unreal-empty-v1");
+  assert.equal(result.adaptive, true);
+});
+
+test("resolveAutoGenre unreal engine always uses unreal pipeline", () => {
+  const result = resolveAutoGenre("PEAK gibi climb", "unreal");
+  assert.equal(result.pipelineId, "unreal-empty-v1");
+  assert.equal(result.engine, "unreal");
+});

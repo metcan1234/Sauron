@@ -64,17 +64,38 @@ function appendGamedevChecks(checks, store, settings = {}) {
       message: "Unity Editor bridge ayrı kurulmalı (CoplayDev/unity-mcp)",
       fixHint: `Unity → Package Manager → Git URL: ${UNITY_BRIDGE_PACKAGE_URL}`,
     });
+  } else if (engine === "unreal") {
+    push({
+      id: "gamedev-unreal-bridge",
+      status: "warn",
+      message: "Unreal Editor + MCP bridge eklentisi açık olmalı (TCP 55557)",
+      fixHint: "Unreal Editor'ı açın, gamedev-all-in-one bridge eklentisini etkinleştirin.",
+    });
   }
 
   const workspacePath = String(settings.workspacePath || store?.get?.("workspacePath") || "").trim();
   if (workspacePath) {
     const layout = detectWorkspaceLayout(workspacePath);
     if (layout.layout === "electron-core" || layout.isOpenGuider) {
+      const projectHint = engine === "unreal"
+        ? "Unreal proje klasörü gerekli (.uproject içeren klasör)"
+        : "Unity proje klasörü gerekli (Assets/ içeren klasör)";
       push({
         id: "gamedev-workspace-layout",
         status: "warn",
-        message: "Çalışma Kısmı Sauron kaynak kodu — Game Dev için Unity proje klasörü gerekli",
-        fixHint: "Ayarlar → Çalışma Kısmı yolunu Unity proje klasörüne değiştirin (Assets/ içeren klasör).",
+        message: `Çalışma Kısmı Sauron kaynak kodu — Game Dev için ${projectHint}`,
+        fixHint: `Ayarlar → Çalışma Kısmı yolunu ${engine === "unreal" ? "Unreal" : "Unity"} proje klasörüne değiştirin.`,
+      });
+    }
+
+    if (engine === "unreal") {
+      const hasUproject = fs.existsSync(workspacePath)
+        && fs.readdirSync(workspacePath).some((name) => name.endsWith(".uproject"));
+      push({
+        id: "gamedev-unreal-project",
+        status: hasUproject ? "pass" : "warn",
+        message: hasUproject ? "Unreal .uproject bulundu" : "Unreal .uproject bulunamadı",
+        fixHint: hasUproject ? "" : "Çalışma Kısmı yolunu .uproject dosyasının bulunduğu klasöre ayarlayın.",
       });
     }
 
@@ -168,7 +189,23 @@ async function appendGamedevLiveChecks(checks, settings = {}) {
     }
   }
 
-  if (settings.gamedevActiveEngine === "unity" || !settings.gamedevActiveEngine) {
+  if (settings.gamedevActiveEngine === "unreal") {
+    try {
+      const { probeUnrealBridge } = require("./gamedev-mcp-proxy");
+      const probe = await probeUnrealBridge();
+      checks.push({
+        id: "gamedev-unreal-bridge-port",
+        status: probe.connected ? "pass" : "warn",
+        message: probe.connected
+          ? "Unreal bridge TCP 55557 bağlı"
+          : "Unreal bridge TCP 55557 bekleniyor",
+        fixHint: probe.connected ? "" : "Unreal Editor'ı açın ve MCP bridge eklentisini etkinleştirin.",
+        tier: "optional",
+      });
+    } catch {
+      // optional
+    }
+  } else if (settings.gamedevActiveEngine === "unity" || !settings.gamedevActiveEngine) {
     try {
       const { probeUnityBridge } = require("./gamedev-mcp-proxy");
       const probe = await probeUnityBridge();

@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.2.2 — 2026-06-24
+
+### Added — Unreal Engine support
+- **`unreal-empty-v1` pipeline**: UE faz hedefleri (`unreal_get_world_outliner`, `unreal_spawn_actor`, `unreal_play_mode`)
+- **Engine-aware genre router**: `gamedevActiveEngine: unreal` → Unreal pipeline; Unity preset şablonları Unreal'de devre dışı
+- **Unreal bridge probe**: TCP 55557 doğrulama (`probeUnrealBridge`, `runUnrealPlayModeVerification`)
+- **Doctor**: `.uproject` kontrolü, Unreal bridge port check
+- **Ayarlar**: Unreal Engine seçeneği etkin
+
+### Fixed
+- **🎮 Game Dev butonu**: görev/plan yazılmadan da VS Code açılır (`activate-gamedev-mode`)
+- **VS Code feedback**: `launchResult` activate yanıtına eklendi
+
 ## 2.2.1 — 2026-06-24
 
 ### Added — Universal game adaptation

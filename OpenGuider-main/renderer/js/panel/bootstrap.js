@@ -847,10 +847,6 @@ export function createPanelController({
 
     const taskText = resolveGamedevTaskText();
     const masterPrompt = resolveGamedevMasterPrompt();
-    if (!taskText && !masterPrompt) {
-      ui.showToast("Kısa görev veya Oyun planım yazın", true);
-      return;
-    }
     if (masterPrompt) {
       await api.invoke("save-settings", { gamedevMasterPrompt: masterPrompt });
     }

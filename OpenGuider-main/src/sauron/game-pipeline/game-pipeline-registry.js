@@ -146,6 +146,38 @@ const GAME_PIPELINE_REGISTRY = {
       },
     ],
   },
+  "unreal-empty-v1": {
+    id: "unreal-empty-v1",
+    label: "Boş Unreal",
+    templateId: null,
+    genre: "empty",
+    engine: "unreal",
+    projectType: "game-unreal",
+    phases: [
+      {
+        phase: 1,
+        goal: "Verify UE level via unreal_get_world_outliner + unreal_play_mode MCP",
+        complexityHint: "low",
+        verification: { mcp: "unreal_play_mode" },
+      },
+      {
+        phase: 2,
+        goal: "Spawn player pawn + camera via unreal_spawn_actor MCP",
+        complexityHint: "low",
+      },
+      {
+        phase: 3,
+        goal: "Implement core mechanic from brief using unreal_* MCP tools only",
+        complexityHint: "low",
+      },
+      {
+        phase: 4,
+        goal: "Playtest in PIE, fix errors, update scene cache",
+        complexityHint: "low",
+        verification: { mcp: "unreal_play_mode" },
+      },
+    ],
+  },
 };
 
 function getGamePipeline(pipelineId) {
@@ -163,18 +195,47 @@ function listGamePipelines() {
   }));
 }
 
-function resolvePipelineForTemplate(templateId) {
+const { normalizeGamedevEngine } = require("../gamedev-config");
+
+function getDefaultPipelineId(engine = "unity") {
+  const normalized = normalizeGamedevEngine(engine);
+  if (normalized === "unreal") {
+    return "unreal-empty-v1";
+  }
+  return "unity-empty-v1";
+}
+
+function resolvePipelineForTemplate(templateId, engine = "unity") {
+  const normalized = normalizeGamedevEngine(engine);
+  if (normalized === "unreal") {
+    return "unreal-empty-v1";
+  }
   const key = String(templateId || "").trim();
   if (!key || key === "empty" || key === "custom" || key === "universal" || key === "any") {
-    return "unity-empty-v1";
+    return getDefaultPipelineId(normalized);
   }
-  const found = Object.values(GAME_PIPELINE_REGISTRY).find((p) => p.templateId === key);
-  return found?.id || "unity-empty-v1";
+  const found = Object.values(GAME_PIPELINE_REGISTRY).find(
+    (p) => p.templateId === key && (p.engine || "unity") === "unity",
+  );
+  return found?.id || getDefaultPipelineId(normalized);
+}
+
+function resolvePipelineForEngine(engine, genreResult = {}) {
+  const normalized = normalizeGamedevEngine(engine);
+  if (normalized === "unreal") {
+    return "unreal-empty-v1";
+  }
+  if (normalized !== "unity") {
+    return getDefaultPipelineId(normalized);
+  }
+  return genreResult.pipelineId || getDefaultPipelineId("unity");
 }
 
 module.exports = {
   GAME_PIPELINE_REGISTRY,
   getGamePipeline,
   listGamePipelines,
+  getDefaultPipelineId,
   resolvePipelineForTemplate,
+  resolvePipelineForEngine,
 };
