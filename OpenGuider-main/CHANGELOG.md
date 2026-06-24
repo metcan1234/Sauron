@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.2.3 — 2026-06-24
+
+### Fixed — Game Dev button reliability
+- **Bridge kurulumu**: 🎮 artık ⌘ Çalışma Kısmı gibi VS Code + Sauron Bridge önkoşullarını kontrol eder
+- **Yanlış session tetikleme**: Sohbet kutusundaki metin oyun planı olmadan pipeline başlatmaz; boş planda `activate-gamedev-mode` → VS Code açılır
+- **Workspace bootstrap**: Game Dev açılışında `.vscode/extensions.json`, MCP config ve clinerules yazılır
+- **Eksik klasör**: Var olmayan workspace yolu erken hata verir
+
 ## 2.2.2 — 2026-06-24
 
 ### Added — Unreal Engine support

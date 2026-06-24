@@ -298,6 +298,50 @@ export function createPanelController({
     return missing.map((step) => `• ${step.title}: ${step.docHint}`).join("\n");
   }
 
+  async function ensureWorkspacePrerequisites({ promptForMissingCline = true } = {}) {
+    let prerequisites = await api.invoke("check-workspace-prerequisites");
+    if (!prerequisites?.canOpenWorkspace) {
+      ui.showErrorBanner({
+        title: "VS Code kurulumu eksik",
+        message: formatSetupWarnings(prerequisites) || prerequisites?.error || "code CLI bulunamadı.",
+        actionLabel: "Kurulum rehberi",
+        onAction: () => api.invoke("open-external-link", "https://github.com/metcan1234/Sauron#kurulum"),
+      });
+      return { ok: false, prerequisites };
+    }
+
+    if (!prerequisites?.bridgeExtension) {
+      ui.showToast("Sauron Bridge kuruluyor…", false);
+      const installResult = await api.invoke("install-workspace-stack");
+      if (!installResult?.ok) {
+        ui.showErrorBanner({
+          title: "Bridge kurulamadı",
+          message: installResult?.error || formatSetupWarnings(installResult?.prerequisites) || "VS Code eklentisi kurulamadı.",
+          actionLabel: "Kurulum rehberi",
+          onAction: () => api.invoke("open-external-link", "https://github.com/metcan1234/Sauron#kurulum"),
+        });
+        return { ok: false, prerequisites: installResult?.prerequisites };
+      }
+      prerequisites = installResult.prerequisites || await api.invoke("check-workspace-prerequisites");
+      ui.showToast("Sauron Bridge kuruldu", false);
+    }
+
+    if (promptForMissingCline && !prerequisites?.clineExtension) {
+      const proceedWithoutCline = await ui.confirmDialog({
+        title: "Cline extension eksik",
+        message: "Cline yüklü değil. VS Code açılır ama görev otomatik başlamaz.\n\nMarketplace'ten Cline (saoudrizwan.claude-dev) kurup devam edilsin mi?",
+        confirmLabel: "Devam",
+        cancelLabel: "İptal",
+        confirmDanger: false,
+      });
+      if (!proceedWithoutCline) {
+        return { ok: false, prerequisites, cancelled: true };
+      }
+    }
+
+    return { ok: true, prerequisites };
+  }
+
   async function pollHandoffUntilSettled(workspacePath, handoffFileName) {
     stopWorkspaceHandoffPoll();
     const startedAt = Date.now();
@@ -386,44 +430,9 @@ export function createPanelController({
     ui.hideWorkspaceStatus();
 
     try {
-      let prerequisites = await api.invoke("check-workspace-prerequisites");
-      if (!prerequisites?.canOpenWorkspace) {
-        ui.showErrorBanner({
-          title: "VS Code kurulumu eksik",
-          message: formatSetupWarnings(prerequisites) || prerequisites?.error || "code CLI bulunamadı.",
-          actionLabel: "Kurulum rehberi",
-          onAction: () => api.invoke("open-external-link", "https://github.com/metcan1234/Sauron#kurulum"),
-        });
+      const prereq = await ensureWorkspacePrerequisites();
+      if (!prereq.ok) {
         return;
-      }
-
-      if (!prerequisites?.bridgeExtension) {
-        ui.showToast("Sauron Bridge kuruluyor…", false);
-        const installResult = await api.invoke("install-workspace-stack");
-        if (!installResult?.ok) {
-          ui.showErrorBanner({
-            title: "Bridge kurulamadı",
-            message: installResult?.error || formatSetupWarnings(installResult?.prerequisites) || "VS Code eklentisi kurulamadı.",
-            actionLabel: "Kurulum rehberi",
-            onAction: () => api.invoke("open-external-link", "https://github.com/metcan1234/Sauron#kurulum"),
-          });
-          return;
-        }
-        prerequisites = installResult.prerequisites || await api.invoke("check-workspace-prerequisites");
-        ui.showToast("Sauron Bridge kuruldu", false);
-      }
-
-      if (!prerequisites?.clineExtension) {
-        const proceedWithoutCline = await ui.confirmDialog({
-          title: "Cline extension eksik",
-          message: "Cline yüklü değil. VS Code açılır ama görev otomatik başlamaz.\n\nMarketplace'ten Cline (saoudrizwan.claude-dev) kurup devam edilsin mi?",
-          confirmLabel: "Devam",
-          cancelLabel: "İptal",
-          confirmDanger: false,
-        });
-        if (!proceedWithoutCline) {
-          return;
-        }
       }
 
       let result = await api.invoke("open-workspace-handoff");
@@ -845,8 +854,11 @@ export function createPanelController({
       dom.gamedevTemplateSelect.value = settings.gamedevDefaultTemplate;
     }
 
-    const taskText = resolveGamedevTaskText();
     const masterPrompt = resolveGamedevMasterPrompt();
+    const savedMasterPrompt = String(settings?.gamedevMasterPrompt || "").trim();
+    const effectiveMasterPrompt = masterPrompt || savedMasterPrompt;
+    const taskText = effectiveMasterPrompt ? resolveGamedevTaskText() : "";
+
     if (masterPrompt) {
       await api.invoke("save-settings", { gamedevMasterPrompt: masterPrompt });
     }
@@ -854,6 +866,11 @@ export function createPanelController({
     gamedevSessionInFlight = true;
 
     try {
+      const prereq = await ensureWorkspacePrerequisites({ promptForMissingCline: !effectiveMasterPrompt });
+      if (!prereq.ok) {
+        return;
+      }
+
       const probe = await api.invoke("probe-gamedev-mcp");
       if (!probe?.ok) {
         ui.showErrorBanner({
@@ -865,8 +882,11 @@ export function createPanelController({
         return;
       }
 
-      if (taskText || masterPrompt) {
-        const result = await api.invoke("start-gamedev-session", { taskText, masterPrompt });
+      if (effectiveMasterPrompt) {
+        const result = await api.invoke("start-gamedev-session", {
+          taskText,
+          masterPrompt: effectiveMasterPrompt,
+        });
         if (!result?.ok) {
           ui.showToast(result?.error || "Game Dev oturumu başlatılamadı", true);
           return;

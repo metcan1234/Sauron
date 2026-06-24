@@ -43,6 +43,7 @@ const {
   startGamePipeline,
   getCurrentPhaseGoal,
 } = require("./game-pipeline");
+const { bootstrapWorkspace } = require("./workspace-bootstrap");
 const { scaffoldUnityTemplate } = require("./scaffold-unity-template");
 
 function resolveWorkspacePath(workspacePath, settings = {}) {
@@ -68,6 +69,12 @@ async function activateGamedevMode(settings = {}) {
   if (!workspacePath) {
     return { ok: false, error: "Workspace path ayarlanmamış — Ayarlar → Çalışma Kısmı." };
   }
+  if (!fs.existsSync(workspacePath)) {
+    return { ok: false, error: "Workspace klasörü bulunamadı — Ayarlar → Çalışma Kısmı yolunu kontrol edin." };
+  }
+
+  const projectType = engine === "unreal" ? "game-unreal" : "game-unity";
+  await bootstrapWorkspace(workspacePath, { ...settings, projectType });
 
   writeGamedevMcpConfig(workspacePath, settings, engine);
   seedGamedevRules(workspacePath, engine);
@@ -113,6 +120,9 @@ async function launchGamedevSession({
   if (!resolvedWorkspace) {
     return { ok: false, error: "Workspace path ayarlanmamış — Ayarlar → Çalışma Kısmı." };
   }
+  if (!fs.existsSync(resolvedWorkspace)) {
+    return { ok: false, error: "Workspace klasörü bulunamadı — Ayarlar → Çalışma Kısmı yolunu kontrol edin." };
+  }
 
   const rawTask = String(taskText || "").trim();
   const rawMaster = String(masterPrompt || settings.gamedevMasterPrompt || "").trim();
@@ -127,6 +137,9 @@ async function launchGamedevSession({
   }
 
   const engine = normalizeGamedevEngine(engineOverride || settings.gamedevActiveEngine);
+  let projectType = engine === "unreal" ? "game-unreal" : "game-unity";
+  await bootstrapWorkspace(resolvedWorkspace, { ...settings, projectType });
+
   const mcpEntryPath = resolveGamedevMcpEntryPath(settings);
   const notices = [];
   const routing = resolveGamedevMode(settings);
@@ -148,7 +161,7 @@ async function launchGamedevSession({
 
   const phaseInfo = getCurrentPhaseGoal(resolvedWorkspace);
   const activePipeline = phaseInfo?.pipeline || pipelineStart.pipeline;
-  const projectType = activePipeline?.projectType || (engine === "unreal" ? "game-unreal" : "game-unity");
+  projectType = activePipeline?.projectType || projectType;
 
   if (phaseInfo?.phase === 1 && genre.presetScaffold && genre.templateId && engine === "unity") {
     const scaffold = scaffoldUnityTemplate(resolvedWorkspace, genre.templateId);

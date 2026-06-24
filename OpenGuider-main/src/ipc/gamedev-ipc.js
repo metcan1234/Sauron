@@ -42,6 +42,13 @@ function registerGamedevIpc({
     try {
       const settings = await getRuntimeSettings();
       const result = await activateGamedevMode(settings);
+      if (result?.ok) {
+        broadcastGamedevEvent("gamedev-mode-changed", {
+          modeActive: true,
+          engine: result.engine,
+          workspacePath: result.workspacePath,
+        });
+      }
       return result;
     } catch (error) {
       appLogger?.error?.("activate-gamedev-mode-failed", { error: error?.message || error });
@@ -64,6 +71,18 @@ function registerGamedevIpc({
         engineOverride: engine || null,
         streamAIResponse,
       });
+      if (result?.ok) {
+        broadcastGamedevEvent("gamedev-mode-changed", {
+          modeActive: true,
+          engine: result.engine,
+          workspacePath: result.workspacePath,
+        });
+        broadcastGamedevEvent("gamedev-session-started", {
+          handoffId: result.handoffId,
+          handoffFileName: result.handoffFileName,
+          workspacePath: result.workspacePath,
+        });
+      }
       return result;
     } catch (error) {
       appLogger?.error?.("start-gamedev-session-failed", { error: error?.message || error });
