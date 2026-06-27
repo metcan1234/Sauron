@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.11 — 2026-06-27
+
+### Fixed — Kurulum açılış hatası
+- **`workspace-path-validator` eksik modül**: Bozuk paket derlemesinde `Cannot find module './src/sauron/workspace-path-validator'` hatası giderildi
+- **`predist:win`**: Goose / Game Dev / workspace doğrulayıcı dosyaları paket öncesi kontrol edilir
+
 ## 2.2.10 — 2026-06-24
 
 ### Fixed — Ekran rehberliği sohbet güncellemesi

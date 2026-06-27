@@ -124,8 +124,30 @@ function ensureGamedevMcpBuilt() {
   console.log(`gamedev-all-in-one MCP ready: ${entryPath}`);
 }
 
+function ensureRequiredRuntimeModules() {
+  const required = [
+    "src/sauron/workspace-path-validator.js",
+    "src/sauron/stt-readiness.js",
+    "src/ipc/goose-ipc.js",
+    "src/ipc/gamedev-ipc.js",
+    "src/ipc/game-pipeline-ipc.js",
+    "src/sauron/goose-launcher.js",
+    "src/sauron/gamedev-launcher.js",
+  ];
+  const missing = required.filter((rel) => !fs.existsSync(path.join(projectRoot, rel)));
+  if (missing.length > 0) {
+    console.error("Required runtime modules missing (dist would crash on launch):");
+    for (const rel of missing) {
+      console.error(`- ${rel}`);
+    }
+    process.exit(1);
+  }
+  console.log(`Required runtime modules OK (${required.length} files)`);
+}
+
 function main() {
   runSyntaxChecks();
+  ensureRequiredRuntimeModules();
   runUnitTests();
   ensureGamedevMcpBuilt();
   ensureBridgeVsixPresent();
