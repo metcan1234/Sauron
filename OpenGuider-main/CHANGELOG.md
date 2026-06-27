@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.2.12 — 2026-06-27
+
+### Fixed — Game Dev MCP kurulum paketi
+- **gamedev-all-in-one**: Exe derlemeden önce `dist/index.js` build edilir; `resources/gamedev-all-in-one/` artık installer'a dahil
+- **after-pack**: Game Dev MCP pakette yoksa build başarısız olur (sessiz eksik paket engellenir)
+- **CI release**: Windows workflow gamedev build + predist adımlarını çalıştırır
+
 ## 2.2.11 — 2026-06-27
 
 ### Fixed — Kurulum açılış hatası

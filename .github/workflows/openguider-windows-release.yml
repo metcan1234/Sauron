@@ -32,6 +32,20 @@ jobs:
         shell: pwsh
         run: npm ci --omit=optional
 
+      - name: Build gamedev-all-in-one MCP
+        shell: pwsh
+        run: |
+          Set-Location extensions/gamedev-all-in-one
+          npm ci
+          npm run build
+          if (-not (Test-Path dist/index.js)) { throw "gamedev-all-in-one dist/index.js missing" }
+
+      - name: Pre-dist checks (skip unit tests on CI release)
+        shell: pwsh
+        env:
+          SAURON_SKIP_DIST_TESTS: "1"
+        run: node scripts/pre-dist-check.js
+
       - name: Build NSIS installer
         shell: pwsh
         env:

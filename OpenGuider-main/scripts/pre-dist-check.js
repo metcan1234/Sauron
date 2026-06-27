@@ -148,9 +148,13 @@ function ensureRequiredRuntimeModules() {
 function main() {
   runSyntaxChecks();
   ensureRequiredRuntimeModules();
-  runUnitTests();
   ensureGamedevMcpBuilt();
   ensureBridgeVsixPresent();
+  if (process.env.SAURON_SKIP_DIST_TESTS === "1") {
+    console.log("Skipping unit tests (SAURON_SKIP_DIST_TESTS=1)");
+  } else {
+    runUnitTests();
+  }
   console.log("pre-dist-check passed");
 }
 

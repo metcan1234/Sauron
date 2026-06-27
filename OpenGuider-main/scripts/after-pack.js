@@ -60,6 +60,26 @@ async function setWindowsExecutableMetadata(context) {
   });
 }
 
+function ensurePackagedGamedevMcp(context) {
+  if (context?.electronPlatformName !== "win32") {
+    return;
+  }
+
+  const productName = context.packager.appInfo.productFilename
+    || context.packager.appInfo.productName
+    || "Sauron";
+  const resourcesDir = path.join(context.appOutDir, "resources");
+  const gamedevEntry = path.join(resourcesDir, "gamedev-all-in-one", "dist", "index.js");
+  if (!fs.existsSync(gamedevEntry)) {
+    throw new Error(
+      `Packaged Game Dev MCP missing: ${gamedevEntry}. `
+      + "Run ensureGamedevMcpBuilt (npm run predist:win) before electron-builder.",
+    );
+  }
+  console.log(`Packaged Game Dev MCP OK: ${gamedevEntry}`);
+}
+
 module.exports = async (context) => {
+  ensurePackagedGamedevMcp(context);
   await setWindowsExecutableMetadata(context);
 };
