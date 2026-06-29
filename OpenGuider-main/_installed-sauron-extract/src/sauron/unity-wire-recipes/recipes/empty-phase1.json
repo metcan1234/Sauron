@@ -1,0 +1,10 @@
+{
+  "id": "empty-phase1",
+  "genre": "empty",
+  "phase": 1,
+  "steps": [
+    "unity_load_scene",
+    "unity_get_hierarchy",
+    "unity_play_mode"
+  ]
+}

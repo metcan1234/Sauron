@@ -1,0 +1,12 @@
+{
+  "id": "co-op-climb-phase5",
+  "genre": "co-op-climb",
+  "phase": 5,
+  "steps": [
+    "unity_load_scene",
+    "unity_create_gameobject",
+    "unity_add_component",
+    "unity_set_transform",
+    "unity_save_scene"
+  ]
+}

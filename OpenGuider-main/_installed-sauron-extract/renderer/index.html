@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Sauron</title>
+<link rel="stylesheet" href="css/style.css"/>
+</head>
+<body>
+<div class="panel">
+  <div class="header">
+    <div class="header-brand">
+      <div class="header-logo">
+        <img src="assets/logo.png" alt="Sauron">
+      </div>
+    </div>
+    <div class="header-center" aria-hidden="false">
+      <span class="header-center-title">Sauron</span>
+    </div>
+    <div class="header-trail">
+    <div class="header-meta">
+      <span class="finops-badge hidden" id="finops-badge" data-i18n="finopsTitle" data-i18n-attr="title" title="FinOps"></span>
+      <span class="agent-status" id="agent-status" data-i18n="agentIdle">boşta</span>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn panel-hint-btn" id="btn-panel-hint" type="button" title="Panel: sohbet ve planlama · ⌘ Çalışma Kısmı: kod yazımı (Cline)" aria-label="Panel ipucu">ℹ</button>
+      <button class="icon-btn" id="btn-chat-history" data-i18n="chatHistory" data-i18n-attr="title" title="Sohbet geçmişi">☰</button>
+      <button class="icon-btn hidden" id="btn-web-preview" data-i18n="webPreview" data-i18n-attr="title" title="Önizleme">👁</button>
+      <button class="icon-btn hidden" id="btn-code-studio" title="Code Studio">&lt;/&gt;</button>
+      <button class="icon-btn goose-btn" id="btn-goose" title="Goose Kısmı — terminal ajanı">🪿</button>
+      <button class="icon-btn gamedev-btn" id="btn-gamedev" title="Game Dev — gamedev-all-in-one MCP">🎮</button>
+      <button class="icon-btn workspace-btn" id="btn-workspace" data-i18n="workspace" data-i18n-attr="title" title="Çalışma Kısmı">⌘</button>
+      <button class="icon-btn" id="btn-settings" data-i18n="settings" data-i18n-attr="title" title="Ayarlar">⚙</button>
+      <button class="icon-btn" id="btn-close" data-i18n="hide" data-i18n-attr="title" title="Gizle" style="-webkit-app-region:no-drag">✕</button>
+    </div>
+    </div>
+  </div>
+
+  <div class="model-bar">
+    <span class="model-badge" data-i18n="model">Model</span>
+    <span class="provider-dot" id="provider-dot"></span>
+    <select class="model-select" id="model-select"></select>
+    <button class="clear-btn" id="btn-clear" data-i18n="clearConversation" data-i18n-attr="title" title="Sohbeti temizle">🗑</button>
+  </div>
+
+  <div class="mode-bar hidden" id="mode-bar" aria-hidden="true">
+    <div class="mode-bar-section mode-bar-left" id="mode-bar-plugin" data-i18n="browserExecuting">⬡ TARAYICI ÇALIŞIYOR</div>
+    <div class="mode-bar-section mode-bar-center">
+      <span class="mode-bar-badge" id="mode-bar-trust" data-i18n="autopilot">● OTOPİLOT</span>
+    </div>
+    <div class="mode-bar-section mode-bar-right" id="mode-bar-step" data-i18n="stepCounter">ADIM 0 / ?</div>
+  </div>
+
+  <div class="chat-area" id="chat-area">
+    <div class="chat-background" id="chat-background">
+      <div class="empty-state" id="chat-background-content">
+        <img src="assets/logo.png" alt="Sauron" class="empty-logo" id="chat-background-logo">
+        <p id="empty-state-hint">Bana bir şey sor.<br/><strong>Yaz</strong> veya <kbd>Ctrl+Shift+Space</kbd> ile konuş.</p>
+        <div class="empty-state-cta" id="empty-state-cta">
+          <button type="button" class="empty-state-cta-btn primary" id="empty-cta-micro-guide">Ekranımda yardım et</button>
+          <button type="button" class="empty-state-cta-btn" id="empty-cta-workspace">Kod yaz / Çalışma Kısmı</button>
+          <button type="button" class="empty-state-cta-btn gamedev-cta" id="empty-cta-gamedev">🎮 Oyun yap (Game Dev)</button>
+          <button type="button" class="empty-state-cta-btn hidden" id="empty-cta-code-agent">Projede kod yaz</button>
+          <p class="empty-state-advanced">Gelişmiş: Web Studio, Browser agent → Ayarlar</p>
+        </div>
+      </div>
+    </div>
+    <div class="chat-messages" id="chat-messages"></div>
+  </div>
+
+  <div class="browser-task-view hidden" id="browser-task-view"></div>
+  <div class="approval-section hidden" id="step-approval-section">
+    <div id="step-approval-card"></div>
+  </div>
+
+  <div class="plan-panel hidden" id="plan-panel">
+    <div class="plan-panel-header">
+      <div class="plan-panel-title" id="plan-goal"></div>
+      <div class="plan-panel-progress" id="plan-progress"></div>
+    </div>
+    <div class="plan-steps" id="plan-steps"></div>
+  </div>
+
+  <div class="panel-actions hidden" id="panel-actions">
+    <button class="action-btn" id="btn-plan-prev" data-i18n="planPrev" data-i18n-attr="title" type="button"><span class="action-icon">←</span><span data-i18n="planBack">Geri</span></button>
+    <button class="action-btn primary" id="btn-plan-done" data-i18n="planMarkDone" data-i18n-attr="title" type="button"><span class="action-icon">✓</span><span data-i18n="planDone">Tamamlandı</span></button>
+    <button class="action-btn" id="btn-plan-skip" data-i18n="planSkip" data-i18n-attr="title" type="button"><span class="action-icon">⤼</span><span data-i18n="planSkip">Atla</span></button>
+    <button class="action-btn" id="btn-plan-help" data-i18n="planHelp" data-i18n-attr="title" type="button"><span class="action-icon">?</span><span data-i18n="planHelp">Yardım</span></button>
+    <button class="action-btn" id="btn-plan-regenerate" data-i18n="planRegenerate" data-i18n-attr="title" type="button"><span class="action-icon">⟳</span><span data-i18n="planRedo">Yeniden dene</span></button>
+    <button class="action-btn" id="btn-plan-recheck" data-i18n="planRecheck" data-i18n-attr="title" type="button"><span class="action-icon">↻</span><span data-i18n="planRecheck">Tekrar kontrol</span></button>
+    <button class="action-btn danger" id="btn-plan-cancel" data-i18n="planCancel" data-i18n-attr="title" type="button"><span class="action-icon">✕</span><span data-i18n="planCancel">İptal</span></button>
+  </div>
+
+  <div class="panel-actions micro-guide-actions hidden" id="micro-guide-actions">
+    <button class="action-btn primary" id="btn-micro-guide-done" type="button" title="Adımı tamamladım"><span class="action-icon">✓</span><span>Yaptım</span></button>
+    <button class="action-btn" id="btn-micro-guide-continue" type="button" title="Tur limitinden sonra devam et"><span class="action-icon">⟳</span><span>Devam et</span></button>
+    <button class="action-btn danger" id="btn-micro-guide-cancel" type="button" title="Mikro rehberi kapat"><span class="action-icon">✕</span><span>İptal</span></button>
+  </div>
+
+  <div class="workspace-status-banner hidden" id="workspace-status-banner">
+    <div class="workspace-status-top">
+      <div class="workspace-status-main">
+        <strong id="workspace-status-title">Çalışma Kısmı</strong>
+        <span id="workspace-status-message"></span>
+      </div>
+      <div class="workspace-status-actions">
+        <button class="workspace-status-btn" id="workspace-status-focus" type="button">VS Code'a git</button>
+        <button class="workspace-status-btn ghost" id="workspace-status-dismiss" type="button" data-i18n="dismiss">Kapat</button>
+      </div>
+    </div>
+    <div class="workspace-status-details">
+      <div class="handoff-history-panel hidden" id="handoff-history-panel">
+        <strong>Handoff geçmişi</strong>
+        <ul class="handoff-history-list" id="handoff-history-list"></ul>
+      </div>
+      <div class="build-pipeline-panel hidden" id="build-pipeline-panel">
+        <strong id="build-pipeline-title">Üretim Hattı</strong>
+        <div class="build-pipeline-meta" id="build-pipeline-meta"></div>
+        <button class="workspace-status-btn ghost hidden" id="build-pipeline-advance" type="button">Sonraki fazı başlat</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="error-banner hidden" id="error-banner">
+    <div class="error-banner-main">
+      <strong id="error-banner-title" data-i18n="errorDefaultTitle">Bir hata oluştu</strong>
+      <span id="error-banner-message"></span>
+      <span class="error-banner-request" id="error-banner-request"></span>
+    </div>
+    <div class="error-banner-actions">
+      <button class="error-banner-btn" id="error-banner-action" type="button" data-i18n="openSettings">Ayarları aç</button>
+      <button class="error-banner-btn ghost" id="error-banner-dismiss" type="button" data-i18n="dismiss">Kapat</button>
+    </div>
+  </div>
+
+  <div class="input-area">
+    <div class="attachment-preview-strip hidden" id="attachment-preview-strip"></div>
+    <div class="input-meta-row">
+      <span class="mode-badge is-clickable" id="assistant-mode-badge" title="Mod değiştir: Asistan / Rehber">Asistan</span>
+      <span class="mode-badge micro-guide-badge hidden" id="micro-guide-badge" title="Aktif mikro-tur rehber">Rehber · Mikro-tur</span>
+      <span class="mode-badge code-agent-badge hidden" id="code-agent-badge" title="Aktif kod agent">Kod · Agent</span>
+      <span class="mode-badge goose-badge hidden" id="goose-badge" title="Aktif Goose oturumu">🪿 Goose</span>
+      <button class="mode-badge goose-cancel hidden" id="btn-goose-cancel" type="button" title="Goose oturumunu durdur">Durdur</button>
+      <span class="mode-badge gamedev-badge hidden" id="gamedev-badge" title="Aktif Game Dev modu">🎮 Game Dev</span>
+      <button class="mode-badge gamedev-cancel hidden" id="btn-gamedev-cancel" type="button" title="Game Dev modunu kapat">Kapat</button>
+      <div class="gamedev-studio-bar hidden" id="gamedev-studio-bar">
+        <label class="gamedev-studio-label" for="gamedev-template-select">Şablon</label>
+        <select id="gamedev-template-select" class="gamedev-template-select" title="Oyun şablonu">
+          <option value="custom">Özel oyun — her fikir (önerilen)</option>
+          <option value="auto">Otomatik (yalnızca net eşleşmede hızlı şablon)</option>
+          <option value="empty">Boş Unity</option>
+          <option value="co-op-climb">Hızlı şablon: Co-op Climb</option>
+          <option value="horror-coop">Hızlı şablon: Horror Co-op</option>
+          <option value="social-deduction">Hızlı şablon: Social Deduction</option>
+        </select>
+        <label class="gamedev-studio-label" for="gamedev-master-prompt">Oyun planım</label>
+        <textarea id="gamedev-master-prompt" class="gamedev-master-prompt" rows="2" placeholder="Uzun oyun planınız (brief olarak kaydedilir)…"></textarea>
+        <span class="gamedev-pipeline-bar" id="gamedev-pipeline-bar" title="Aktif pipeline fazı"></span>
+        <a class="gamedev-dashboard-link" id="gamedev-dashboard-link" href="#" title="gamedev dashboard">Dashboard</a>
+      </div>
+      <span class="code-agent-log hidden" id="code-agent-log" title="Son kod agent adımları"></span>
+      <span class="screen-pending-badge hidden" id="screen-pending-badge" title="Gönderimde ekran görüntüsü eklenecek"></span>
+    </div>
+    <div class="input-row">
+      <input type="file" id="attachment-file-input" class="hidden" multiple accept="image/*,.txt,.md,.json,.js,.ts,.py,.html,.css,.csv"/>
+      <button class="attach-file-btn" id="btn-attach-file" type="button" title="Dosya / resim ekle">📎</button>
+      <button class="capture-screen-btn" id="btn-capture-screen" type="button" data-i18n="captureScreen" data-i18n-attr="title" title="Ekran Al">📷</button>
+      <button class="capture-screen-btn micro-guide-btn" id="btn-micro-guide" type="button" title="Mikro rehber — ekranda tek adım yönlendirme">🎯</button>
+      <textarea class="text-input" id="text-input" data-i18n-placeholder="askPlaceholder" placeholder="Bana bir şey sor…" rows="1"></textarea>
+      <button class="ptt-btn" id="ptt-btn" data-i18n="holdToTalk" data-i18n-attr="title" title="Konuşmak için basılı tut">⏺
+        <span class="waveform" id="waveform" style="display:none">
+          <span class="waveform-bar" id="wb1"></span>
+          <span class="waveform-bar" id="wb2"></span>
+          <span class="waveform-bar" id="wb3"></span>
+          <span class="waveform-bar" id="wb4"></span>
+          <span class="waveform-bar" id="wb5"></span>
+        </span>
+      </button>
+      <button class="send-btn" id="send-btn" data-i18n="send" data-i18n-attr="title" title="Gönder">➤</button>
+      <button class="stop-btn hidden" id="stop-btn" data-i18n="stop" data-i18n-attr="title" title="Durdur">⏹</button>
+    </div>
+  </div>
+</div>
+
+<aside class="artifact-panel hidden" id="artifact-panel" aria-hidden="true">
+  <div class="artifact-panel-header">
+    <h3 id="artifact-panel-title">Artifact</h3>
+    <div class="artifact-panel-actions">
+      <button class="artifact-panel-btn" id="artifact-panel-copy" type="button">Kopyala</button>
+      <button class="artifact-panel-btn" id="artifact-panel-download" type="button">İndir</button>
+      <button class="artifact-panel-btn ghost" id="artifact-panel-close" type="button">✕</button>
+    </div>
+  </div>
+  <textarea class="artifact-panel-content" id="artifact-panel-content" spellcheck="false"></textarea>
+</aside>
+
+<div class="chat-drawer-overlay hidden" id="chat-drawer-overlay" aria-hidden="true">
+  <aside class="chat-drawer" id="chat-drawer" role="dialog" aria-labelledby="chat-drawer-title">
+    <div class="chat-drawer-header">
+      <h3 id="chat-drawer-title">Sohbetler</h3>
+      <button class="icon-btn chat-drawer-close" id="chat-drawer-close" type="button" title="Kapat">✕</button>
+    </div>
+    <input class="chat-drawer-search" id="chat-drawer-search" type="search" placeholder="Sohbetlerde ara..." autocomplete="off" />
+    <button class="chat-drawer-new" id="chat-drawer-new" type="button">+ Yeni sohbet</button>
+    <button class="chat-drawer-memory" id="chat-drawer-memory" type="button">🧠 Kalıcı hafıza</button>
+    <button class="chat-drawer-create-folder" id="chat-drawer-create-folder" type="button">📁 Yeni klasör</button>
+    <button class="chat-drawer-ephemeral" id="chat-drawer-ephemeral" type="button">⏱ Geçici sohbet</button>
+    <div class="chat-drawer-list" id="chat-drawer-list"></div>
+    <div class="chat-drawer-footer">
+      <button class="chat-drawer-footer-btn" id="chat-drawer-export-active" type="button">⬇ Aktif sohbeti dışa aktar</button>
+    </div>
+  </aside>
+</div>
+
+<div class="toast hidden" id="toast"></div>
+
+<div class="onboarding-overlay hidden" id="onboarding-overlay" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+  <div class="onboarding-modal">
+    <h3 id="onboarding-title" data-i18n="onboardingTitle">Sauron'a hoş geldin</h3>
+    <p id="onboarding-subtitle" data-i18n="onboardingSubtitle">İlk kullanımdan önce kurulum ve güvenlik notlarına göz at.</p>
+    <ol class="onboarding-steps">
+      <li data-i18n="onboardingStep1">Ayarlar'dan AI sağlayıcı API anahtarını ekle. Anahtarlar yalnızca yerelde saklanır.</li>
+      <li data-i18n="onboardingStep2">Mikrofon (bas-konuş) ve isteğe bağlı ekran görüntüsü izinleri gerekebilir.</li>
+      <li data-i18n="onboardingStep3">API anahtarların güvenli depolamada tutulur; yalnızca seçtiğin sağlayıcıya HTTPS istekleri gider.</li>
+    </ol>
+    <div class="onboarding-actions">
+      <button class="confirm-btn ghost" id="onboarding-skip" type="button" data-i18n="onboardingStart">Başla</button>
+      <button class="confirm-btn" id="onboarding-open-settings" type="button" data-i18n="openSettings">Ayarları aç</button>
+    </div>
+  </div>
+</div>
+
+<div class="confirm-overlay hidden" id="confirm-overlay" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+  <div class="confirm-modal">
+    <h3 id="confirm-title" data-i18n="confirmClearTitle">Sohbet temizlensin mi?</h3>
+    <p id="confirm-message" data-i18n="confirmClearMessage">Tüm sohbet geçmişi ve aktif plan ilerlemesi silinecek.</p>
+    <div class="confirm-actions">
+      <button class="confirm-btn ghost" id="confirm-cancel" type="button" data-i18n="cancel">İptal</button>
+      <button class="confirm-btn danger" id="confirm-confirm" type="button" data-i18n="confirmClear">Temizle</button>
+    </div>
+  </div>
+</div>
+
+<div class="confirm-overlay hidden" id="prompt-overlay" role="dialog" aria-modal="true" aria-labelledby="prompt-title">
+  <div class="confirm-modal">
+    <h3 id="prompt-title">Başlık</h3>
+    <p id="prompt-message"></p>
+    <input class="prompt-input" id="prompt-input" type="text" autocomplete="off" />
+    <div class="confirm-actions">
+      <button class="confirm-btn ghost" id="prompt-cancel" type="button" data-i18n="cancel">İptal</button>
+      <button class="confirm-btn" id="prompt-confirm" type="button">Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<div class="web-studio-overlay hidden" id="web-studio-overlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="web-studio-title">
+  <div class="web-studio-modal">
+    <div class="web-studio-header">
+      <h3 id="web-studio-title" data-i18n="webStudioTitle">Web Studio — Kurumsal Site</h3>
+      <button class="icon-btn" id="ws-btn-close" type="button" data-i18n="dismiss">✕</button>
+    </div>
+    <div class="web-studio-step" data-step="0">
+      <h4 data-i18n="webStudioStep1">Marka bilgileri</h4>
+      <label class="ws-label">Şirket adı<input class="form-input" id="ws-company-name" type="text" placeholder="Örnek Holding A.Ş."/></label>
+      <label class="ws-label">Sektör<input class="form-input" id="ws-industry" type="text" placeholder="Finans, teknoloji…"/></label>
+      <label class="ws-label">Slogan<textarea class="form-input" id="ws-tagline" rows="2" placeholder="Güvenilir çözümler…"></textarea></label>
+    </div>
+    <div class="web-studio-step hidden" data-step="1">
+      <h4 data-i18n="webStudioStep2">Sayfalar</h4>
+      <div class="ws-checkboxes">
+        <label><input type="checkbox" id="ws-page-home" checked/> Ana sayfa</label>
+        <label><input type="checkbox" id="ws-page-about" checked/> Hakkımızda</label>
+        <label><input type="checkbox" id="ws-page-services" checked/> Hizmetler</label>
+        <label><input type="checkbox" id="ws-page-contact" checked/> İletişim</label>
+        <label><input type="checkbox" id="ws-page-blog"/> Blog</label>
+      </div>
+    </div>
+    <div class="web-studio-step hidden" data-step="2">
+      <h4 data-i18n="webStudioStep3">Görünüm</h4>
+      <label class="ws-label">Ana renk<input class="form-input" id="ws-primary-color" type="color" value="#1e3a5f"/></label>
+      <label class="ws-label">Vurgu rengi<input class="form-input" id="ws-accent-color" type="color" value="#c9a227"/></label>
+      <label class="ws-label">Ton
+        <select class="form-input" id="ws-brand-tone">
+          <option value="corporate">Kurumsal</option>
+          <option value="modern">Modern</option>
+          <option value="luxury">Lüks</option>
+        </select>
+      </label>
+    </div>
+    <div class="web-studio-step hidden" data-step="3">
+      <h4 data-i18n="webStudioStep4">Özet ve kalite</h4>
+      <div id="web-studio-summary" class="web-studio-summary"></div>
+      <pre class="web-studio-checklist" id="web-studio-checklist-preview"></pre>
+    </div>
+    <div class="web-studio-actions">
+      <button class="confirm-btn ghost" id="ws-btn-back" type="button" data-i18n="planBack">Geri</button>
+      <button class="confirm-btn" id="ws-btn-next" type="button" data-i18n="webStudioNext">İleri</button>
+      <button class="confirm-btn primary hidden" id="ws-btn-finish" type="button" data-i18n="webStudioFinish">Oluştur ve Cline'a gönder</button>
+    </div>
+  </div>
+</div>
+
+<div class="web-studio-overlay hidden" id="self-build-overlay" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="web-studio-modal">
+    <div class="web-studio-header">
+      <h3>Self-Build Studio</h3>
+      <button class="icon-btn" id="sbs-btn-close" type="button">✕</button>
+    </div>
+    <div class="web-studio-step" data-sbs-step="0">
+      <h4>Hedef</h4>
+      <label class="ws-label">Üretim hattı
+        <select class="form-input" id="sbs-pipeline-id">
+          <option value="self-improve-feature-v1">Kendini geliştir (Sauron)</option>
+          <option value="bridge-agent-v1">Bridge agent</option>
+          <option value="corporate-web-v1">Kurumsal web (pipeline)</option>
+          <option value="monorepo-stack-v1">Tam stack (monorepo rehberi)</option>
+        </select>
+      </label>
+    </div>
+    <div class="web-studio-step hidden" data-sbs-step="1">
+      <h4>Görev</h4>
+      <label class="ws-label">Kısa açıklama<textarea class="form-input" id="sbs-task-description" rows="3" placeholder="Ne yapılacak?"></textarea></label>
+      <label class="ws-label">Maliyet profili
+        <select class="form-input" id="sbs-cost-profile">
+          <option value="economy">Ekonomi</option>
+          <option value="balanced" selected>Dengeli</option>
+          <option value="performance">Performans</option>
+        </select>
+      </label>
+    </div>
+    <div class="web-studio-step hidden" data-sbs-step="2">
+      <h4>Özet</h4>
+      <div id="sbs-summary" class="web-studio-summary"></div>
+    </div>
+    <div class="web-studio-actions">
+      <button class="confirm-btn ghost" id="sbs-btn-back" type="button">Geri</button>
+      <button class="confirm-btn" id="sbs-btn-next" type="button">İleri</button>
+      <button class="confirm-btn primary hidden" id="sbs-btn-finish" type="button">Pipeline başlat</button>
+    </div>
+  </div>
+</div>
+
+<div class="gamedev-setup-overlay hidden" id="gamedev-setup-overlay" role="dialog" aria-modal="true">
+  <div class="onboarding-modal gamedev-setup-modal">
+    <h3>Game Dev kurulum</h3>
+    <p class="gamedev-setup-progress" id="gamedev-setup-progress">Adım 1 / 3</p>
+    <div class="gamedev-setup-step" id="gamedev-setup-step-1">
+      <p>Unity proje klasörünüzü <strong>Çalışma Kısmı</strong> olarak ayarlayın (içinde <code>Assets/</code> ve <code>Packages/manifest.json</code> olmalı).</p>
+      <p id="gamedev-setup-workspace-status" class="gamedev-setup-status"></p>
+    </div>
+    <div class="gamedev-setup-step hidden" id="gamedev-setup-step-2">
+      <p>Unity Package Manager → Git URL: <strong>CoplayDev unity-mcp</strong> bridge kurun.</p>
+      <p>Cline'da <strong>gamedev-all-in-one</strong> MCP sunucusunu başlatın (TCP 7890).</p>
+      <p id="gamedev-setup-bridge-status" class="gamedev-setup-status"></p>
+    </div>
+    <div class="gamedev-setup-step hidden" id="gamedev-setup-step-3">
+      <label class="ws-label">Şablon
+        <select class="form-input" id="gamedev-setup-template">
+          <option value="custom">Özel oyun — her fikir (önerilen)</option>
+          <option value="auto">Otomatik (net eşleşmede hızlı şablon)</option>
+          <option value="empty">Boş Unity</option>
+          <option value="co-op-climb">Hızlı şablon: Co-op Climb</option>
+          <option value="horror-coop">Hızlı şablon: Horror Co-op</option>
+          <option value="social-deduction">Hızlı şablon: Social Deduction</option>
+        </select>
+      </label>
+      <p>Oyun planınız <code>.sauron/game-design-brief.json</code> olarak kaydedilir; handoff'ta yalnızca kısa özet gider.</p>
+      <p id="gamedev-setup-doctor-status" class="gamedev-setup-status"></p>
+    </div>
+    <div class="onboarding-actions">
+      <button class="confirm-btn ghost" id="gamedev-setup-prev" type="button">Geri</button>
+      <button class="confirm-btn" id="gamedev-setup-next" type="button">İleri</button>
+      <button class="confirm-btn primary hidden" id="gamedev-setup-done" type="button">Tamam, başlayalım</button>
+    </div>
+  </div>
+</div>
+
+<script src="components/step-approval/StepApprovalCard.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

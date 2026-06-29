@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="tr" class="settings-window">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Sauron Settings</title>
+<link rel="stylesheet" href="css/style.css"/>
+</head>
+<body class="settings-window">
+<div class="settings-panel">
+  <div class="settings-header">
+    <div class="header-logo">⚙</div>
+    <h2 data-i18n="settingsTitle">Ayarlar</h2>
+    <button class="icon-btn" id="btn-close" style="-webkit-app-region:no-drag" data-i18n="close" data-i18n-attr="title" title="Kapat">✕</button>
+  </div>
+
+  <div class="settings-body">
+    <div class="settings-tabs">
+      <button class="settings-tab-btn active" data-tab="agents" data-i18n="aiAgentsTab">AI Ajanları</button>
+      <button class="settings-tab-btn" data-tab="workspace" data-i18n="workspaceTab">Çalışma Kısmı</button>
+      <button class="settings-tab-btn" data-tab="finops" data-i18n="finopsTab">Bütçe / FinOps</button>
+      <button class="settings-tab-btn" data-tab="voice" data-i18n="voiceTab">Ses</button>
+      <button class="settings-tab-btn" data-tab="plugins" data-i18n="pluginsTab">Eklentiler</button>
+      <button class="settings-tab-btn" data-tab="aware" data-i18n="awareTab">Farkındalık</button>
+      <button class="settings-tab-btn" data-tab="shortcuts" data-i18n="shortcutsTab">Kısayollar</button>
+      <button class="settings-tab-btn" data-tab="about" data-i18n="aboutTab">Hakkında</button>
+    </div>
+
+    <div class="settings-tab-section active" data-tab-content="agents">
+      <div class="settings-section">
+        <h3>AI Agents</h3>
+        <p class="settings-lead">Sauron Core ve Cline için model seçimi otomatik yapılır. API anahtarlarını buraya girin — Bridge açık workspace'te Cline'a otomatik senkronlar (fork Cline gerekir).</p>
+
+        <div class="form-group">
+          <label>Cline senkron durumu</label>
+          <div class="hint" id="clineSyncStatus">Workspace seçilmedi veya anahtar yok.</div>
+          <button class="btn btn-secondary" id="btn-sync-cline" type="button" style="margin-top:8px;">Cline'a senkronla</button>
+          <span class="hint" style="display:block;margin-top:6px;">VS Code açıkken Bridge bu isteği okuyup Cline SecretStorage'a yazar. Anahtarlar workspace JSON'una yazılmaz.</span>
+        </div>
+
+        <div class="form-group">
+          <label>Gemini API Key <span class="hint-inline">(zorunlu)</span></label>
+          <input class="form-input password" id="geminiApiKey" type="password" placeholder="AIza..."/>
+          <span class="hint">Google AI Studio — Core sohbet, planlama ve orta karmaşıklık Cline.</span>
+        </div>
+
+        <div class="form-group">
+          <label>DeepSeek API Key <span class="hint-inline">(zorunlu)</span></label>
+          <input class="form-input password" id="deepseekApiKey" type="password" placeholder="sk-..."/>
+          <span class="hint">platform.deepseek.com — Cline agent döngüsü (ana model).</span>
+        </div>
+
+        <div class="form-group">
+          <label>OpenAI API Key <span class="hint-inline">(zorunlu)</span></label>
+          <input class="form-input password" id="openaiApiKey" type="password" placeholder="sk-..."/>
+          <span class="hint">platform.openai.com — yüksek karmaşıklık / retry escalation (gpt-4o-mini).</span>
+        </div>
+
+        <div class="form-group">
+          <label>Ollama URL <span class="hint-inline">(isteğe bağlı)</span></label>
+          <input class="form-input" id="ollamaUrl" type="url" placeholder="http://localhost:11434"/>
+          <span class="hint">Yerel fallback — GPU yoksa boş bırakılabilir. Varsayılan: <code>http://localhost:11434</code></span>
+        </div>
+
+        <div class="form-group">
+          <details id="clineSetupDetails">
+            <summary style="cursor:pointer;font-weight:600;">Cline kurulumu (otomatik senkron)</summary>
+            <p class="hint" style="margin-top:8px;">Kaydettiğiniz anahtarlar workspace handoff veya "Cline'a senkronla" ile Bridge üzerinden Cline'a aktarılır. Detay: <code>docs/agent-setup-cline.md</code></p>
+            <ul class="hint" style="margin:8px 0 0 16px;">
+              <li>DeepSeek → Cline DeepSeek provider veya OpenAI-compatible</li>
+              <li>Gemini → Cline Gemini provider</li>
+              <li>OpenAI → Cline OpenAI provider</li>
+              <li>Ollama → Cline Ollama URL</li>
+            </ul>
+          </details>
+          </details>
+        </div>
+
+        <details id="advancedProviderDetails" style="margin-top:16px;">
+          <summary style="cursor:pointer;font-weight:600;">Gelişmiş (legacy provider)</summary>
+          <div style="margin-top:12px;">
+            <div class="form-group">
+              <label>Asistan kişiliği (system prompt)</label>
+              <textarea class="form-input" id="systemPromptOverride" rows="4" placeholder="Opsiyonel — asistanın tonu ve davranışı"></textarea>
+              <span class="hint">Boş bırakılırsa varsayılan sistem promptu kullanılır.</span>
+            </div>
+            <div class="form-group">
+              <label>Kullanıcı hafızası (satır başına bir gerçek)</label>
+              <textarea class="form-input" id="userMemoryFacts" rows="4" placeholder="Örn: Adım Can&#10;Tercih ettiğim dil Türkçe"></textarea>
+              <span class="hint">Her satır ayrı bir hatıra olarak modele eklenir.</span>
+            </div>
+            <div class="form-group">
+              <label>Provider (legacy)</label>
+              <select class="form-select" id="providerSelect">
+                <option value="gemini">Gemini (Google)</option>
+                <option value="deepseek">DeepSeek</option>
+                <option value="openai">OpenAI</option>
+                <option value="ollama">Ollama (Local)</option>
+                <option value="claude">Claude (Anthropic)</option>
+                <option value="openrouter">OpenRouter</option>
+                <option value="groq">Groq</option>
+              </select>
+            </div>
+
+            <div class="provider-section" id="section-claude">
+              <div class="form-group">
+                <label>Claude API Key</label>
+                <input class="form-input password" id="claudeApiKey" type="password" placeholder="sk-ant-..."/>
+              </div>
+              <div class="form-group">
+                <label>Model Name</label>
+                <input class="form-input" id="claudeModel" type="text" placeholder="claude-sonnet-4-5"/>
+              </div>
+              <div class="form-group">
+                <label>Base URL</label>
+                <input class="form-input" id="claudeBaseUrl" type="url" placeholder="https://api.anthropic.com"/>
+              </div>
+            </div>
+
+            <div class="provider-section" id="section-openai">
+              <div class="form-group">
+                <label>Model Name</label>
+                <input class="form-input" id="openaiModel" type="text" placeholder="gpt-4o-mini"/>
+              </div>
+              <div class="form-group">
+                <label>Base URL</label>
+                <input class="form-input" id="openaiBaseUrl" type="url" placeholder="https://api.openai.com/v1"/>
+              </div>
+            </div>
+
+            <div class="provider-section" id="section-gemini">
+              <div class="form-group">
+                <label>Model Name</label>
+                <input class="form-input" id="geminiModel" type="text" placeholder="gemini-2.0-flash"/>
+              </div>
+              <div class="form-group">
+                <label>Base URL</label>
+                <input class="form-input" id="geminiBaseUrl" type="url" placeholder="https://generativelanguage.googleapis.com/v1beta"/>
+              </div>
+            </div>
+
+            <div class="provider-section" id="section-deepseek">
+              <div class="form-group">
+                <label>Model Name</label>
+                <input class="form-input" id="deepseekModel" type="text" placeholder="deepseek-chat"/>
+              </div>
+              <div class="form-group">
+                <label>Base URL</label>
+                <input class="form-input" id="deepseekBaseUrl" type="url" placeholder="https://api.deepseek.com"/>
+              </div>
+            </div>
+
+            <div class="provider-section" id="section-openrouter">
+              <div class="form-group">
+                <label>OpenRouter API Key</label>
+                <input class="form-input password" id="openrouterApiKey" type="password" placeholder="sk-or-..."/>
+              </div>
+              <div class="form-group">
+                <label>Model Name</label>
+                <input class="form-input" id="openrouterModel" type="text" placeholder="google/gemini-2.0-flash-lite"/>
+              </div>
+              <div class="form-group">
+                <label>OpenRouter Max Tokens</label>
+                <input class="form-input" id="openrouterMaxTokens" type="number" min="256" step="256" placeholder="2048"/>
+              </div>
+              <div class="form-group">
+                <label>Base URL</label>
+                <input class="form-input" id="openrouterBaseUrl" type="url" placeholder="https://openrouter.ai/api/v1"/>
+              </div>
+            </div>
+
+            <div class="provider-section" id="section-groq">
+              <div class="form-group">
+                <label>Groq API Key</label>
+                <input class="form-input password" id="groqApiKey" type="password" placeholder="gsk_..."/>
+              </div>
+              <div class="form-group">
+                <label>Model Name</label>
+                <input class="form-input" id="groqModel" type="text" placeholder="llama-3.2-11b-vision-preview"/>
+              </div>
+              <div class="form-group">
+                <label>Base URL</label>
+                <input class="form-input" id="groqBaseUrl" type="url" placeholder="https://api.groq.com/openai/v1"/>
+              </div>
+            </div>
+
+            <div class="provider-section" id="section-ollama">
+              <div class="form-group">
+                <label>Model Name</label>
+                <input class="form-input" id="ollamaModel" type="text" placeholder="qwen2.5-coder:7b"/>
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="settings-tab-section" data-tab-content="workspace">
+      <div class="settings-section">
+        <h3>Çalışma Kısmı (Workspace)</h3>
+        <p class="settings-lead">Sauron Core ile VS Code + Cline arasında paylaşılan proje klasörü. "Çalışma Kısmı" butonu bu klasörü VS Code'da açar ve görev özetini Cline'a aktarır.</p>
+        <p class="hint" style="margin-bottom:12px;">Varsayılan mod: <strong>Asistan</strong> (panel rozetinden Rehber'e geçilir). Provider ve bütçe: AI Ajanları / Bütçe sekmeleri.</p>
+        <div class="form-group">
+          <label>VS Code yolu</label>
+          <input class="form-input" id="vscodePath" type="text" placeholder="C:\Users\...\Microsoft VS Code\bin\code.cmd"/>
+          <span class="hint">İsteğe bağlı. Cursor PATH'te önde ise gerçek VS Code CLI yolunu buraya yazın; boş bırakırsanız otomatik bulunur.</span>
+        </div>
+        <div class="form-group">
+          <label>Workspace Path</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input class="form-input" id="workspacePath" type="text" placeholder="C:\path\to\your\project" style="flex:1;"/>
+            <button class="btn btn-secondary" id="btn-browse-workspace" type="button">Browse</button>
+          </div>
+          <span class="hint">Proje kök klasörünü seçin. Handoff dosyası <code>.sauron/handoff-&lt;id&gt;.json</code> olarak buraya yazılır.</span>
+        </div>
+        <div class="form-group">
+          <label>VS Code Bridge</label>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <button class="btn btn-secondary" id="btn-install-workspace-stack" type="button">Bridge'i kur / yenile</button>
+            <span class="hint" id="workspace-stack-status">Durum kontrol ediliyor…</span>
+          </div>
+          <span class="hint">⌘ Çalışma Kısmı basıldığında Bridge otomatik kurulur. Sorun olursa bu düğmeyi kullanın.</span>
+          <div id="cline-capability-summary" class="hint" style="margin-top:6px;">Cline capability durumu kontrol ediliyor…</div>
+        </div>
+        <div class="form-group">
+          <label>Sistem tanısı</label>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <button class="btn btn-secondary" id="btn-run-doctor" type="button">Sistem tanısı çalıştır</button>
+            <span class="hint" id="doctor-summary">Henüz çalıştırılmadı</span>
+          </div>
+          <div class="doctor-readiness-banner hidden" id="doctor-readiness-banner"></div>
+          <ul class="doctor-results" id="doctor-results"></ul>
+          <span class="hint">Node, VS Code CLI, Bridge, Cline, workspace, .sauron/ yazılabilirliği ve browser runtime durumunu kontrol eder.</span>
+        </div>
+        <div class="form-group">
+          <label>Sohbet yedekleme</label>
+          <label class="checkbox-row">
+            <input type="checkbox" id="chatBackupEnabled"/>
+            Otomatik yerel yedekleme
+          </label>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+            <input class="form-input" id="chatBackupPath" type="text" placeholder="Yedek klasörü" style="flex:1;"/>
+            <button class="btn btn-secondary" id="btn-browse-backup" type="button">Browse</button>
+            <button class="btn btn-secondary" id="btn-backup-now" type="button">Şimdi yedekle</button>
+            <button class="btn btn-secondary" id="btn-import-backup" type="button">İçe aktar</button>
+          </div>
+          <span class="hint">Uygulama açılış/kapanışta timestamp'li JSON yedek oluşturur.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-tab-section" data-tab-content="finops">
+      <div class="settings-section">
+        <h3>Bütçe / FinOps</h3>
+        <p class="settings-lead">LLM çağrılarının token ve TL maliyetini takip eder. Kayıtlar workspace varsa <code>.sauron/usage/logs.jsonl</code> dosyasına yazılır.</p>
+
+        <div class="form-group">
+          <label>Toplam Bütçe (TL)</label>
+          <input class="form-input" id="finopsTotalBudgetTl" type="number" min="0" step="0.01" placeholder="0 = sınırsız"/>
+          <span class="hint">0 bırakılırsa bütçe uyarısı devre dışı kalır.</span>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="finopsHardBudgetEnabled"/>
+            Sert bütçe limiti (tükendiğinde LLM çağrılarını engelle)
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label>Harcama grafiği (son 7 gün)</label>
+          <canvas class="finops-analytics-canvas" id="finopsAnalyticsCanvas" width="520" height="180"></canvas>
+          <span class="hint" id="finopsAnalyticsHint">Günlük TL harcaması</span>
+        </div>
+
+        <div class="form-group">
+          <label>Harcanan (TL)</label>
+          <input class="form-input" id="finopsTotalSpentTl" type="text" readonly placeholder="—"/>
+          <span class="hint" id="finopsSummaryHint">Kayıt yolu yükleniyor…</span>
+        </div>
+
+        <div class="form-group">
+          <label>USD / TL Kuru</label>
+          <input class="form-input" id="finopsUsdToTl" type="number" min="0" step="0.01" placeholder="34.5"/>
+          <span class="hint">Cline maliyet aktarımı için bridge bu kuru kullanır (.sauron/finops-config.json).</span>
+        </div>
+
+        <div class="form-group">
+          <label>Harcama Kırılımı</label>
+          <pre class="form-input" id="finopsBreakdown" style="min-height:88px;white-space:pre-wrap;font-family:var(--mono,monospace);">—</pre>
+        </div>
+
+        <div class="form-group">
+          <label>Varsayılan Fiyat (TL / 1M token)</label>
+          <input class="form-input" id="finopsDefaultPricePerMillionTl" type="number" min="0" step="0.01" placeholder="50"/>
+        </div>
+
+        <div class="form-group">
+          <label>Provider Fiyat Override (TL / 1M token)</label>
+          <div id="finopsProviderOverrides"></div>
+          <button class="btn btn-secondary" id="btn-add-provider-override" type="button">+ Provider ekle</button>
+        </div>
+
+        <div class="form-group">
+          <label>Model Fiyat Override (TL / 1M token)</label>
+          <div id="finopsModelOverrides"></div>
+          <button class="btn btn-secondary" id="btn-add-model-override" type="button">+ Model ekle</button>
+        </div>
+
+        <div class="form-group">
+          <button class="btn btn-secondary" id="btn-refresh-finops" type="button">Harcananı yenile</button>
+        </div>
+
+        <div class="form-group">
+          <h4 style="margin:0 0 8px">Agent Bakiyeleri</h4>
+          <p class="hint" style="margin-bottom:12px">Tahmini maliyet — Cline kayıtları Cline totalCost, panel kayıtları fiyat kataloğundan. Site faturasıyla küçük fark olabilir.</p>
+          <div id="finopsAgentWallets"></div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h3>Maliyet Optimizer</h3>
+        <p class="settings-lead">Otomatik agent routing: Panel sohbet Gemini; Cline low Gemini Flash; günlük iş DeepSeek; gerçek zor işler OpenAI (nadir). Governor günlük bütçede kademe düşürür — Cline modelini kilitlemez, sadece önerir.</p>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="finopsCostOptimizerEnabled"/>
+            Maliyet optimizer etkin
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label>Optimizer modu</label>
+          <select class="form-select" id="finopsCostOptimizerMode">
+            <option value="economy">Economy</option>
+            <option value="balanced">Balanced</option>
+            <option value="performance">Performance</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Core model tier</label>
+          <select class="form-select" id="finopsCoreModelTier">
+            <option value="economy">Economy</option>
+            <option value="standard">Standard</option>
+            <option value="premium">Premium</option>
+            <option value="local">Local</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Handoff max karakter</label>
+          <input class="form-input" id="finopsHandoffMaxChars" type="number" min="100" step="100" placeholder="4000"/>
+          <span class="hint">Cline'a giden handoff prompt üst sınırı (Goal/plan adımları korunur).</span>
+        </div>
+
+        <div class="form-group">
+          <label>Kod agent context max karakter</label>
+          <input class="form-input" id="finopsCodeContextMaxChars" type="number" min="100" step="100" placeholder="4000"/>
+          <span class="hint">Yerel kod agent'a gönderilen dosya/snippet üst sınırı.</span>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="finopsHandoffIncludeTranscript"/>
+            Handoff'ta son sohbet transcript'ini dahil et
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label>Günlük bütçe (TL)</label>
+          <input class="form-input" id="finopsDailyBudgetTl" type="number" min="0" step="0.01" placeholder="0 = sınırsız"/>
+          <span class="hint">Bütçe hızı aşılırsa Cline bir tier düşürülür (görev başına en fazca 1).</span>
+        </div>
+
+        <div class="settings-section" style="margin-top:16px">
+          <h4>FinOps Ultra</h4>
+          <p class="settings-lead">Token tasarrufu: delta handoff, clarify skip, yerel Ollama low önerisi. Cline VS Code içinde istediği modeli seçebilir.</p>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="finopsDeltaHandoffEnabled"/>
+              Delta handoff (tekrarlayan görevlerde küçük workspace bağlamı)
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="finopsClarifySkipEnabled"/>
+              Gereksiz clarify atla (kısa/eylem fiilli mesajlar)
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="finopsClineOllamaForLow"/>
+              Cline low → Ollama öner (yerel, sıfır API maliyeti)
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label>Panel context mesaj limiti</label>
+            <input class="form-input" id="finopsPanelContextMessages" type="number" min="4" max="50" step="1" placeholder="20"/>
+          </div>
+
+          <div class="form-group" style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-secondary" type="button" id="btn-finops-solo-preset">Solo Ultra Economy Uygula</button>
+            <button class="btn btn-secondary" type="button" id="btn-finops-preset-restore">Preset Geri Al</button>
+          </div>
+        </div>
+
+        <div class="settings-section" style="margin-top:16px">
+          <h4>Token Ultra (v2.4)</h4>
+          <p class="settings-lead">Akıllı token tasarrufu — model veya tool kısıtlamaz. Delta handoff, repo map, sahne cache, read cache ve tool output compressor ile üç kanal daha az token tüketir.</p>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="tokenUltraShowDashboard"/>
+              Token Ultra dashboard (FinOps özetinde göster)
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="tokenUltraEnabled"/>
+              Token Ultra etkin
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="finopsTrackingOnly"/>
+              FinOps sadece takip (model düşürme / engelleme kapalı)
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="tokenUltraUseDeltaHandoff"/>
+              Delta handoff (Token Ultra)
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="tokenUltraUseRepoMap"/>
+              Repo map (imza-only dosya haritası)
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="tokenUltraUseSceneCache"/>
+              Game Dev sahne cache pointer
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="tokenUltraSandboxToolOutput"/>
+              Büyük çıktıları sandbox'a yaz
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label>Token Ultra handoff max karakter</label>
+            <input class="form-input" id="tokenUltraMaxHandoffChars" type="number" min="500" step="100" placeholder="6000"/>
+          </div>
+        </div>
+
+        <input type="hidden" id="finopsLegacyHidden" value=""/>
+      </div>
+    </div>
+
+    <div class="settings-tab-section" data-tab-content="voice">
+      <div class="settings-section">
+        <h3>Voice (Speech-to-Text)</h3>
+        <div class="form-group">
+          <label>STT Provider</label>
+          <select class="form-select" id="sttProvider">
+            <option value="assemblyai">AssemblyAI Streaming (high accuracy)</option>
+            <option value="whisper">OpenAI Whisper (upload-based)</option>
+          </select>
+        </div>
+        <div class="form-group" id="assemblyKey-group">
+          <label>AssemblyAI API Key</label>
+          <input class="form-input password" id="assemblyaiApiKey" type="password" placeholder="..."/>
+        </div>
+        <div class="form-group" id="whisperKey-group" style="display:none;">
+          <label>Whisper API Key</label>
+          <input class="form-input password" id="whisperApiKey" type="password" placeholder="sk-..."/>
+          <span class="hint">Defaults to OpenAI. For Groq, enter your Groq API Key here.</span>
+        </div>
+        <div class="form-group" id="whisperApi-group" style="display:none;">
+          <label>Whisper Base URL</label>
+          <input class="form-input" id="whisperBaseUrl" type="url" placeholder="https://api.openai.com/v1"/>
+          <span class="hint">For Groq Whisper, use: <strong>https://api.groq.com/openai/v1</strong></span>
+        </div>
+        <div class="form-group" id="whisperModel-group" style="display:none;">
+          <label>Whisper Model</label>
+          <input class="form-input" id="whisperModel" type="text" placeholder="whisper-1"/>
+          <span class="hint">For Groq Whisper, use: <strong>whisper-large-v3</strong></span>
+        </div>
+        <div class="form-group">
+          <label>Language</label>
+          <select class="form-select" id="sttLanguage">
+            <option value="en-US">English (US)</option>
+            <option value="tr-TR">Turkish</option>
+            <option value="de-DE">German</option>
+            <option value="fr-FR">French</option>
+            <option value="es-ES">Spanish</option>
+            <option value="ja-JP">Japanese</option>
+            <option value="zh-CN">Chinese (Simplified)</option>
+          </select>
+        </div>
+      </div>
+      <div class="settings-section">
+        <h3>Voice (Text-to-Speech)</h3>
+        <div class="form-group">
+          <label>TTS Provider</label>
+          <select class="form-select" id="ttsProvider">
+            <option value="google">Google Translate TTS (Free &amp; Online)</option>
+            <option value="openai">OpenAI TTS (Cheap &amp; High Quality)</option>
+            <option value="elevenlabs">ElevenLabs (Premium)</option>
+          </select>
+        </div>
+        
+        <div id="openaiTts-group" style="display:none; flex-direction:column; gap:12px;">
+          <div class="form-group">
+            <label>OpenAI TTS API Key</label>
+            <input class="form-input password" id="openaiTtsApiKey" type="password" placeholder="Fallback to global OpenAI key if blank"/>
+          </div>
+          <div class="form-group">
+            <label>TTS Base URL</label>
+            <input class="form-input" id="openaiTtsBaseUrl" type="url" placeholder="https://api.openai.com/v1"/>
+          </div>
+          <div class="form-group">
+            <label>TTS Model &amp; Voice</label>
+            <div style="display:flex; gap: 8px;">
+              <input class="form-input" id="openaiTtsModel" type="text" placeholder="tts-1" style="flex:1;"/>
+              <input class="form-input" id="openaiTtsVoice" type="text" placeholder="nova" style="flex:1;"/>
+            </div>
+            <span class="hint">Voices: alloy, echo, fable, onyx, nova, shimmer</span>
+          </div>
+        </div>
+        <div class="form-group" id="elevenlabs-group">
+          <label>ElevenLabs API Key</label>
+          <input class="form-input password" id="elevenlabsApiKey" type="password" placeholder="..."/>
+        </div>
+        <div class="form-group" id="elevenlabs-voice-group">
+          <label>ElevenLabs Voice ID</label>
+          <input class="form-input" id="elevenlabsVoiceId" type="text" placeholder="EXAVITQu4vr4xnSDxMaL"/>
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="ttsEnabled" style="accent-color:#C65A3A"/>
+            Enable TTS responses
+          </label>
+        </div>
+        <div class="form-group">
+          <label>TTS Volume <span id="ttsVolumeValue">100%</span></label>
+          <input
+            class="form-input"
+            id="ttsVolume"
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value="1"
+          />
+          <span class="hint">Controls playback volume for all TTS providers.</span>
+        </div>
+        <div class="form-group">
+          <label>TTS Speed <span id="ttsRateValue">1.50x</span></label>
+          <input
+            class="form-input"
+            id="ttsRate"
+            type="range"
+            min="1"
+            max="2"
+            step="0.05"
+            value="1.5"
+          />
+          <span class="hint">Playback speed for all TTS providers (1.0x - 2.0x).</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-tab-section" data-tab-content="plugins">
+      <div class="settings-section plugins-overview-section">
+        <h3>Plugins</h3>
+        <p class="settings-lead">Sauron Core can route tasks into specialized plugins. Browser automation is live today; more workspaces can plug in here later without changing your overall setup.</p>
+
+        <section class="settings-card" style="margin-bottom:16px;">
+          <div class="settings-card-title">İsteğe bağlı özellikler</div>
+          <p class="hint" style="margin-bottom:12px;">Kullanmadığınız özellikleri kapatarak paneli sadeleştirin. Kod silinmez; istediğiniz zaman tekrar açabilirsiniz.</p>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="webStudioEnabled" class="plugin-checkbox"/>
+              <span class="toggle-copy">
+                <strong>Web Studio</strong>
+                <span>Kurumsal site sihirbazı ve sohbet önerileri.</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="selfBuildEnabled" class="plugin-checkbox"/>
+              <span class="toggle-copy">
+                <strong>Self-Build Pipeline</strong>
+                <span>Çok fazlı üretim hattı ve build pipeline paneli.</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="codeAgentNativeEnabled" class="plugin-checkbox"/>
+              <span class="toggle-copy">
+                <strong>Yerel Kod Agent (Cline'sız)</strong>
+                <span>Workspace içinde dosya düzenleme, terminal ve test döngüsü.</span>
+              </span>
+            </label>
+          </div>
+          <p class="hint">Browser Agent aç/kapa: aşağıdaki Browser eklentisi kartında.</p>
+        </section>
+
+        <div class="plugin-grid">
+          <article class="plugin-card plugin-card-active plugin-card-expandable" data-plugin-card="browser">
+            <button class="plugin-card-trigger" type="button" aria-expanded="false" aria-controls="plugin-panel-browser">
+              <div class="plugin-card-header">
+                <div>
+                  <div class="plugin-card-title">Browser</div>
+                  <div class="plugin-card-subtitle">Web automation and browsing tasks</div>
+                </div>
+                <span class="plugin-card-state plugin-card-state-live">Live</span>
+              </div>
+              <p class="plugin-card-copy">Handles search, navigation, form filling, and multi-step browser workflows.</p>
+              <span class="plugin-card-action">Open settings</span>
+            </button>
+
+            <div class="plugin-card-panel hidden" id="plugin-panel-browser" data-plugin-panel="browser">
+              <div class="plugin-shell">
+                <div class="plugin-shell-header">
+                  <div>
+                    <div class="plugin-shell-title">Primary automation workspace</div>
+                    <div class="plugin-shell-subtitle">Controls the installed browser automation runtime and its execution behavior.</div>
+                  </div>
+                  <span class="plugin-badge">Installed</span>
+                </div>
+
+                <div class="plugin-layout">
+                  <section class="settings-card">
+                    <div class="settings-card-title">Runtime</div>
+                    <div class="form-group">
+                      <label class="toggle-card">
+                        <input type="checkbox" id="browserAgentEnabled" class="plugin-checkbox"/>
+                        <span class="toggle-copy">
+                          <strong>Enable browser plugin</strong>
+                          <span>Requires the Python runtime to be available on this machine.</span>
+                        </span>
+                      </label>
+                    </div>
+                    <div class="plugin-status-panel">
+                      <div class="plugin-status-line">
+                        <span class="plugin-status-label">Runtime status</span>
+                        <strong id="browserAgentStatusText" class="plugin-status-value">stopped</strong>
+                      </div>
+                      <div class="plugin-runtime-actions">
+                        <button class="record-shortcut-btn" id="btn-download-agent" type="button">Download Runtime</button>
+                        <button class="record-shortcut-btn" id="btn-restart-agent" type="button">Restart Runtime</button>
+                      </div>
+                      <div id="agent-download-progress" class="plugin-progress hidden"></div>
+                      <span class="hint" id="browser-runtime-doctor-hint" style="margin-top:8px;display:block;">Runtime durumu kontrol ediliyor…</span>
+                    </div>
+                  </section>
+
+                  <section class="settings-card">
+                    <div class="settings-card-title">Execution Policy</div>
+                    <div class="form-group">
+                      <label>Mode</label>
+                      <select class="form-select" id="executionMode">
+                        <option value="hitl">Human-in-the-loop (Stay in control)</option>
+                        <option value="auto">Autopilot Mode (Do it automatically)</option>
+                      </select>
+                      <span class="hint" id="executionModeDescription">Sauron Core runs the browser for you, but pauses when your selected trust policy says human approval is needed.</span>
+                    </div>
+                    <div class="form-group" id="trustSettingsSection">
+                      <label>Trust Level</label>
+                      <select class="form-select" id="trustLevel">
+                        <option value="paranoid">Don't Trust (Every step needs approval)</option>
+                        <option value="balanced">Balanced (Approve only risky steps)</option>
+                      </select>
+                      <span class="hint" id="trustLevelDescription">Safe read-only actions run automatically; anything that writes or submits pauses for your approval.</span>
+                    </div>
+                    <div class="form-group">
+                      <label class="toggle-card">
+                        <input type="checkbox" id="browserHeadless" class="plugin-checkbox"/>
+                        <span class="toggle-copy">
+                          <strong>Run in headless mode</strong>
+                          <span>Keep the browser invisible while the plugin works. Leave this off to watch the full browser window.</span>
+                        </span>
+                      </label>
+                    </div>
+                  </section>
+                </div>
+              </div>
+            </div>
+          </article>
+          <article class="plugin-card plugin-card-muted">
+            <div class="plugin-card-header">
+              <div>
+                <div class="plugin-card-title">CLI &amp; Coding</div>
+                <div class="plugin-card-subtitle">Terminal and code execution</div>
+              </div>
+              <span class="plugin-card-state">Soon</span>
+            </div>
+            <p class="plugin-card-copy">Reserved for shell tasks, repo actions, builds, tests, and local coding flows.</p>
+          </article>
+          <article class="plugin-card plugin-card-muted">
+            <div class="plugin-card-header">
+              <div>
+                <div class="plugin-card-title">Desktop Apps</div>
+                <div class="plugin-card-subtitle">Native app automation</div>
+              </div>
+              <span class="plugin-card-state">Soon</span>
+            </div>
+            <p class="plugin-card-copy">Space for tools like Photoshop, office apps, and other desktop-first workflows.</p>
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-tab-section" data-tab-content="aware">
+      <div class="settings-section aware-section">
+        <h3>Aware</h3>
+        <p class="settings-lead">Experimental screen-awareness for guide flows. This layer adds OCR, window context distillation, and pointer verification so Sauron Core does not rely only on raw LLM pointers.</p>
+        <section class="aware-shell">
+          <div class="aware-shell-header">
+            <div>
+              <div class="aware-shell-title">Aware Assistance</div>
+              <div class="aware-shell-subtitle">Applies only to Fast and Planning modes. Browser plugin execution is not affected.</div>
+            </div>
+            <span class="plugin-badge">Experimental</span>
+          </div>
+
+          <div class="settings-card aware-card">
+            <div class="settings-card-title">Runtime Toggle</div>
+            <div class="form-group">
+              <label class="toggle-card">
+                <input type="checkbox" id="awareAssistanceEnabled" class="plugin-checkbox"/>
+                <span class="toggle-copy">
+                  <strong>Enable Aware assistance</strong>
+                  <span>Turns on the pre-LLM and post-LLM safety layers together, including OCR, window/context analysis, embedding-based matching, and pointer verification.</span>
+                </span>
+              </label>
+            </div>
+            <div class="aware-note">
+              Use this only when you want extra screen-state validation. It is intentionally off by default while the feature is still being tuned.
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div class="settings-tab-section" data-tab-content="shortcuts">
+      <div class="settings-section">
+        <h3>Shortcuts</h3>
+        <div class="form-group">
+          <label>Push-to-Talk Shortcut</label>
+          <div class="shortcut-row">
+            <input class="form-input shortcut-input" id="pushToTalkShortcut" type="text" placeholder="Ctrl+Shift+Space"/>
+            <button class="record-shortcut-btn" data-target-input="pushToTalkShortcut" type="button">Record</button>
+          </div>
+          <span class="hint">Restart app after changing Push-to-Talk shortcut.</span>
+        </div>
+        <div class="form-group">
+          <label>Mark as done</label>
+          <div class="shortcut-row">
+            <input class="form-input shortcut-input" id="markStepDoneShortcut" type="text" placeholder="Ctrl+Alt+1"/>
+            <button class="record-shortcut-btn" data-target-input="markStepDoneShortcut" type="button">Record</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Need help</label>
+          <div class="shortcut-row">
+            <input class="form-input shortcut-input" id="requestStepHelpShortcut" type="text" placeholder="Ctrl+Alt+2"/>
+            <button class="record-shortcut-btn" data-target-input="requestStepHelpShortcut" type="button">Record</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Re-check</label>
+          <div class="shortcut-row">
+            <input class="form-input shortcut-input" id="recheckCurrentStepShortcut" type="text" placeholder="Ctrl+Alt+3"/>
+            <button class="record-shortcut-btn" data-target-input="recheckCurrentStepShortcut" type="button">Record</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Previous step</label>
+          <div class="shortcut-row">
+            <input class="form-input shortcut-input" id="previousStepShortcut" type="text" placeholder="Ctrl+Alt+5"/>
+            <button class="record-shortcut-btn" data-target-input="previousStepShortcut" type="button">Record</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Skip step</label>
+          <div class="shortcut-row">
+            <input class="form-input shortcut-input" id="skipCurrentStepShortcut" type="text" placeholder="Ctrl+Alt+6"/>
+            <button class="record-shortcut-btn" data-target-input="skipCurrentStepShortcut" type="button">Record</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Regenerate step (Redo)</label>
+          <div class="shortcut-row">
+            <input class="form-input shortcut-input" id="regenerateCurrentStepShortcut" type="text" placeholder="Ctrl+Alt+7"/>
+            <button class="record-shortcut-btn" data-target-input="regenerateCurrentStepShortcut" type="button">Record</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Cancel plan</label>
+          <div class="shortcut-row">
+            <input class="form-input shortcut-input" id="cancelActivePlanShortcut" type="text" placeholder="Ctrl+Alt+4"/>
+            <button class="record-shortcut-btn" data-target-input="cancelActivePlanShortcut" type="button">Record</button>
+          </div>
+          <span class="hint">These shortcuts work in panel when a step is active and status is waiting user.</span>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h3>Performance Telemetry</h3>
+        <div class="form-group">
+          <label>Runtime metrics (IPC + capture timings)</label>
+          <div class="shortcut-row">
+            <button class="record-shortcut-btn" id="btn-refresh-metrics" type="button">Refresh</button>
+            <button class="record-shortcut-btn" id="btn-reset-metrics" type="button">Reset</button>
+          </div>
+          <span class="hint">Use this for freeze diagnostics. Includes p95/avg timings.</span>
+        </div>
+        <pre class="metrics-box" id="metrics-output">No metrics yet.</pre>
+      </div>
+    </div>
+
+    <div class="settings-tab-section" data-tab-content="about">
+      <div class="settings-section">
+        <h3 data-i18n="aboutTitle">Hakkında</h3>
+        <p id="aboutAppName" class="about-line">Sauron</p>
+        <p id="aboutAppVersion" class="about-line">Sürüm —</p>
+        <p id="aboutPublisher" class="about-line">Geliştirici: —</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-footer">
+    <button class="btn-danger" id="btn-reset-all">Reset to Factory Defaults</button>
+    <button class="btn-ghost" id="btn-cancel" data-i18n="cancel">İptal</button>
+    <button class="btn-primary" id="btn-save" data-i18n="saveSettings">Ayarları kaydet</button>
+  </div>
+</div>
+
+<div class="confirm-overlay hidden" id="confirm-overlay" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+  <div class="confirm-modal">
+    <h3 id="confirm-title">Reset All Settings?</h3>
+    <p id="confirm-message">This will remove all saved settings and restore factory defaults.</p>
+    <div class="confirm-actions">
+      <button class="confirm-btn ghost" id="confirm-cancel" type="button">Cancel</button>
+      <button class="confirm-btn danger" id="confirm-confirm" type="button">Reset</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast hidden" id="toast"></div>
+<script type="module" src="js/settings.js"></script>
+</body>
+</html>

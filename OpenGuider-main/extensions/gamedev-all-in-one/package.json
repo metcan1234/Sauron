@@ -1,0 +1,14 @@
+{
+  "name": "gamedev-all-in-one",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Minimal MCP server for game development scene operations",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "node scripts/build.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.9.0"
+  }
+}

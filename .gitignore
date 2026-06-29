@@ -1,0 +1,62 @@
+# Dependencies
+**/node_modules/
+
+# Build outputs
+**/dist/
+**/release/
+**/out/
+**/build/
+
+# Whitelist .vsix inside dist/ for GitHub releases
+!sauron-vscode-bridge/dist/*.vsix
+
+# Goose distribution (standalone binary — not part of repo)
+dist-windows/
+
+# Electron artifacts
+*.asar
+*.blockmap
+
+# Logs
+**/*.log
+logs/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# OS/editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+
+# Sauron runtime handoff artifacts
+.sauron/handoff*.json
+.sauron/handoff*.json.consumed
+.sauron/handoff*.json.rejected
+.sauron/archive/
+**/.sauron/usage/
+
+# IDE/agent runtime configs
+.cline/
+.cursor/
+.goose/
+.clinerules/sauron-gamedev.md
+
+# Temp files
+readme-check.md
+
+# Test coverage / caches
+coverage/
+.cache/
+.eslintcache
+tmp/
+temp/
+
+# Missing upstream LFS asset (optional demo)
+cline-main/assets/docs/demo.gif

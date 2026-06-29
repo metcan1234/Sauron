@@ -1,0 +1,57 @@
+name: Sauron Monorepo Test
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+jobs:
+  openguider-test:
+    name: OpenGuider tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: OpenGuider-main
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: OpenGuider-main/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --omit=optional
+
+      - name: Run test suite
+        run: npm test
+
+  bridge-test:
+    name: Sauron Bridge tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sauron-vscode-bridge
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: sauron-vscode-bridge/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run test suite
+        run: npm test

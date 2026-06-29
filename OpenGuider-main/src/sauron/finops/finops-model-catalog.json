@@ -1,0 +1,116 @@
+[
+  {
+    "provider": "claude",
+    "model": "claude-sonnet-4-5",
+    "contextWindow": 200000,
+    "pricePerMillionTokensTl": 120
+  },
+  {
+    "provider": "claude",
+    "model": "claude-3-5-sonnet",
+    "contextWindow": 200000,
+    "pricePerMillionTokensTl": 90
+  },
+  {
+    "provider": "claude",
+    "model": "claude-3-5-haiku",
+    "contextWindow": 200000,
+    "pricePerMillionTokensTl": 25
+  },
+  {
+    "provider": "openai",
+    "model": "gpt-4o",
+    "contextWindow": 128000,
+    "pricePerMillionTokensTl": 100
+  },
+  {
+    "provider": "openai",
+    "model": "gpt-4o-mini",
+    "contextWindow": 128000,
+    "pricePerMillionTokensTl": 15
+  },
+  {
+    "provider": "gemini",
+    "model": "gemini-2.5-flash-lite",
+    "contextWindow": 1000000,
+    "pricePerMillionTokensTl": 8
+  },
+  {
+    "provider": "gemini",
+    "model": "gemini-2.0-flash",
+    "contextWindow": 1000000,
+    "pricePerMillionTokensTl": 8
+  },
+  {
+    "provider": "gemini",
+    "model": "gemini-2.5-flash",
+    "contextWindow": 1000000,
+    "pricePerMillionTokensTl": 10
+  },
+  {
+    "provider": "openrouter",
+    "model": "google/gemini-2.0-flash-lite",
+    "contextWindow": 1000000,
+    "pricePerMillionTokensTl": 5
+  },
+  {
+    "provider": "openrouter",
+    "model": "google/gemini-2.5-flash",
+    "contextWindow": 1000000,
+    "pricePerMillionTokensTl": 12
+  },
+  {
+    "provider": "openrouter",
+    "model": "deepseek/deepseek-chat",
+    "contextWindow": 128000,
+    "pricePerMillionTokensTl": 8
+  },
+  {
+    "provider": "openrouter",
+    "model": "deepseek/deepseek-reasoner",
+    "contextWindow": 128000,
+    "pricePerMillionTokensTl": 15
+  },
+  {
+    "provider": "openrouter",
+    "model": "openai/gpt-4o-mini",
+    "contextWindow": 128000,
+    "pricePerMillionTokensTl": 12
+  },
+  {
+    "provider": "groq",
+    "model": "llama-3.2-11b-vision-preview",
+    "contextWindow": 8192,
+    "pricePerMillionTokensTl": 3
+  },
+  {
+    "provider": "groq",
+    "model": "llama-3.3-70b-versatile",
+    "contextWindow": 128000,
+    "pricePerMillionTokensTl": 8
+  },
+  {
+    "provider": "deepseek",
+    "model": "deepseek-chat",
+    "contextWindow": 128000,
+    "pricePerMillionTokensTl": 8
+  },
+  {
+    "provider": "deepseek",
+    "model": "deepseek-reasoner",
+    "contextWindow": 128000,
+    "pricePerMillionTokensTl": 15
+  },
+  {
+    "provider": "ollama",
+    "model": "qwen2.5-coder:7b",
+    "contextWindow": 128000,
+    "pricePerMillionTokensTl": 0
+  },
+  {
+    "provider": "ollama",
+    "model": "llama3.2",
+    "contextWindow": 128000,
+    "pricePerMillionTokensTl": 0
+  }
+]

@@ -1,0 +1,12 @@
+{
+  "id": "empty-phase2",
+  "genre": "empty",
+  "phase": 2,
+  "steps": [
+    "unity_load_scene",
+    "unity_create_gameobject",
+    "unity_add_component",
+    "unity_set_transform",
+    "unity_play_mode"
+  ]
+}
