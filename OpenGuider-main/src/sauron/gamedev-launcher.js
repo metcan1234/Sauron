@@ -100,6 +100,8 @@ async function activateGamedevMode(settings = {}) {
     vscode = await focusOrLaunchWorkspaceVSCode(workspacePath, {
       engine,
       engineLabel: GAMEDEV_ENGINE_LABELS[engine],
+      allowLaunch: true,
+      revealWelcome: true,
     });
     if (!vscode?.ok) {
       setGamedevModeActive(false);
@@ -348,6 +350,8 @@ async function launchGamedevSession({
     vscodeLaunch = await focusOrLaunchWorkspaceVSCode(resolvedWorkspace, {
       engine,
       engineLabel: GAMEDEV_ENGINE_LABELS[engine],
+      allowLaunch: true,
+      revealWelcome: true,
     });
     if (!vscodeLaunch?.ok) {
       setGamedevModeActive(false);

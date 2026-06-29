@@ -19,6 +19,8 @@ async function focusOrLaunchWorkspaceVSCode(workspacePath, options = {}) {
   return focusOrLaunchChannelVSCode(workspacePath, "gamedev", channelMeta, {
     ...GAMEDEV_VSCODE_LAUNCH_OPTIONS,
     ...options,
+    allowLaunch: options.allowLaunch !== false,
+    revealWelcome: options.revealWelcome === true,
   });
 }
 

@@ -192,7 +192,7 @@ function getMissionControlStatus(workspacePath, options = {}) {
     marker: marker
       ? { channel: marker.channel, label: marker.label, openedAt: marker.openedAt }
       : null,
-    shouldShow: activeCount > 0 || Boolean(hub?.shouldShow) || recentMemory.length > 0,
+    shouldShow: activeCount > 0 || Boolean(hub?.shouldShow),
   };
 }
 

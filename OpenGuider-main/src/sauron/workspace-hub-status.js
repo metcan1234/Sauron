@@ -112,11 +112,18 @@ function getWorkspaceHubStatus(workspacePath, options = {}) {
   }
 
   const summaryLine = parts.join(" · ");
+  const pendingHandoffs = listHandoffHistory(resolved, { limit: 20 })
+    .filter((item) => item.status === "pending").length;
+  const freshTaskComplete = Boolean(
+    taskComplete?.completedAt
+    && (Date.now() - Date.parse(taskComplete.completedAt)) < 15 * 60 * 1000,
+  );
   const shouldShow = Boolean(
     options.forceShow
+    || pendingHandoffs > 0
     || handoffStatus === "bekliyor"
     || (pipeline && pipeline.status === "active")
-    || taskComplete,
+    || freshTaskComplete,
   );
 
   let tone = "default";

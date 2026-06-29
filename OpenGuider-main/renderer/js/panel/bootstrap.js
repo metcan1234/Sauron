@@ -185,6 +185,15 @@ export function createPanelController({
   let lastGamedevOpenAt = 0;
   let microGuideAutopilotTimer = null;
 
+  async function refreshBuildPipeline() {
+    try {
+      const status = await api.invoke("get-build-pipeline-status");
+      ui.renderBuildPipeline(status);
+    } catch (error) {
+      log("build pipeline refresh error", error);
+    }
+  }
+
   async function refreshGamePipeline() {
     try {
       const status = await api.invoke("get-game-pipeline-status");
@@ -199,38 +208,8 @@ export function createPanelController({
             : label;
         }
       }
-      if (status?.pendingComplete && status?.pipeline?.status === "active") {
-        const advanced = await api.invoke("advance-game-pipeline");
-        if (advanced?.ok && advanced.action === "next-phase") {
-          ui.showToast(`Game Dev faz ${advanced.pipeline?.currentPhase}/${advanced.pipeline?.totalPhases} handoff yazıldı`);
-        } else if (advanced?.ok && advanced.action === "completed") {
-          ui.showToast("Game Dev pipeline tamamlandı");
-        } else if (advanced?.ok && advanced.action === "fix-handoff") {
-          ui.showToast("Doğrulama hatası — düzeltme handoff yazıldı", true);
-        }
-        await refreshGamePipeline();
-      }
     } catch (error) {
       log("game pipeline refresh error", error);
-    }
-  }
-
-  async function refreshBuildPipeline() {
-    try {
-      const status = await api.invoke("get-build-pipeline-status");
-      ui.renderBuildPipeline(status);
-      if (status?.pendingComplete && status?.pipeline?.status === "active") {
-        const advanced = await api.invoke("advance-build-pipeline");
-        if (advanced?.ok && advanced.action === "next-phase") {
-          ui.showToast(`Faz ${advanced.pipeline?.currentPhase}/${advanced.pipeline?.totalPhases} handoff yazıldı`);
-        } else if (advanced?.ok && advanced.action === "completed") {
-          ui.showToast("Üretim hattı tamamlandı");
-        }
-        await refreshBuildPipeline();
-      await refreshGamePipeline();
-      }
-    } catch (error) {
-      log("build pipeline refresh error", error);
     }
   }
 
@@ -239,7 +218,7 @@ export function createPanelController({
       const result = await api.invoke("list-handoff-history", { limit: 10 });
       if (result?.ok) {
         ui.renderHandoffHistory(result.items || [], {
-          hideUnlessPending: gamedevUiEngaged,
+          hideUnlessPending: true,
         });
       }
       await refreshBuildPipeline();
@@ -296,14 +275,15 @@ export function createPanelController({
     }
 
     try {
-      ui.showToast("⌘ Çalışma Kısmı — VS Code açılıyor…", false);
+      ui.showToast("VS Code'a odaklanılıyor…", false);
       const result = await api.invoke("focus-workspace-vscode");
       if (!result?.ok) {
-        ui.showToast(result?.error || "VS Code odaklanamadı", true);
-      } else if (!result?.skipped) {
-        if (result?.verified) {
-          ui.showToast("⌘ Çalışma Kısmı açıldı — VS Code'da turuncu CHANNEL-WORKSPACE.md", false);
+        if (result?.skipped) {
+          ui.showToast(result?.error || "VS Code açık değil — ⌘ butonuna basın", true);
+        } else {
+          ui.showToast(result?.error || "VS Code odaklanamadı", true);
         }
+        return result;
       }
       return result;
     } catch (error) {
@@ -477,6 +457,7 @@ export function createPanelController({
     }
 
     dom.btnWorkspace.disabled = true;
+    ui.clearWorkspaceHubSuppression?.();
     ui.hideWorkspaceStatus();
 
     try {

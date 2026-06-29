@@ -38,3 +38,21 @@ test("getWorkspaceHubStatus reports pending handoff", () => {
     fs.rmSync(workspace, { recursive: true, force: true });
   }
 });
+
+test("getWorkspaceHubStatus does not show banner for stale rejected handoff", () => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "hub-reject-"));
+  try {
+    const sauronDir = path.join(workspace, ".sauron");
+    fs.mkdirSync(sauronDir, { recursive: true });
+    const fileName = "handoff-test.json.rejected";
+    fs.writeFileSync(
+      path.join(sauronDir, fileName),
+      JSON.stringify({ goal: "old task", id: "old" }),
+      "utf8",
+    );
+    const hub = getWorkspaceHubStatus(workspace);
+    assert.equal(hub.shouldShow, false);
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  }
+});

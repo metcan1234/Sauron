@@ -184,11 +184,14 @@ function registerWorkspaceIpc({
       if (!workspacePath || !fs.existsSync(workspacePath)) {
         return { ok: false, error: "Çalışma klasörü ayarlanmamış veya bulunamıyor." };
       }
-      const launchResult = await focusOrLaunchChannelVSCode(workspacePath, "workspace");
+      const launchResult = await focusOrLaunchChannelVSCode(workspacePath, "workspace", {}, {
+        allowLaunch: false,
+        revealWelcome: false,
+      });
       const resolvedLaunch = launchResult?.launchResult || launchResult;
       debugLog("ipc:focus-workspace-vscode result", {
         workspacePath,
-        skipped: Boolean(resolvedLaunch?.skipped),
+        skipped: Boolean(launchResult?.skipped),
         executable: resolvedLaunch?.executable,
         executableKind: resolvedLaunch?.executableKind,
         launchMethod: resolvedLaunch?.launchMethod,
@@ -198,13 +201,11 @@ function registerWorkspaceIpc({
         action: resolvedLaunch?.action,
         pid: resolvedLaunch?.pid,
       });
-      if (resolvedLaunch?.skipped) {
-        return { ok: true, workspacePath, ...resolvedLaunch };
-      }
-      if (!resolvedLaunch?.verified) {
+      if (!launchResult?.ok) {
         return {
           ok: false,
-          error: buildVSCodeFocusErrorMessage(resolvedLaunch),
+          skipped: launchResult?.skipped === true,
+          error: launchResult?.error || buildVSCodeFocusErrorMessage(resolvedLaunch),
           workspacePath,
           channel: "workspace",
           channelMarker: launchResult?.channelMarker,
@@ -372,6 +373,8 @@ function registerWorkspaceIpc({
       }, {
         ...SAURON_CHANNEL_VSCODE_OPTIONS,
         verifyTimeoutMs: 25000,
+        allowLaunch: true,
+        revealWelcome: true,
       });
       const launchResult = vscodeLaunch?.launchResult || null;
       appLogger.info("vscode-launch-resolve", {

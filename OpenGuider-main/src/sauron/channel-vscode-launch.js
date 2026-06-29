@@ -17,6 +17,9 @@ async function focusOrLaunchChannelVSCode(workspacePath, channel, meta = {}, ext
     return { ok: false, error: "Workspace path is required." };
   }
 
+  const allowLaunch = extraOptions.allowLaunch !== false;
+  const revealWelcome = extraOptions.revealWelcome === true;
+
   const channelPrep = prepareChannelVSCode(resolved, channel, meta);
   const launchOptions = {
     ...SAURON_CHANNEL_VSCODE_OPTIONS,
@@ -32,7 +35,9 @@ async function focusOrLaunchChannelVSCode(workspacePath, channel, meta = {}, ext
   });
 
   if (focused?.verified) {
-    revealWelcomeFile(resolved, channel, meta);
+    if (revealWelcome) {
+      revealWelcomeFile(resolved, channel, meta);
+    }
     return {
       ok: true,
       launchResult: focused,
@@ -41,10 +46,27 @@ async function focusOrLaunchChannelVSCode(workspacePath, channel, meta = {}, ext
     };
   }
 
+  if (!allowLaunch) {
+    return {
+      ok: false,
+      skipped: true,
+      action: "focus_only",
+      channelMarker: channelPrep.marker,
+      error: "VS Code açık değil. ⌘ Çalışma Kısmı butonuna basarak açabilirsiniz.",
+      launchResult: focused,
+    };
+  }
+
   const launchResult = await launchVSCode(resolved, {
     ...launchOptions,
     force: extraOptions.force !== false,
   });
+
+  if (launchResult?.verified || launchResult?.skipped) {
+    if (revealWelcome) {
+      revealWelcomeFile(resolved, channel, meta);
+    }
+  }
 
   return {
     ok: Boolean(launchResult?.verified || launchResult?.skipped),

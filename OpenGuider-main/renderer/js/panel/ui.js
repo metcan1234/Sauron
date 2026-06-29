@@ -143,6 +143,7 @@ export function queryPanelDom(doc = document) {
 export function createPanelUI({ api, doc = document, dom, log, state }) {
   let workspaceStatusFocusCallback = null;
   let workspaceStatusOwner = null;
+  let workspaceHubSuppressed = false;
 
   function normalizeUrl(url) {
     const trimmed = String(url || "").trim();
@@ -968,6 +969,15 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     dom.workspaceStatusChannelPill?.classList.add("hidden");
     workspaceStatusFocusCallback = null;
     workspaceStatusOwner = null;
+    workspaceHubSuppressed = true;
+  }
+
+  function clearWorkspaceHubSuppression() {
+    workspaceHubSuppressed = false;
+  }
+
+  function isWorkspaceHubSuppressed() {
+    return workspaceHubSuppressed === true;
   }
 
   function clearWorkspaceStatusOwner(owner) {
@@ -1183,9 +1193,6 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     }
 
     dom.missionControlPanel.classList.remove("hidden");
-    if (status.shouldShow && dom.workspaceStatusBanner) {
-      dom.workspaceStatusBanner.classList.remove("hidden");
-    }
     dom.missionControlGrid.innerHTML = cards.map((ch) => {
       const stateClass = ch.state === "active"
         ? "is-active"
@@ -1726,6 +1733,8 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     hideErrorBanner,
     showWorkspaceStatus,
     hideWorkspaceStatus,
+    clearWorkspaceHubSuppression,
+    isWorkspaceHubSuppressed,
     clearWorkspaceStatusOwner,
     invokeWorkspaceStatusFocus,
     renderHandoffHistory,

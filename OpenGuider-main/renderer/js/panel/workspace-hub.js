@@ -4,17 +4,19 @@ export function isWorkspaceHubEnabled(settings = {}) {
   return settings.workspaceHubEnabled !== false;
 }
 
-export async function refreshWorkspaceHub({ api, ui, settings, onFocus, skipWhenGamedevActive = false }) {
-  if (skipWhenGamedevActive) {
+export async function refreshWorkspaceHub({ api, ui, settings, onFocus, skipWhenGamedevActive = false, suppressBanner = false }) {
+  if (suppressBanner || ui.isWorkspaceHubSuppressed?.()) {
     return null;
   }
-  try {
-    const gamedevStatus = await api.invoke("get-gamedev-status").catch(() => null);
-    if (gamedevStatus?.modeActive === true || gamedevStatus?.launchInProgress === true) {
-      return null;
+  if (skipWhenGamedevActive) {
+    try {
+      const gamedevStatus = await api.invoke("get-gamedev-status").catch(() => null);
+      if (gamedevStatus?.modeActive === true || gamedevStatus?.launchInProgress === true) {
+        return null;
+      }
+    } catch {
+      // continue with hub refresh
     }
-  } catch {
-    // continue with hub refresh
   }
   if (!isWorkspaceHubEnabled(settings)) {
     return null;
@@ -24,7 +26,7 @@ export async function refreshWorkspaceHub({ api, ui, settings, onFocus, skipWhen
     if (!hub?.ok || hub.disabled) {
       return null;
     }
-    if (!hub.shouldShow && !hub.summaryLine) {
+    if (!hub.shouldShow) {
       return hub;
     }
     ui.showWorkspaceStatus({
