@@ -372,7 +372,6 @@ function registerWorkspaceIpc({
         handoffFileName: written.fileName,
       }, {
         ...SAURON_CHANNEL_VSCODE_OPTIONS,
-        verifyTimeoutMs: 25000,
         allowLaunch: true,
         revealWelcome: true,
       });

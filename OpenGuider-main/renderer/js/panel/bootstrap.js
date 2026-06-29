@@ -6,6 +6,7 @@ import { refreshWorkspaceHub, maybeOfferPreviewAfterClineComplete } from "./work
 import { runEnhancedOnboarding } from "./onboarding-enhanced.js";
 import { applyI18nToDocument, t } from "../i18n/index.js";
 import { createChannelControls } from "./channel-controls.js";
+import { showChannelCompareDialog } from "./channel-guide.js";
 import { createAgentTraceController } from "./agent-trace.js";
 import { createClineActivityFeedController } from "./cline-activity-feed.js";
 import { createMissionControlController } from "./mission-control.js";
@@ -452,11 +453,16 @@ export function createPanelController({
 
   async function openWorkspaceHandoff() {
     log("ipc:open-workspace-handoff invoke");
-    if (dom.btnWorkspace.disabled) {
+    if (dom.btnWorkspace.disabled || focusInProgress || workspaceHandoffInFlight) {
+      return;
+    }
+    if (gamedevSessionInFlight) {
+      ui.showToast("Game Dev hazırlanıyor — bitince ⌘ Çalışma Kısmı'na basın", true);
       return;
     }
 
     dom.btnWorkspace.disabled = true;
+    workspaceHandoffInFlight = true;
     ui.clearWorkspaceHubSuppression?.();
     ui.hideWorkspaceStatus();
 
@@ -512,7 +518,7 @@ export function createPanelController({
       ui.showWorkspaceStatus({
         title: result?.launchResult?.verified ? "⌘ Çalışma Kısmı · Cline" : "⌘ Çalışma Kısmı bekleniyor",
         message: result?.launchResult?.verified
-          ? "VS Code'da turuncu CHANNEL-WORKSPACE.md açılır. Bridge'in Cline'a görev yüklemesi bekleniyor…"
+          ? "VS Code: turuncu alt çubuk + CHANNEL-WORKSPACE.md. Mor görürsen yanlış kanal."
           : "VS Code penceresi doğrulanamadı. VS Code'a git ile tekrar deneyin.",
         tone: result?.launchResult?.verified ? "default" : "warning",
         channel: "workspace",
@@ -539,6 +545,7 @@ export function createPanelController({
     } catch (error) {
       ui.showToast(error?.message || "Çalışma Kısmı açılamadı", true);
     } finally {
+      workspaceHandoffInFlight = false;
       dom.btnWorkspace.disabled = false;
     }
   }
@@ -809,6 +816,7 @@ export function createPanelController({
   }
 
   let gamedevSessionInFlight = false;
+  let workspaceHandoffInFlight = false;
 
   let gamedevSetupStep = 1;
 
@@ -903,6 +911,10 @@ export function createPanelController({
       log("[GameDev] Button disabled or session in flight");
       return;
     }
+    if (workspaceHandoffInFlight) {
+      ui.showToast("Çalışma Kısmı açılıyor — bitince 🎮 Game Dev'e basın", true);
+      return;
+    }
 
     const now = Date.now();
     if (now - lastGamedevOpenAt < 800) {
@@ -917,7 +929,7 @@ export function createPanelController({
     setGamedevUiActive(true, { modeActive: true, engineLabel });
     ui.showWorkspaceStatus({
       title: `🎮 Game Dev · ${engineLabel}`,
-      message: "VS Code hazırlanıyor… Mor CHANNEL-GAMEDEV.md açılacak.",
+      message: "VS Code hazırlanıyor… Mor alt çubuk + CHANNEL-GAMEDEV.md açılacak.",
       tone: "warning",
       channel: "gamedev",
       onFocus: () => focusWorkspaceVSCode(),
@@ -1430,6 +1442,7 @@ export function createPanelController({
     },
   });
   channelControls.wrapMessagingSend(messaging);
+  channelControls.syncChannelVisuals();
 
   function bindEvents() {
     if (panelEventsBound) {
@@ -1597,6 +1610,25 @@ export function createPanelController({
       channelControls.onWorkspaceClick();
     });
 
+    dom.channelRailCore?.addEventListener("click", () => {
+      channelControls.onCoreSelected();
+    });
+
+    dom.channelRailWorkspace?.addEventListener("click", () => {
+      channelControls.onWorkspaceClick();
+    });
+
+    dom.channelRailGamedev?.addEventListener("click", () => {
+      channelControls.setActiveChannel("gamedev");
+      void openGamedevSession();
+    });
+
+    const openChannelGuide = () => {
+      void showChannelCompareDialog(ui);
+    };
+    dom.channelRailHelp?.addEventListener("click", openChannelGuide);
+    dom.btnPanelHint?.addEventListener("click", openChannelGuide);
+
     dom.btnGoose?.addEventListener("click", () => {
       channelControls.setActiveChannel("goose");
       void openGooseSession();
@@ -1607,6 +1639,7 @@ export function createPanelController({
     });
 
     dom.btnGamedev?.addEventListener("click", () => {
+      channelControls.setActiveChannel("gamedev");
       void openGamedevSession();
     });
 

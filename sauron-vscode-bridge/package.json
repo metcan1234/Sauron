@@ -2,8 +2,13 @@
   "name": "sauron-vscode-bridge",
   "displayName": "Sauron VS Code Bridge",
   "description": "Loads Sauron Core handoff files into Cline without patching Cline core logic.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "sauron-local",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/metcan1234/Sauron.git"
+  },
+  "license": "MIT",
   "engines": {
     "vscode": "^1.84.0"
   },
@@ -12,6 +17,14 @@
     "workspaceContains:.sauron",
     "onStartupFinished"
   ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "sauron.showChannelGuide",
+        "title": "Sauron: Hangi kanaldayım?"
+      }
+    ]
+  },
   "extensionDependencies": [
     "saoudrizwan.claude-dev"
   ],
@@ -20,7 +33,7 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "test": "node --import tsx --test src/test/*.test.ts",
-    "package:vsix": "npm run compile && vsce package --no-dependencies --out dist/sauron-vscode-bridge.vsix"
+    "package:vsix": "npm run compile && vsce package --no-dependencies --allow-missing-repository --out dist/sauron-vscode-bridge.vsix"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

@@ -21,6 +21,13 @@ const BLINK_ASSETS = [
 export function queryPanelDom(doc = document) {
   return {
     panelRoot: doc.querySelector(".panel"),
+    channelRail: doc.getElementById("channel-rail"),
+    channelRailCore: doc.getElementById("channel-rail-core"),
+    channelRailWorkspace: doc.getElementById("channel-rail-workspace"),
+    channelRailGamedev: doc.getElementById("channel-rail-gamedev"),
+    channelRailHelp: doc.getElementById("channel-rail-help"),
+    channelRailActiveHint: doc.getElementById("channel-rail-active-hint"),
+    btnPanelHint: doc.getElementById("btn-panel-hint"),
     agentStatus: doc.getElementById("agent-status"),
     assistantModeBadge: doc.getElementById("assistant-mode-badge"),
     microGuideBadge: doc.getElementById("micro-guide-badge"),
@@ -995,8 +1002,8 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
   }
 
   const CHANNEL_PILL_LABELS = {
-    workspace: "⌘ Çalışma",
-    gamedev: "🎮 Game Dev",
+    workspace: "⌘ Çalışma · turuncu",
+    gamedev: "🎮 Game Dev · mor",
   };
 
   function showWorkspaceStatus({

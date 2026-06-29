@@ -173,6 +173,131 @@ html, body {
 }
 .icon-btn:hover { background: var(--accent-soft); color: var(--text); border-color: var(--accent); }
 
+/* ── Channel rail (Çalışma vs Game Dev) ─────────────────────────────────── */
+.channel-rail {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 4px;
+  align-items: stretch;
+  padding: 6px 10px 4px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(8, 12, 20, 0.55);
+}
+
+.channel-rail-segment {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-height: 44px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.35);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  font-family: inherit;
+}
+
+.channel-rail-segment:hover {
+  border-color: rgba(148, 163, 184, 0.45);
+  color: var(--text);
+}
+
+.channel-rail-segment.is-active {
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.channel-rail-segment.is-workspace.is-active {
+  border-color: rgba(198, 90, 58, 0.75);
+  background: linear-gradient(180deg, rgba(198, 90, 58, 0.22), rgba(198, 90, 58, 0.06));
+}
+
+.channel-rail-segment.is-gamedev.is-active {
+  border-color: rgba(147, 51, 234, 0.7);
+  background: linear-gradient(180deg, rgba(147, 51, 234, 0.24), rgba(99, 102, 241, 0.08));
+}
+
+.channel-rail-segment[data-channel="core"].is-active {
+  border-color: rgba(148, 163, 184, 0.45);
+  background: rgba(30, 41, 59, 0.5);
+}
+
+.channel-rail-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.channel-rail-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.channel-rail-hint {
+  font-size: 9px;
+  opacity: 0.75;
+}
+
+.channel-rail-segment.is-workspace .channel-rail-hint { color: #f0a080; }
+.channel-rail-segment.is-gamedev .channel-rail-hint { color: #c4b5fd; }
+
+.channel-rail-help {
+  width: 28px;
+  min-height: 44px;
+  border-radius: 6px;
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  align-self: stretch;
+}
+
+.channel-rail-help:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.channel-rail-active-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 2px 4px 0;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.channel-rail-active-hint.hidden {
+  display: none;
+}
+
+.panel.channel-active-workspace {
+  box-shadow: inset 4px 0 0 rgba(198, 90, 58, 0.85);
+}
+
+.panel.channel-active-gamedev {
+  box-shadow: inset 4px 0 0 rgba(147, 51, 234, 0.85);
+}
+
+.panel.channel-active-goose {
+  box-shadow: inset 4px 0 0 rgba(134, 239, 172, 0.75);
+}
+
+.panel.channel-active-workspace .text-input:focus {
+  border-color: rgba(198, 90, 58, 0.75);
+  box-shadow: inset 0 0 10px rgba(198, 90, 58, 0.08);
+}
+
+.panel.channel-active-gamedev .text-input:focus {
+  border-color: rgba(147, 51, 234, 0.65);
+  box-shadow: inset 0 0 10px rgba(147, 51, 234, 0.08);
+}
+
 /* ── Model selector ──────────────────────────────────────────────────────── */
 .model-bar {
   display: flex;

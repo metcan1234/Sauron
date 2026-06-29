@@ -16,7 +16,7 @@ test("prepareChannelVSCode writes workspace welcome marker", () => {
   assert.ok(fs.existsSync(path.join(dir, ".sauron", "active-channel.json")));
   assert.equal(path.basename(prep.welcomePath), CHANNEL_FILES.workspace);
   const content = fs.readFileSync(prep.welcomePath, "utf8");
-  assert.match(content, /Calisma Kismi aktif/);
+  assert.match(content, /ÇALIŞMA KISMI AKTİF/);
 });
 
 test("prepareChannelVSCode writes gamedev welcome marker", () => {
@@ -27,6 +27,6 @@ test("prepareChannelVSCode writes gamedev welcome marker", () => {
   assert.equal(prep.marker.engineLabel, "Unity");
   assert.equal(path.basename(prep.welcomePath), CHANNEL_FILES.gamedev);
   const content = fs.readFileSync(prep.welcomePath, "utf8");
-  assert.match(content, /Game Dev modu aktif/);
+  assert.match(content, /GAME DEV AKTİF/);
   assert.match(content, /Unity/);
 });

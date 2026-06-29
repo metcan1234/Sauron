@@ -117,6 +117,42 @@ test("spawnVSCodeProcess on Windows redirects code.cmd to Code.exe via detached 
   fs.rmSync(workspaceDir, { recursive: true, force: true });
 });
 
+test("spawnVSCodeProcess on Windows reuses code.cmd shim for -r instead of Code.exe", async (t) => {
+  if (process.platform !== "win32") {
+    t.skip("Windows-only spawn path");
+    return;
+  }
+
+  const { execCalls, spawnCalls } = installLaunchTransportMocks(t);
+
+  const installRoot = fs.mkdtempSync(path.join(os.tmpdir(), "og-vscode-reuse-"));
+  const binDir = path.join(installRoot, "bin");
+  fs.mkdirSync(binDir, { recursive: true });
+  const codeCmd = path.join(binDir, "code.cmd");
+  const codeExe = path.join(installRoot, "Code.exe");
+  fs.writeFileSync(codeCmd, "@echo off\r\n", "utf8");
+  fs.writeFileSync(codeExe, "", "utf8");
+  const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "og-vscode-workspace-reuse-"));
+
+  delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
+  delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
+  const { spawnVSCodeProcess } = require("../../src/sauron/vscode-launcher");
+
+  await spawnVSCodeProcess(
+    { kind: "cmd", path: codeCmd },
+    ["-r", workspaceDir],
+  );
+
+  assert.equal(spawnCalls.length, 0);
+  assert.equal(execCalls.length, 1);
+  const psCommand = execCalls[0][1][execCalls[0][1].indexOf("-Command") + 1];
+  assert.match(psCommand, /code\.cmd/i);
+  assert.match(psCommand, /-r|reuse-window/);
+
+  fs.rmSync(installRoot, { recursive: true, force: true });
+  fs.rmSync(workspaceDir, { recursive: true, force: true });
+});
+
 test("spawnVSCodeProcess falls back to hidden code.cmd when Code.exe is missing", async (t) => {
   if (process.platform !== "win32") {
     t.skip("Windows-only spawn path");
@@ -238,6 +274,18 @@ test("buildLaunchArgs uses -n only for new windows", () => {
   const workspace = "C:\\work\\demo";
   assert.deepEqual(buildLaunchArgs(workspace, { newWindow: true }), ["-n", workspace]);
   assert.deepEqual(buildLaunchArgs(workspace, { newWindow: false }), ["-r", workspace]);
+});
+
+test("buildLaunchArgs opens welcome file via -g without extra workspace roots", () => {
+  const { buildLaunchArgs } = require("../../src/sauron/vscode-launcher");
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "og-goto-"));
+  const welcome = path.join(workspace, ".sauron", "CHANNEL-WORKSPACE.md");
+  fs.mkdirSync(path.dirname(welcome), { recursive: true });
+  fs.writeFileSync(welcome, "# welcome", "utf8");
+  assert.deepEqual(buildLaunchArgs(workspace, {
+    newWindow: false,
+    gotoPath: welcome,
+  }), ["-g", welcome, "-r", workspace]);
 });
 
 test("buildLaunchArgs uses long flags for Code.exe fallback", () => {

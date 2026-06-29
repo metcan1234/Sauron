@@ -6,8 +6,8 @@ const GAMEDEV_VSCODE_LAUNCH_OPTIONS = {
   skipInterProfileRecovery: true,
   skipRecovery: true,
   launchProfiles: [{ profile: "default", extraArgs: [] }],
-  requireWindowVerification: true,
-  verifyTimeoutMs: 20000,
+  requireWindowVerification: false,
+  verifyTimeoutMs: 6000,
 };
 
 async function focusOrLaunchWorkspaceVSCode(workspacePath, options = {}) {

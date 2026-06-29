@@ -170,7 +170,14 @@ function resolveCodeExeFromCmdPath(codeCmdPath) {
   return null;
 }
 
-function spawnVSCodeCmdOnWindows(codeCmdPath, args) {
+function shouldUseCliShimOnWindows(args = []) {
+  return args.some((arg) => arg === "-r" || arg === "--reuse-window");
+}
+
+function spawnVSCodeCmdOnWindows(codeCmdPath, args, options = {}) {
+  if (options.useCliShim || shouldUseCliShimOnWindows(args)) {
+    return spawnViaPowerShellStartProcess(codeCmdPath, args);
+  }
   const codeExe = resolveCodeExeFromCmdPath(codeCmdPath);
   if (codeExe) {
     return spawnVSCodeGuiProcess(codeExe, mapCliArgsToExeArgs(args));
@@ -417,11 +424,21 @@ function toShortPath(longPath) {
   return resolved;
 }
 
-function buildLaunchArgs(workspacePath, { newWindow = true, executableKind = "cmd", extraArgs = [], additionalPaths = [] } = {}) {
+function buildLaunchArgs(workspacePath, { newWindow = true, executableKind = "cmd", extraArgs = [], additionalPaths = [], gotoPath = null } = {}) {
   const normalized = path.resolve(workspacePath);
   const pathForWorkspace = process.platform === "win32" && /[^\x00-\x7F]/.test(normalized)
     ? toShortPath(normalized)
     : normalized;
+  const prefixArgs = [...extraArgs];
+  if (gotoPath) {
+    const gotoResolved = path.resolve(String(gotoPath || "").trim());
+    if (gotoResolved && fs.existsSync(gotoResolved)) {
+      const pathForGoto = process.platform === "win32" && /[^\x00-\x7F]/.test(gotoResolved)
+        ? toShortPath(gotoResolved)
+        : gotoResolved;
+      prefixArgs.push("-g", pathForGoto);
+    }
+  }
   const flags = [];
   if (executableKind === "exe") {
     flags.push(newWindow ? "--new-window" : "--reuse-window");
@@ -430,11 +447,8 @@ function buildLaunchArgs(workspacePath, { newWindow = true, executableKind = "cm
   } else {
     flags.push("-r");
   }
-  const extraLaunchPaths = (additionalPaths || [])
-    .map((entry) => path.resolve(String(entry || "").trim()))
-    .filter((entry) => entry && fs.existsSync(entry))
-    .map((entry) => (process.platform === "win32" && /[^\x00-\x7F]/.test(entry) ? toShortPath(entry) : entry));
-  return [...extraArgs, ...flags, pathForWorkspace, ...extraLaunchPaths];
+  void additionalPaths;
+  return [...prefixArgs, ...flags, pathForWorkspace];
 }
 
 function resolveLaunchProfiles(options = {}) {
@@ -624,7 +638,7 @@ async function spawnVSCodeProcess(executable, args, launchContext = null) {
   let result;
   if (process.platform === "win32") {
     if (executable.kind === "cmd") {
-      result = await spawnVSCodeCmdOnWindows(executable.path, args);
+      result = await spawnVSCodeCmdOnWindows(executable.path, args, launchContext?.options || {});
     } else {
       result = await spawnVSCodeGuiProcess(executable.path, args);
     }
@@ -861,6 +875,7 @@ async function launchAndVerifyVSCode(workspacePath, executable, options = {}) {
     executableKind: executable.kind,
     extraArgs: options.extraArgs || [],
     additionalPaths: options.additionalPaths || [],
+    gotoPath: options.gotoPath || null,
   });
   const launchMethod = getLaunchMethod(executable.kind);
   const launchProfile = options.launchProfile || "default";
@@ -1282,6 +1297,7 @@ module.exports = {
   launchVSCode,
   resolveCodeExeFromCmdPath,
   mapCliArgsToExeArgs,
+  shouldUseCliShimOnWindows,
   spawnVSCodeProcess,
   resetLaunchDebounceForTests,
 };

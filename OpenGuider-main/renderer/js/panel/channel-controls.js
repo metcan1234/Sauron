@@ -2,6 +2,8 @@
  * Header channel highlight + send routing (works with exe bootstrap Goose/GameDev handlers).
  */
 
+import { applyChannelTheme } from "./channel-guide.js";
+
 export function createChannelControls({
   dom,
   log,
@@ -17,11 +19,16 @@ export function createChannelControls({
     dom.btnGamedev?.classList.toggle("gamedev-active", gamedevModeActive);
     dom.btnGamedev?.classList.toggle("channel-active", activeChannel === "gamedev");
     dom.btnWorkspace?.classList.toggle("channel-active", activeChannel === "workspace");
+    applyChannelTheme(dom, activeChannel);
   }
 
   function setActiveChannel(channel) {
     activeChannel = channel || "core";
     syncChannelVisuals();
+  }
+
+  function getActiveChannel() {
+    return activeChannel;
   }
 
   function setGamedevModeActive(active) {
@@ -95,6 +102,11 @@ export function createChannelControls({
     setGamedevModeActive(false);
   }
 
+  function onCoreSelected() {
+    activeChannel = "core";
+    syncChannelVisuals();
+  }
+
   return {
     refreshChannelStatus,
     wrapMessagingSend,
@@ -102,8 +114,10 @@ export function createChannelControls({
     onGooseSessionStarted,
     onGamedevSessionActive,
     onGamedevModeEnded,
+    onCoreSelected,
     setActiveChannel,
     setGamedevModeActive,
+    getActiveChannel,
     syncChannelVisuals,
   };
 }

@@ -1,7 +1,11 @@
 const fs = require("fs");
 const path = require("path");
-const { spawn } = require("child_process");
-const { resolveVSCodeCommand, toShortPath } = require("./vscode-launcher");
+const {
+  resolveVSCodeExecutable,
+  spawnVSCodeProcess,
+  toShortPath,
+} = require("./vscode-launcher");
+const { applyChannelVSCodeTheme, getChannelThemeBanner } = require("./channel-vscode-theme");
 
 const CHANNEL_FILES = {
   workspace: "CHANNEL-WORKSPACE.md",
@@ -28,15 +32,22 @@ function ensureSauronDir(workspacePath) {
 }
 
 function buildWelcomeContent(channel, meta = {}) {
+  const banner = getChannelThemeBanner(channel);
   if (channel === "gamedev") {
     const engine = meta.engineLabel || meta.engine || "Unity";
-    return `# Game Dev modu aktif
+    return `# 🟪 GAME DEV AKTİF
+
+> ${banner}
+> Yanlış moddaysan Sauron panelinde diğer kanala geç.
+
+---
 
 Bu VS Code penceresi **Sauron Game Dev** (${engine}) tarafindan acildi.
 
 - Cline + gamedev-all-in-one MCP ile oyun gelistirme
 - Oyun planini SAURON panelinden gonder
 - Dashboard: http://127.0.0.1:3100
+- **Sol alttaki çubuk mor olmali** — turuncu ise Çalışma Kısmı açıktır
 
 Bu dosya hangi modun acik oldugunu gosterir; istedigin zaman kapatabilirsin.
 `;
@@ -46,13 +57,20 @@ Bu dosya hangi modun acik oldugunu gosterir; istedigin zaman kapatabilirsin.
     ? `\n- Son handoff: \`${meta.handoffFileName}\`\n`
     : "\n";
 
-  return `# Calisma Kismi aktif
+  return `# 🟧 ÇALIŞMA KISMI AKTİF
+
+> ${banner}
+> Yanlış moddaysan Sauron panelinde 🎮 Game Dev'e geç.
+
+---
 
 Bu VS Code penceresi **Sauron Calisma Kismi** (Cline + Bridge) tarafindan acildi.
 
 - Handoff gorevleri Cline sidebar'da gorunur
 - Bridge extension gorevi yukler
 ${handoffHint}
+- **Sol alttaki çubuk turuncu olmali** — mor ise Game Dev açıktır
+
 Bu dosya hangi modun acik oldugunu gosterir; istedigin zaman kapatabilirsin.
 `;
 }
@@ -78,6 +96,8 @@ function prepareChannelVSCode(workspacePath, channel, meta = {}) {
     "utf8",
   );
 
+  applyChannelVSCodeTheme(resolved, channel, meta);
+
   return {
     welcomePath,
     additionalPaths: [welcomePath],
@@ -85,22 +105,19 @@ function prepareChannelVSCode(workspacePath, channel, meta = {}) {
   };
 }
 
-function revealWelcomeFile(workspacePath, channel, meta = {}) {
-  const prep = prepareChannelVSCode(workspacePath, channel, meta);
-  const code = resolveVSCodeCommand();
-  if (!code) {
+async function revealWelcomeFile(workspacePath, channel, meta = {}, existingPrep = null) {
+  const prep = existingPrep || prepareChannelVSCode(workspacePath, channel, meta);
+  const executable = resolveVSCodeExecutable();
+  if (!executable) {
     return prep;
   }
 
+  const workspace = pathForLaunch(workspacePath);
   const file = pathForLaunch(prep.welcomePath);
   try {
-    const child = spawn(code, ["-r", "-g", file], {
-      detached: true,
-      stdio: "ignore",
-      shell: String(code).toLowerCase().endsWith(".cmd"),
-      windowsHide: true,
+    await spawnVSCodeProcess(executable, ["-g", file, "-r", workspace], {
+      options: { useCliShim: true },
     });
-    child.unref();
   } catch {
     // non-fatal
   }

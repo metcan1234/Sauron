@@ -35,6 +35,7 @@ import {
 	journalHandoffPlan,
 	journalHandoffQuestion,
 } from "./activity/cline-activity-journal"
+import { registerChannelIndicator } from "./channel-indicator"
 
 const CLINE_EXTENSION_ID = "saoudrizwan.claude-dev"
 const CLINE_SIDEBAR_FOCUS = "claude-dev.SidebarProvider.focus"
@@ -262,6 +263,7 @@ export async function scanAllWorkspaces(context: vscode.ExtensionContext): Promi
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+	registerChannelIndicator(context)
 	void scanAllWorkspaces(context)
 	startCostMonitor(context, getClineApi)
 }

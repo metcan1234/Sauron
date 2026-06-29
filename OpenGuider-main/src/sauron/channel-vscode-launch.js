@@ -7,11 +7,13 @@ const SAURON_CHANNEL_VSCODE_OPTIONS = {
   skipInterProfileRecovery: true,
   skipRecovery: true,
   launchProfiles: [{ profile: "default", extraArgs: [] }],
-  requireWindowVerification: true,
-  verifyTimeoutMs: 20000,
+  requireWindowVerification: false,
+  verifyTimeoutMs: 6000,
 };
 
-async function focusOrLaunchChannelVSCode(workspacePath, channel, meta = {}, extraOptions = {}) {
+let channelLaunchInFlight = null;
+
+async function performFocusOrLaunchChannelVSCode(workspacePath, channel, meta = {}, extraOptions = {}) {
   const resolved = String(workspacePath || "").trim();
   if (!resolved) {
     return { ok: false, error: "Workspace path is required." };
@@ -24,7 +26,9 @@ async function focusOrLaunchChannelVSCode(workspacePath, channel, meta = {}, ext
   const launchOptions = {
     ...SAURON_CHANNEL_VSCODE_OPTIONS,
     ...extraOptions,
-    additionalPaths: channelPrep.additionalPaths,
+    additionalPaths: [],
+    gotoPath: revealWelcome ? channelPrep.welcomePath : (extraOptions.gotoPath || null),
+    useCliShim: true,
   };
 
   const focused = await focusVSCodeWorkspace(resolved, {
@@ -36,7 +40,7 @@ async function focusOrLaunchChannelVSCode(workspacePath, channel, meta = {}, ext
 
   if (focused?.verified) {
     if (revealWelcome) {
-      revealWelcomeFile(resolved, channel, meta);
+      await revealWelcomeFile(resolved, channel, meta, channelPrep);
     }
     return {
       ok: true,
@@ -59,14 +63,8 @@ async function focusOrLaunchChannelVSCode(workspacePath, channel, meta = {}, ext
 
   const launchResult = await launchVSCode(resolved, {
     ...launchOptions,
-    force: extraOptions.force !== false,
+    force: extraOptions.force === true,
   });
-
-  if (launchResult?.verified || launchResult?.skipped) {
-    if (revealWelcome) {
-      revealWelcomeFile(resolved, channel, meta);
-    }
-  }
 
   return {
     ok: Boolean(launchResult?.verified || launchResult?.skipped),
@@ -77,6 +75,17 @@ async function focusOrLaunchChannelVSCode(workspacePath, channel, meta = {}, ext
       ? undefined
       : "VS Code başlatılamadı.",
   };
+}
+
+async function focusOrLaunchChannelVSCode(workspacePath, channel, meta = {}, extraOptions = {}) {
+  if (channelLaunchInFlight) {
+    return channelLaunchInFlight;
+  }
+  channelLaunchInFlight = performFocusOrLaunchChannelVSCode(workspacePath, channel, meta, extraOptions)
+    .finally(() => {
+      channelLaunchInFlight = null;
+    });
+  return channelLaunchInFlight;
 }
 
 module.exports = {
