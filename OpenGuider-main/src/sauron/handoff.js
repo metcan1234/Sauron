@@ -627,6 +627,7 @@ function writeHandoff(workspacePath, payload, settings = {}) {
       pipelinePhase: nextPayload.pipelinePhase,
       pipelineId: nextPayload.pipelineId,
       handoffId,
+      channel: "workspace",
     }, settings);
   } catch {
     // project memory is best-effort

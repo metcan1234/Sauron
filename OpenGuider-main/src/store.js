@@ -164,6 +164,7 @@ const schema = {
   enhancedOnboardingEnabled: { type: "boolean", default: true },
   channelRoutingGuideEnabled: { type: "boolean", default: true },
   clineActivityFeedEnabled: { type: "boolean", default: true },
+  missionControlEnabled: { type: "boolean", default: true },
 };
 function createStore() { return new Store({ schema, clearInvalidConfig: true }); }
 module.exports = { createStore, schema };

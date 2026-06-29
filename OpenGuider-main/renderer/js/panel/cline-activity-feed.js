@@ -6,7 +6,7 @@ export function isClineActivityFeedEnabled(settings = {}) {
   return settings.clineActivityFeedEnabled !== false;
 }
 
-export function createClineActivityFeedController({ api, ui, getSettings }) {
+export function createClineActivityFeedController({ api, ui, getSettings, onTaskComplete = null }) {
   let pollTimer = null;
   let lastEventId = "";
   let emittedState = {
@@ -30,6 +30,9 @@ export function createClineActivityFeedController({ api, ui, getSettings }) {
         eventId: event.id,
         scopeKey: event.scopeKey || event.handoffId || "",
       });
+      if (typeof onTaskComplete === "function") {
+        void onTaskComplete();
+      }
       return;
     }
     if (event.kind === "question") {

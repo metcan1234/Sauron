@@ -189,6 +189,17 @@ async function launchGoose({ workspacePath, taskText, settings = {}, modeOverrid
     terminal: spawnResult.terminal,
   });
 
+  try {
+    const { recordTask } = require("./project-memory");
+    recordTask(canonicalWorkspace, {
+      summary: rawTask.slice(0, 160),
+      handoffId: handoffResult.handoff.id,
+      channel: "goose",
+    }, settings);
+  } catch {
+    // project memory is best-effort
+  }
+
   // Register with channel-runtime
   if (spawnResult?.pid && typeof spawnResult.pid === 'number' && spawnResult.pid > 0) {
     channelRuntime.registerProcess('goose', spawnResult.pid, {

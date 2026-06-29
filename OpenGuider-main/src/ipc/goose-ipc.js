@@ -125,6 +125,11 @@ function registerGooseIpc({
       gooseBinaryPath,
     });
   });
+
+  ipcMain.handle("list-goose-recipes", async () => {
+    const { listGooseRecipes } = require("../sauron/goose-recipes");
+    return { ok: true, recipes: listGooseRecipes() };
+  });
 }
 
 module.exports = {

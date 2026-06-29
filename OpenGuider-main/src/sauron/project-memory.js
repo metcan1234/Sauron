@@ -85,13 +85,17 @@ function recordTask(workspacePath, entry = {}, settings = {}) {
     memory.pipelineId = String(entry.pipelineId).trim();
   }
 
+  const channel = String(entry.channel || "").trim().slice(0, 24);
+  const dedupeKey = `${channel}:${summary}`;
+
   memory.tasks = [
     {
       summary,
       at: new Date().toISOString(),
       handoffId: entry.handoffId || "",
+      ...(channel ? { channel } : {}),
     },
-    ...memory.tasks.filter((task) => task.summary !== summary),
+    ...memory.tasks.filter((task) => `${task.channel || ""}:${task.summary}` !== dedupeKey),
   ].slice(0, MAX_TASKS);
 
   return writeMemory(resolved, memory);
@@ -117,7 +121,10 @@ function buildMemorySummaryBlock(workspacePath, settings = {}) {
   if (memory.pipelineId && memory.pipelinePhase != null) {
     lines.push(`Üretim hattı: ${memory.pipelineId} — faz ${memory.pipelinePhase}`);
   }
-  const recent = memory.tasks.slice(0, 3).map((task) => `- ${task.summary}`);
+  const recent = memory.tasks.slice(0, 3).map((task) => {
+    const prefix = task.channel ? `[${task.channel}] ` : "";
+    return `- ${prefix}${task.summary}`;
+  });
   if (recent.length) {
     lines.push(`Son görevler:\n${recent.join("\n")}`);
   }

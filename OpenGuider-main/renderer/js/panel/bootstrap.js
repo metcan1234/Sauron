@@ -8,6 +8,7 @@ import { applyI18nToDocument, t } from "../i18n/index.js";
 import { createChannelControls } from "./channel-controls.js";
 import { createAgentTraceController } from "./agent-trace.js";
 import { createClineActivityFeedController } from "./cline-activity-feed.js";
+import { createMissionControlController } from "./mission-control.js";
 import { createMessagingController } from "./messaging.js";
 import { createPlanView } from "./plan-view.js";
 import { createPttController } from "./ptt.js";
@@ -147,10 +148,16 @@ export function createPanelController({
   const stepApproval = createStepApprovalController({ dom, log, win });
   const webStudio = createWebStudioController({ api, ui, win, doc });
   const selfBuildStudio = createSelfBuildStudioController({ api, ui, doc });
+  const missionControl = createMissionControlController({
+    api,
+    ui,
+    getSettings: () => state.getSettings(),
+  });
   const clineActivityFeed = createClineActivityFeedController({
     api,
     ui,
     getSettings: () => state.getSettings(),
+    onTaskComplete: () => missionControl.maybeShowGitCommitHint(),
   });
   const agentTrace = createAgentTraceController({
     ui,
@@ -252,6 +259,7 @@ export function createPanelController({
         webStudio,
         offeredRef: clinePreviewOffered,
       });
+      await missionControl.refreshOnce();
       await clineActivityFeed.pollOnce();
     } catch (error) {
       log("handoff history refresh error", error);
@@ -2035,6 +2043,7 @@ export function createPanelController({
       await channelControls.refreshChannelStatus(api, state);
       startHandoffHistoryRefresh();
       clineActivityFeed.start();
+      missionControl.start();
       await ui.refreshFinOpsBadge();
       dom.textInput.focus();
       log("init:complete");

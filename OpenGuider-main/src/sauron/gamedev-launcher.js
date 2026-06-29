@@ -412,6 +412,17 @@ async function launchGamedevSession({
 
   const session = getLastGamedevSession();
 
+  try {
+    const { recordTask } = require("./project-memory");
+    recordTask(resolvedWorkspace, {
+      summary: String(handoffMeta.optimizedTask || taskText || "").slice(0, 160),
+      handoffId: written.handoffId,
+      channel: "gamedev",
+    }, settings);
+  } catch {
+    // project memory is best-effort
+  }
+
   // Register VS Code PID with channel-runtime
   const vscodePid = vscodeLaunch?.pid || launchResult?.pid || vscodeLaunch?.launchResult?.pid;
   if (vscodePid && typeof vscodePid === 'number' && vscodePid > 0) {

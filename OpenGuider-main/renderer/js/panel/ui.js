@@ -98,6 +98,13 @@ export function queryPanelDom(doc = document) {
     buildPipelinePanel: doc.getElementById("build-pipeline-panel"),
     buildPipelineMeta: doc.getElementById("build-pipeline-meta"),
     buildPipelineAdvance: doc.getElementById("build-pipeline-advance"),
+    missionControlPanel: doc.getElementById("mission-control-panel"),
+    missionControlGrid: doc.getElementById("mission-control-grid"),
+    missionControlMemory: doc.getElementById("mission-control-memory"),
+    gitCommitHintPanel: doc.getElementById("git-commit-hint-panel"),
+    gitCommitHintHeadline: doc.getElementById("git-commit-hint-headline"),
+    gitCommitHintCopy: doc.getElementById("git-commit-hint-copy"),
+    gitCommitHintDismiss: doc.getElementById("git-commit-hint-dismiss"),
     chatDrawerOverlay: doc.getElementById("chat-drawer-overlay"),
     chatDrawerClose: doc.getElementById("chat-drawer-close"),
     chatDrawerSearch: doc.getElementById("chat-drawer-search"),
@@ -1113,6 +1120,98 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     }
   }
 
+  let gitCommitHintBound = false;
+
+  function bindGitCommitHintActions() {
+    if (gitCommitHintBound) {
+      return;
+    }
+    gitCommitHintBound = true;
+    dom.gitCommitHintDismiss?.addEventListener("click", () => {
+      dom.gitCommitHintPanel?.classList.add("hidden");
+    });
+    dom.gitCommitHintCopy?.addEventListener("click", async () => {
+      const text = dom.gitCommitHintHeadline?.textContent || "";
+      if (!text) {
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast("Commit mesajı kopyalandı", false);
+      } catch {
+        showToast("Kopyalama başarısız", true);
+      }
+    });
+  }
+
+  function showGitCommitHint(hint = {}) {
+    if (!dom.gitCommitHintPanel || !dom.gitCommitHintHeadline) {
+      return;
+    }
+    bindGitCommitHintActions();
+    dom.gitCommitHintHeadline.textContent = hint.suggestion?.headline || "";
+    dom.gitCommitHintPanel.classList.remove("hidden");
+    dom.workspaceStatusBanner?.classList.remove("hidden");
+  }
+
+  function renderMissionControl(status = null) {
+    if (!dom.missionControlPanel || !dom.missionControlGrid) {
+      return;
+    }
+    if (!status?.channels) {
+      dom.missionControlPanel.classList.add("hidden");
+      dom.missionControlGrid.innerHTML = "";
+      dom.missionControlMemory?.classList.add("hidden");
+      return;
+    }
+
+    if (!status.shouldShow) {
+      dom.missionControlPanel.classList.add("hidden");
+      dom.missionControlGrid.innerHTML = "";
+      dom.missionControlMemory?.classList.add("hidden");
+      return;
+    }
+
+    const channels = ["workspace", "goose", "gamedev"];
+    const cards = channels
+      .map((key) => status.channels[key])
+      .filter((ch) => ch?.enabled !== false);
+
+    if (!cards.length && !(status.recentMemory || []).length) {
+      dom.missionControlPanel.classList.add("hidden");
+      return;
+    }
+
+    dom.missionControlPanel.classList.remove("hidden");
+    if (status.shouldShow && dom.workspaceStatusBanner) {
+      dom.workspaceStatusBanner.classList.remove("hidden");
+    }
+    dom.missionControlGrid.innerHTML = cards.map((ch) => {
+      const stateClass = ch.state === "active"
+        ? "is-active"
+        : ch.state === "done"
+          ? "is-done"
+          : "";
+      return `<div class="mission-control-card ${stateClass}" data-channel="${escapeHtml(ch.id)}">
+        <span class="mission-control-card-label">${escapeHtml(ch.label)}</span>
+        <span class="mission-control-card-detail">${escapeHtml(ch.detail || "")}</span>
+      </div>`;
+    }).join("");
+
+    const memory = Array.isArray(status.recentMemory) ? status.recentMemory : [];
+    if (dom.missionControlMemory) {
+      if (memory.length) {
+        dom.missionControlMemory.classList.remove("hidden");
+        dom.missionControlMemory.innerHTML = memory
+          .map((line) => `<li>${escapeHtml(line)}</li>`)
+          .join("");
+      } else {
+        dom.missionControlMemory.classList.add("hidden");
+        dom.missionControlMemory.innerHTML = "";
+      }
+    }
+  }
+
   function showOnboarding() {
     if (dom.onboardingOverlay) {
       dom.onboardingOverlay.classList.remove("hidden");
@@ -1631,6 +1730,8 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     invokeWorkspaceStatusFocus,
     renderHandoffHistory,
     renderBuildPipeline,
+    renderMissionControl,
+    showGitCommitHint,
     showOnboarding,
     hideOnboarding,
     closeArtifactPanel,

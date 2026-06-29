@@ -52,6 +52,25 @@ function syncChannelRoutingGuideVisibility(enabled = true) {
   }
 }
 
+async function populateGooseRecipeOptions(selectEl, selectedId = "") {
+  if (!selectEl) {
+    return;
+  }
+  try {
+    const result = await window.sauron.invoke("list-goose-recipes");
+    const recipes = Array.isArray(result?.recipes) ? result.recipes : [];
+    const current = String(selectedId || "").trim();
+    selectEl.innerHTML = `<option value="">Tarif yok (ham görev)</option>${recipes.map((recipe) => {
+      const id = String(recipe.id || "");
+      const label = String(recipe.label || id);
+      const selected = id === current ? " selected" : "";
+      return `<option value="${id}"${selected}>${label}</option>`;
+    }).join("")}`;
+  } catch {
+    selectEl.value = String(selectedId || "");
+  }
+}
+
 async function init() {
   applyI18nToDocument();
   settings = await window.sauron.invoke("get-settings");
@@ -147,12 +166,16 @@ async function init() {
   const enhancedOnboardingEl = document.getElementById("enhancedOnboardingEnabled");
   const channelRoutingGuideEl = document.getElementById("channelRoutingGuideEnabled");
   const clineActivityFeedEl = document.getElementById("clineActivityFeedEnabled");
+  const missionControlEl = document.getElementById("missionControlEnabled");
+  const gooseRecipeEl = document.getElementById("gooseRecipeId");
   if (workspaceHubEl) workspaceHubEl.checked = settings.workspaceHubEnabled !== false;
   if (projectMemoryEl) projectMemoryEl.checked = settings.projectMemoryEnabled !== false;
+  if (missionControlEl) missionControlEl.checked = settings.missionControlEnabled !== false;
   if (corporateWebAutoPipelineEl) corporateWebAutoPipelineEl.checked = settings.corporateWebAutoPipeline !== false;
   if (enhancedOnboardingEl) enhancedOnboardingEl.checked = settings.enhancedOnboardingEnabled !== false;
   if (channelRoutingGuideEl) channelRoutingGuideEl.checked = settings.channelRoutingGuideEnabled !== false;
   if (clineActivityFeedEl) clineActivityFeedEl.checked = settings.clineActivityFeedEnabled !== false;
+  void populateGooseRecipeOptions(gooseRecipeEl, settings.gooseRecipeId);
   syncChannelRoutingGuideVisibility(settings.channelRoutingGuideEnabled !== false);
   if (codeAgentNativeEnabledEl) codeAgentNativeEnabledEl.checked = settings.codeAgentNativeEnabled === true;
   document.getElementById("awareAssistanceEnabled").checked = settings.awareAssistanceEnabled === true;
@@ -1456,6 +1479,8 @@ async function saveSettings() {
     enhancedOnboardingEnabled: document.getElementById("enhancedOnboardingEnabled")?.checked !== false,
     channelRoutingGuideEnabled: document.getElementById("channelRoutingGuideEnabled")?.checked !== false,
     clineActivityFeedEnabled: document.getElementById("clineActivityFeedEnabled")?.checked !== false,
+    missionControlEnabled: document.getElementById("missionControlEnabled")?.checked !== false,
+    gooseRecipeId: document.getElementById("gooseRecipeId")?.value.trim() || "",
     codeAgentNativeEnabled:  document.getElementById("codeAgentNativeEnabled")?.checked === true,
     awareAssistanceEnabled:  document.getElementById("awareAssistanceEnabled").checked,
     includeScreenshotByDefault: false,

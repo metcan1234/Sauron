@@ -19,6 +19,7 @@ test("recordTask writes project-memory.json when enabled", () => {
       projectLabel: "Test A.Ş.",
       themeId: "kurumsal",
       handoffId: "abc123",
+      channel: "workspace",
     }, { projectMemoryEnabled: true });
     assert.equal(result.ok, true);
     assert.equal(fs.existsSync(getMemoryPath(workspace)), true);
@@ -26,6 +27,7 @@ test("recordTask writes project-memory.json when enabled", () => {
     assert.equal(memory.activeProjectLabel, "Test A.Ş.");
     assert.equal(memory.themeId, "kurumsal");
     assert.equal(memory.tasks.length, 1);
+    assert.equal(memory.tasks[0].channel, "workspace");
   } finally {
     fs.rmSync(workspace, { recursive: true, force: true });
   }

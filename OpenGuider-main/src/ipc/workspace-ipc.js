@@ -518,6 +518,49 @@ function registerWorkspaceIpc({
       };
     }
   });
+
+  ipcMain.handle("get-mission-control-status", async (_event, options = {}) => {
+    try {
+      const { getMissionControlStatus } = require("../sauron/mission-control-status");
+      const workspacePath = String(
+        options.workspacePath || store.get("workspacePath") || "",
+      ).trim();
+      if (!workspacePath) {
+        return { ok: false, error: "Workspace path is not configured." };
+      }
+      const runtimeSettings = await getRuntimeSettings();
+      if (runtimeSettings.missionControlEnabled === false) {
+        return { ok: true, disabled: true, shouldShow: false, channels: {} };
+      }
+      return getMissionControlStatus(workspacePath, {
+        ...options,
+        settings: runtimeSettings,
+      });
+    } catch (error) {
+      return {
+        ok: false,
+        error: error?.message || "Failed to read mission control status.",
+      };
+    }
+  });
+
+  ipcMain.handle("get-git-commit-hint", async (_event, options = {}) => {
+    try {
+      const { getGitCommitHint } = require("../sauron/git-commit-hint");
+      const workspacePath = String(
+        options.workspacePath || store.get("workspacePath") || "",
+      ).trim();
+      if (!workspacePath) {
+        return { ok: false, error: "Workspace path is not configured." };
+      }
+      return await getGitCommitHint(workspacePath);
+    } catch (error) {
+      return {
+        ok: false,
+        error: error?.message || "Failed to build git commit hint.",
+      };
+    }
+  });
 }
 
 module.exports = { registerWorkspaceIpc };
