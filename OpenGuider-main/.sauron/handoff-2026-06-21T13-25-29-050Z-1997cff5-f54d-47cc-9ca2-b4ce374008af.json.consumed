@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "id": "2026-06-21T13-25-29-050Z-1997cff5-f54d-47cc-9ca2-b4ce374008af",
+  "source": "sauron-core",
+  "workspacePath": "C:\\Users\\Can\\OneDrive\\Desktop\\Sauron Core\\OpenGuider-main",
+  "taskSummary": "Clarified task (for Cline):\nBir \"selamlar\" mesajı gönderildi. [POINT:none]\n\nOriginal context:\nWorkspace snapshot:\nlayout: electron-core\npackage: openguider\nscripts: start, terminal, debug, dev, test, test:unit, test:integration, test:vscode-launch, test:vscode-stability, predist:win, pack, dist\ndependencies: 11 prod, 4 dev\n.clinerules/\n  sauron-electron-dev.md\n  sauron-self-improve.md\n  sauron-web-dev.md\n  sauron-workspace.md\n.github/\n  workflows/\n.sauron/\n.vscode/\n  extensions.json\n  settings.json\nCore/\n  OpenGuider-main\ndocs/\n  adr/\n  agent-setup-cline.md\n  build-pipeline-tr.md\n  finops-cline-export-report.md\n  finops-cost-optimizer.md\n  MANUAL-TEST-CHECKLIST.md\n  open-guider-guide-en.md\n  open-guider-guide-tr.md\n  OpenGuider - Configuration (EN) .pdf\n  OpenGuider - Configuration(…\n\nChat session: Ekranımda yardım et\n\nLatest chat context:\nUser: selamlar\nAssistant: Merhaba! Size nasıl yardımcı olabilirim?",
+  "goal": "",
+  "sessionId": "0e401810-cca8-403c-b7c0-97c9f4e0a612",
+  "createdAt": "2026-06-21T13:25:29.086Z",
+  "autoStart": true,
+  "autoChain": false,
+  "complexityHint": "low",
+  "costContext": {
+    "coreModelTier": "economy",
+    "optimizerEnabled": true,
+    "mode": "balanced",
+    "budgetGovernorActive": false,
+    "suggestedClineAgent": {
+      "providerId": "deepseek",
+      "modelId": "deepseek-chat",
+      "agentId": "deepseek",
+      "reason": "complexity-low",
+      "walletFallbackFrom": null,
+      "allCloudExhausted": false
+    }
+  },
+  "projectType": "electron-core"
+}

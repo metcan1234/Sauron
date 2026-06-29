@@ -1,0 +1,10 @@
+{
+  "id": "horror-coop-phase1",
+  "genre": "horror-coop",
+  "phase": 1,
+  "steps": [
+    "unity_load_scene",
+    "unity_get_hierarchy",
+    "unity_play_mode"
+  ]
+}

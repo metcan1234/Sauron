@@ -1,0 +1,99 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root,
+html[data-theme="kurumsal"] {
+  --color-primary: {{PRIMARY_COLOR}};
+  --color-accent: {{ACCENT_COLOR}};
+  --color-surface: #0b0f14;
+  --color-surface-elevated: #121820;
+  --color-muted: #94a3b8;
+  --color-foreground: #f1f5f9;
+  --font-display: var(--font-display-kurumsal), Georgia, serif;
+  --radius-card: 0.75rem;
+  --radius-btn: 0.5rem;
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.25);
+  --section-py: 4rem;
+  --hero-variant: classic;
+}
+
+html[data-theme="modern"] {
+  --color-primary: {{PRIMARY_COLOR}};
+  --color-accent: {{ACCENT_COLOR}};
+  --color-surface: #0a0a0f;
+  --color-surface-elevated: #14141c;
+  --color-muted: #a1a1aa;
+  --color-foreground: #fafafa;
+  --font-display: var(--font-display-modern), ui-sans-serif, sans-serif;
+  --radius-card: 0.25rem;
+  --radius-btn: 0.25rem;
+  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --section-py: 5rem;
+  --hero-variant: split;
+}
+
+html[data-theme="luks"] {
+  --color-primary: {{PRIMARY_COLOR}};
+  --color-accent: {{ACCENT_COLOR}};
+  --color-surface: #0c0a09;
+  --color-surface-elevated: #1c1917;
+  --color-muted: #d6d3d1;
+  --color-foreground: #fafaf9;
+  --font-display: var(--font-display-luks), Georgia, serif;
+  --radius-card: 0.125rem;
+  --radius-btn: 0.125rem;
+  --shadow-card: 0 2px 16px rgba(0, 0, 0, 0.35);
+  --section-py: 5.5rem;
+  --hero-variant: luxury;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-surface text-foreground antialiased;
+    font-family: var(--font-sans), system-ui, sans-serif;
+  }
+
+  h1, h2, h3 {
+    font-family: var(--font-display);
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+}
+
+@layer components {
+  .skip-link {
+    @apply sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-white;
+  }
+
+  .container-page {
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 focus-visible:outline-accent;
+    border-radius: var(--radius-btn);
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center border border-white/20 px-5 py-2.5 text-sm font-semibold text-foreground transition hover:border-accent hover:text-accent;
+    border-radius: var(--radius-btn);
+  }
+
+  .card-elevated {
+    @apply border border-white/10 bg-surface-elevated p-6 transition hover:border-accent/30;
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+  }
+
+  .section-py {
+    padding-top: var(--section-py);
+    padding-bottom: var(--section-py);
+  }
+}

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Sauron Code Studio</title>
+<link rel="stylesheet" href="css/style.css"/>
+<style>
+body.code-studio-body { margin: 0; background: #0f1117; color: #e8eaed; font-family: system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; }
+.code-studio-layout { display: flex; flex: 1; min-height: 0; }
+.code-studio-sidebar { width: 240px; border-right: 1px solid rgba(255,255,255,0.08); overflow: auto; padding: 8px; font-size: 12px; }
+.code-studio-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.code-studio-editor { flex: 1; overflow: auto; padding: 12px; }
+.code-studio-editor pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: Consolas, monospace; font-size: 13px; }
+.code-studio-log { height: 160px; border-top: 1px solid rgba(255,255,255,0.08); overflow: auto; padding: 8px; font-size: 12px; }
+.file-item { cursor: pointer; padding: 2px 4px; border-radius: 4px; }
+.file-item:hover { background: rgba(255,255,255,0.06); }
+.file-item.active { background: rgba(198,90,58,0.25); }
+</style>
+</head>
+<body class="code-studio-body">
+  <header style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;justify-content:space-between;align-items:center;">
+    <strong>Sauron Code Studio</strong>
+    <button id="btn-refresh-index" type="button">İndeksi yenile</button>
+  </header>
+  <div class="code-studio-layout">
+    <aside class="code-studio-sidebar" id="file-tree">Yükleniyor…</aside>
+    <div class="code-studio-main">
+      <div class="code-studio-editor"><pre id="file-content">Dosya seçin.</pre></div>
+      <div class="code-studio-log" id="agent-log">Kod agent logu burada görünür.</div>
+    </div>
+  </div>
+  <script type="module" src="js/code-studio.js"></script>
+</body>
+</html>

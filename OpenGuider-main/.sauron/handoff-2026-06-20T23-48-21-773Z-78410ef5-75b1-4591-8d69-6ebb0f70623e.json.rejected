@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "id": "2026-06-20T23-48-21-773Z-78410ef5-75b1-4591-8d69-6ebb0f70623e",
+  "source": "sauron-core",
+  "workspacePath": "C:\\Users\\Can\\OneDrive\\Desktop\\Sauron Core\\OpenGuider-main",
+  "taskSummary": "Chat session: çalışma kısmını açamaıyorum açabilir misin\n\nLatest chat context:\nUser: vs code açılamadı diye uyarı veriyor onu sana sormak istedim bana yardımcı olabilir misin\nAssistant: Anladım, VS Code'un açılamadığına dair bir uyarı alıyorsunuz. Elinizde bir hata mesajı varsa onu paylaşabilir misiniz? Bu, sorunun nedenini anlamama yardımcı olacaktır. Ayrıca, paylaştığınız ekran görüntüsünde sol tarafta \"VS Code'u mu?\" şeklinde bir soru görüyorum. Bu, sorunla ilgili bir ayar veya seçenek olabilir. Sorunu daha iyi anlamak için bana şu bilgileri verebilir misiniz: 1. **Hata mesajının tam metni:** Ekran görüntüsünde gördüğünüz tam hata mesajını yazabilir misiniz? 2. **Ne zaman bu hatayı almaya başladınız?** (Örneğin, bir güncelleme yaptıktan sonra mı, yeni bir proje açmaya çalı…",
+  "goal": "",
+  "sessionId": "ffbe824b-67e2-47e3-8b2b-27038a07187f",
+  "createdAt": "2026-06-20T23:48:21.777Z",
+  "autoStart": true,
+  "autoChain": false,
+  "complexityHint": "low",
+  "costContext": {
+    "coreModelTier": "economy",
+    "optimizerEnabled": true,
+    "mode": "balanced",
+    "budgetGovernorActive": false,
+    "suggestedClineAgent": {
+      "providerId": "deepseek",
+      "modelId": "deepseek-chat",
+      "agentId": "deepseek",
+      "reason": "complexity-low",
+      "walletFallbackFrom": null,
+      "allCloudExhausted": false
+    }
+  },
+  "projectType": "electron-core"
+}

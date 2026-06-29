@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin:0; padding:0; }
+html, body { width:100%; height:100%; overflow:hidden; background:transparent; }
+body { pointer-events:none; }
+
+:root {
+  --sauron-accent: #c65a3a;
+  --sauron-accent-light: #f6a27a;
+  --sauron-accent-glow: rgba(198, 90, 58, 0.75);
+  --sauron-accent-ring: rgba(198, 90, 58, 0.55);
+}
+
+.cursor-wrap {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Pointer anchor — position only; visual size comes from children */
+.ai-cursor {
+  position: absolute;
+  width: 0;
+  height: 0;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition:
+    left 0.65s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+    top 0.65s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+    opacity 0.25s ease;
+  will-change: left, top, opacity;
+}
+.ai-cursor.visible { opacity: 1; }
+
+/* Outward ripple rings (GPU-friendly: transform + opacity only) */
+.pointer-pulse {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 56px;
+  height: 56px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.pointer-ring {
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--sauron-accent-ring);
+  border-radius: 50%;
+  will-change: transform, opacity;
+  animation: pointer-pulse 1.8s ease-out infinite;
+}
+
+.pointer-ring:nth-child(1) { animation-delay: 0s; }
+.pointer-ring:nth-child(2) { animation-delay: 0.45s; }
+.pointer-ring:nth-child(3) { animation-delay: 0.9s; }
+
+.ai-cursor:not(.visible) .pointer-ring {
+  animation-play-state: paused;
+}
+
+@keyframes pointer-pulse {
+  0% {
+    transform: scale(0.55);
+    opacity: 0.85;
+  }
+  70% {
+    transform: scale(1.65);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.65);
+    opacity: 0;
+  }
+}
+
+/* Solid center target */
+.cursor-dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 2;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle at 35% 35%, var(--sauron-accent-light), var(--sauron-accent));
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2px rgba(198, 90, 58, 0.35),
+    0 0 16px var(--sauron-accent-glow);
+}
+
+/* One-shot click emphasis (unchanged behaviour) */
+.ripple {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid rgba(198, 90, 58, 0.8);
+  opacity: 0;
+  pointer-events: none;
+}
+.ripple.animate {
+  animation: rippleOut 0.6s ease-out forwards;
+}
+.ripple2 {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid rgba(246, 162, 122, 0.6);
+  opacity: 0;
+  pointer-events: none;
+}
+.ripple2.animate {
+  animation: rippleOut 0.6s ease-out 0.15s forwards;
+}
+@keyframes rippleOut {
+  0%   { transform: translate(-50%, -50%) scale(1); opacity: 0.9; }
+  100% { transform: translate(-50%, -50%) scale(3.5); opacity: 0; }
+}
+
+/* Label bubble */
+.cursor-label {
+  position: absolute;
+  top: 34px;
+  left: 50%;
+  white-space: nowrap;
+  background: rgba(8, 9, 18, 0.92);
+  border: 1px solid rgba(198, 90, 58, 0.45);
+  color: var(--sauron-accent-light);
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 20px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transform: translateX(-50%) translateY(6px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.ai-cursor.visible .cursor-label {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  transition-delay: 0.4s;
+}
+</style>
+</head>
+<body>
+<div class="cursor-wrap">
+  <div class="ai-cursor" id="cursor">
+    <div class="pointer-pulse" aria-hidden="true">
+      <span class="pointer-ring"></span>
+      <span class="pointer-ring"></span>
+      <span class="pointer-ring"></span>
+    </div>
+    <div class="cursor-dot"></div>
+    <div class="ripple"  id="ripple1"></div>
+    <div class="ripple2" id="ripple2"></div>
+    <div class="cursor-label" id="cursor-label">element</div>
+  </div>
+</div>
+
+<script>
+const cursor  = document.getElementById("cursor");
+const label   = document.getElementById("cursor-label");
+const ripple1 = document.getElementById("ripple1");
+const ripple2 = document.getElementById("ripple2");
+
+let hideTimer = null;
+
+function showCursorAt(x, y, labelText, options = {}) {
+  clearTimeout(hideTimer);
+
+  // Place instantly off-screen first time (no transition flash)
+  if (!cursor.classList.contains("visible")) {
+    cursor.style.transition = "none";
+    cursor.style.left = (window.innerWidth / 2) + "px";
+    cursor.style.top  = (window.innerHeight / 2) + "px";
+    // Force reflow before re-enabling transition
+    void cursor.offsetWidth;
+    cursor.style.transition = "";
+  }
+
+  // Update label
+  label.textContent = labelText || "element";
+
+  // Animate cursor to target position
+  cursor.style.left = x + "px";
+  cursor.style.top  = y + "px";
+  cursor.classList.add("visible");
+
+  // Fire click ripple after fly animation ends (~700ms)
+  setTimeout(() => {
+    ripple1.classList.remove("animate");
+    ripple2.classList.remove("animate");
+    void ripple1.offsetWidth; // reflow
+    ripple1.classList.add("animate");
+    ripple2.classList.add("animate");
+  }, 680);
+
+  if (!options.persistent) {
+    hideTimer = setTimeout(hideCursor, 5500);
+  }
+}
+
+function hideCursor() {
+  cursor.classList.remove("visible");
+}
+
+window.sauron.on("show-cursor-at", (parsed) => {
+  if (!parsed) return;
+  // Fallback to coordinate.x if scaledX isn't set via IPC
+  const x = typeof parsed.scaledX === "number" ? parsed.scaledX : (parsed.coordinate?.x || 0);
+  const y = typeof parsed.scaledY === "number" ? parsed.scaledY : (parsed.coordinate?.y || 0);
+  showCursorAt(x, y, parsed.label, { persistent: Boolean(parsed.persistent) });
+});
+
+window.sauron.on("hide-cursor", hideCursor);
+</script>
+</body>
+</html>

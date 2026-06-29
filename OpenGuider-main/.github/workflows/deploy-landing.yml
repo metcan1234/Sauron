@@ -1,0 +1,46 @@
+name: Deploy Landing Page
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare static site
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p site/assets
+
+          cp landing/index.html site/index.html
+          cp landing/landing.css site/landing.css
+          cp landing/landing.js site/landing.js
+          cp landing/favicon.svg site/favicon.svg
+          cp tutorial.gif site/tutorial.gif
+          mkdir -p site/docs
+          cp "docs/OpenGuider - Configuration(TR).pdf" "site/docs/OpenGuider - Configuration(TR).pdf"
+          cp "docs/OpenGuider - Configuration (EN) .pdf" "site/docs/OpenGuider - Configuration (EN) .pdf"
+
+          cp renderer/assets/logo.png site/assets/logo.png
+          cp renderer/assets/half-opened.png site/assets/half-opened.png
+          cp renderer/assets/full-closed.png site/assets/full-closed.png
+
+      - name: Deploy to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: site

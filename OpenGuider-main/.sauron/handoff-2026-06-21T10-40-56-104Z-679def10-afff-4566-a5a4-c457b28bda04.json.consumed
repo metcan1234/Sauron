@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "id": "2026-06-21T10-40-56-104Z-679def10-afff-4566-a5a4-c457b28bda04",
+  "source": "sauron-core",
+  "workspacePath": "C:\\Users\\Can\\OneDrive\\Desktop\\Sauron Core\\OpenGuider-main",
+  "taskSummary": "Chat session: şuanda bir şeyi test ediyorum\n\nLatest chat context:\nUser: şuanda bir şeyi test ediyorum\nAssistant: Merhaba! Test ettiğiniz şey hakkında bilgi verebilir misiniz? Belki yardımcı olabilirim.",
+  "goal": "",
+  "sessionId": "bd97f45e-44c9-4071-b5be-f8524446caca",
+  "createdAt": "2026-06-21T10:40:56.107Z",
+  "autoStart": true,
+  "autoChain": false,
+  "complexityHint": "low",
+  "costContext": {
+    "coreModelTier": "economy",
+    "optimizerEnabled": true,
+    "mode": "balanced",
+    "budgetGovernorActive": false,
+    "suggestedClineAgent": {
+      "providerId": "deepseek",
+      "modelId": "deepseek-chat",
+      "agentId": "deepseek",
+      "reason": "complexity-low",
+      "walletFallbackFrom": null,
+      "allCloudExhausted": false
+    }
+  },
+  "projectType": "electron-core"
+}

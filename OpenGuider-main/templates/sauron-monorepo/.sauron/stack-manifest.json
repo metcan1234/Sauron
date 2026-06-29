@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "template": "sauron-monorepo",
+  "components": {
+    "core": "../OpenGuider-main",
+    "bridge": "../sauron-vscode-bridge",
+    "clineFork": "../cline-main/apps/vscode"
+  }
+}

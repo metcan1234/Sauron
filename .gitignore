@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Workspace runtime (yeniden oluşur)
+workspace/.sauron/
+workspace/.cline/
+workspace/.cursor/
+workspace/.vscode/
+
+# Goose binary (büyük; goose-package klasörü kalır, exe yerel)
+goose-package/*.exe
+
+# Secrets
+.env
+.env.*
+!.env.example
+**/secure-settings.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+
+# Logs
+*.log
+logs/
