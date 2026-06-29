@@ -24,6 +24,12 @@ function writeJson(filePath, data) {
   fs.writeFileSync(filePath, `${JSON.stringify(data, null, "\t")}\n`, "utf8");
 }
 
+function resolveDefaultVscodePath() {
+  const localAppData = process.env.LOCALAPPDATA || "";
+  const candidate = path.join(localAppData, "Programs", "Microsoft VS Code", "Code.exe");
+  return fs.existsSync(candidate) ? candidate : "";
+}
+
 function pinConfig(configPath) {
   const config = readJson(configPath);
   if (!config) {
@@ -32,6 +38,7 @@ function pinConfig(configPath) {
 
   const workspacePath = getBundledWorkspacePath();
   const gooseBinaryPath = getBundledGooseExePath();
+  const vscodePath = resolveDefaultVscodePath();
   const changes = [];
 
   if (config.workspacePath !== workspacePath) {
@@ -42,6 +49,10 @@ function pinConfig(configPath) {
   if (gooseBinaryPath && fs.existsSync(gooseBinaryPath) && config.gooseBinaryPath !== gooseBinaryPath) {
     config.gooseBinaryPath = gooseBinaryPath;
     changes.push("gooseBinaryPath");
+  }
+  if (vscodePath && config.vscodePath !== vscodePath) {
+    config.vscodePath = vscodePath;
+    changes.push("vscodePath");
   }
 
   if (!changes.length) {

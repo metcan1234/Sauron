@@ -231,7 +231,9 @@ export function createPanelController({
     try {
       const result = await api.invoke("list-handoff-history", { limit: 10 });
       if (result?.ok) {
-        ui.renderHandoffHistory(result.items || []);
+        ui.renderHandoffHistory(result.items || [], {
+          hideUnlessPending: gamedevUiEngaged,
+        });
       }
       await refreshBuildPipeline();
       await refreshGamePipeline();
@@ -241,6 +243,7 @@ export function createPanelController({
         ui,
         settings,
         onFocus: () => focusWorkspaceVSCode(),
+        skipWhenGamedevActive: gamedevUiEngaged,
       });
       await maybeOfferPreviewAfterClineComplete({
         api,
@@ -285,13 +288,13 @@ export function createPanelController({
     }
 
     try {
-      ui.showToast("VS Code açılıyor…", false);
+      ui.showToast("⌘ Çalışma Kısmı — VS Code açılıyor…", false);
       const result = await api.invoke("focus-workspace-vscode");
       if (!result?.ok) {
         ui.showToast(result?.error || "VS Code odaklanamadı", true);
       } else if (!result?.skipped) {
         if (result?.verified) {
-          ui.showToast("VS Code açıldı", false);
+          ui.showToast("⌘ Çalışma Kısmı açıldı — VS Code'da turuncu CHANNEL-WORKSPACE.md", false);
         }
       }
       return result;
@@ -394,7 +397,9 @@ export function createPanelController({
               title: "Cline görevi yüklendi",
               message: "Bridge handoff'u işledi. VS Code + Cline sidebar'da görevi görebilirsiniz.",
               tone: "success",
+              channel: "workspace",
               onFocus: () => focusWorkspaceVSCode(),
+              owner: "workspace",
             });
             resolve("consumed");
             return;
@@ -406,7 +411,9 @@ export function createPanelController({
               title: "Görev reddedildi",
               message: "VS Code'da aktif Cline görevi vardı ve yeni görev reddedildi.",
               tone: "warning",
+              channel: "workspace",
               onFocus: () => focusWorkspaceVSCode(),
+              owner: "workspace",
             });
             resolve("rejected");
             return;
@@ -418,7 +425,9 @@ export function createPanelController({
               title: "Bridge yanıt vermedi",
               message: "VS Code açıldı ama handoff henüz işlenmedi. Cline sidebar'ını açın (saoudrizwan.claude-dev) ve Bridge kurulumunu kontrol edin.",
               tone: "warning",
+              channel: "workspace",
               onFocus: () => focusWorkspaceVSCode(),
+              owner: "workspace",
             });
             resolve("timeout");
           }
@@ -512,13 +521,20 @@ export function createPanelController({
       }
 
       ui.showWorkspaceStatus({
-        title: result?.launchResult?.verified ? "VS Code açıldı" : "VS Code bekleniyor",
+        title: result?.launchResult?.verified ? "⌘ Çalışma Kısmı · Cline" : "⌘ Çalışma Kısmı bekleniyor",
         message: result?.launchResult?.verified
-          ? "Bridge'in Cline'a görev yüklemesi bekleniyor…"
+          ? "VS Code'da turuncu CHANNEL-WORKSPACE.md açılır. Bridge'in Cline'a görev yüklemesi bekleniyor…"
           : "VS Code penceresi doğrulanamadı. VS Code'a git ile tekrar deneyin.",
         tone: result?.launchResult?.verified ? "default" : "warning",
+        channel: "workspace",
         onFocus: () => focusWorkspaceVSCode(),
+        owner: "workspace",
+        pin: true,
       });
+
+      if (result?.launchResult?.verified) {
+        ui.showToast("⌘ Çalışma Kısmı açıldı — VS Code'da turuncu CHANNEL-WORKSPACE.md", false);
+      }
 
       if (Array.isArray(result.setupWarnings) && result.setupWarnings.length > 0) {
         ui.showToast("Eklenti eksik — otomatik görev başlamayabilir", true);
@@ -771,6 +787,7 @@ export function createPanelController({
     const launchResult = result?.launchResult || result?.vscode?.launchResult;
     const verified = launchResult?.verified === true;
     const skipped = launchResult?.skipped === true;
+    const engineLabel = result?.engineLabel || result?.engine || "Unity";
 
     if (!verified && launchResult && !skipped && launchResult.verificationReason !== "spawn_ok") {
       ui.showToast(
@@ -782,13 +799,20 @@ export function createPanelController({
     }
 
     ui.showWorkspaceStatus({
-      title: verified || skipped ? "Game Dev · VS Code açıldı" : "Game Dev · VS Code bekleniyor",
-      message: result?.handoffFileName
-        ? "Cline handoff hazır — Bridge görevi yükleyecek."
-        : "MCP config yazıldı. Cline'da gamedev-all-in-one MCP'yi başlatın.",
-      tone: verified || skipped ? "default" : "warning",
+      title: `🎮 Game Dev · ${engineLabel}`,
+      message: verified || skipped
+        ? "VS Code'da mor CHANNEL-GAMEDEV.md açılır. Oyun planını yazıp gönderin veya Cline handoff bekleyin."
+        : "VS Code açılıyor… Pencere gelmezse alttaki VS Code'a git'e basın.",
+      tone: verified || skipped ? "success" : "warning",
+      channel: "gamedev",
       onFocus: () => focusWorkspaceVSCode(),
+      owner: "gamedev",
+      pin: true,
     });
+
+    if (verified || skipped) {
+      ui.showToast(`🎮 Game Dev açıldı — VS Code'da mor CHANNEL-GAMEDEV.md`, false);
+    }
 
     if (result?.dashboardUrl) {
       ui.showToast(`Dashboard: ${result.dashboardUrl}`, false);
@@ -879,6 +903,13 @@ export function createPanelController({
 
   async function openGamedevSession(options = {}) {
     log("[GameDev] openGamedevSession called", { options, gamedevSessionInFlight });
+
+    function revertGamedevOptimisticUi() {
+      gamedevUiEngaged = false;
+      setGamedevUiActive(false, { forceDeactivate: true, modeActive: false });
+      ui.clearWorkspaceStatusOwner("gamedev");
+    }
+
     if (!dom.btnGamedev || dom.btnGamedev.disabled || gamedevSessionInFlight) {
       log("[GameDev] Button disabled or session in flight");
       return;
@@ -892,11 +923,25 @@ export function createPanelController({
     lastGamedevOpenAt = now;
 
     const settings = await api.invoke("get-settings");
+    const engineLabel = settings?.gamedevActiveEngine === "unreal" ? "Unreal" : "Unity";
+    gamedevUiEngaged = true;
+    setGamedevUiActive(true, { modeActive: true, engineLabel });
+    ui.showWorkspaceStatus({
+      title: `🎮 Game Dev · ${engineLabel}`,
+      message: "VS Code hazırlanıyor… Mor CHANNEL-GAMEDEV.md açılacak.",
+      tone: "warning",
+      channel: "gamedev",
+      onFocus: () => focusWorkspaceVSCode(),
+      owner: "gamedev",
+      pin: true,
+    });
+
     log("[GameDev] Settings loaded", { workspacePath: settings?.workspacePath, gamedevEnabled: settings?.gamedevEnabled, gamedevSetupComplete: settings?.gamedevSetupComplete });
     if (settings?.workspaceRepaired?.to) {
       ui.showToast(`Çalışma Kısmı düzeltildi: ${settings.workspaceRepaired.to}`, false);
     }
     if (settings?.gamedevEnabled === false) {
+      revertGamedevOptimisticUi();
       ui.showToast("Game Dev devre dışı — Ayarlar → Eklentiler", true);
       return;
     }
@@ -904,6 +949,7 @@ export function createPanelController({
     const wsPath = String(settings?.workspacePath || "").trim();
     log("[GameDev] Workspace path check", { wsPath, isTemp: wsPath.toLowerCase().includes("\\temp\\") || wsPath.toLowerCase().includes("\\tmp\\") });
     if (!wsPath) {
+      revertGamedevOptimisticUi();
       ui.showToast("Workspace path ayarlanmamış — Ayarlar → Çalışma Kısmı", true);
       return;
     }
@@ -936,11 +982,13 @@ export function createPanelController({
     try {
       const prereq = await ensureWorkspacePrerequisites({ promptForMissingCline: !effectiveMasterPrompt });
       if (!prereq.ok) {
+        revertGamedevOptimisticUi();
         return;
       }
 
       const probe = await api.invoke("probe-gamedev-mcp");
       if (!probe?.ok) {
+        revertGamedevOptimisticUi();
         ui.showErrorBanner({
           title: "gamedev-all-in-one bulunamadı",
           message: probe?.error || "extensions/gamedev-all-in-one/dist/index.js eksik.",
@@ -956,6 +1004,7 @@ export function createPanelController({
           masterPrompt: effectiveMasterPrompt,
         });
         if (!result?.ok) {
+          revertGamedevOptimisticUi();
           ui.showToast(result?.error || "Game Dev oturumu başlatılamadı", true);
           return;
         }
@@ -974,6 +1023,7 @@ export function createPanelController({
 
       const activate = await api.invoke("activate-gamedev-mode");
       if (!activate?.ok) {
+        revertGamedevOptimisticUi();
         ui.showToast(activate?.error || "Game Dev modu açılamadı", true);
         return;
       }
@@ -990,6 +1040,7 @@ export function createPanelController({
       );
     } catch (error) {
       log("openGamedevSession error", error);
+      revertGamedevOptimisticUi();
       ui.showToast(error?.message || "Game Dev başlatılamadı", true);
     } finally {
       dom.btnGamedev.disabled = false;
@@ -1000,6 +1051,7 @@ export function createPanelController({
   async function cancelGamedevMode() {
     const result = await api.invoke("deactivate-gamedev-mode");
     setGamedevUiActive(false, { forceDeactivate: true, modeActive: false });
+    ui.clearWorkspaceStatusOwner("gamedev");
     if (result?.ok) {
       ui.showToast("Game Dev modu kapatıldı");
     } else if (result?.error) {

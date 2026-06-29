@@ -6,7 +6,7 @@ const path = require("path");
 const SCRIPT_DIR = path.join(os.tmpdir(), "openguider-ps");
 const POLL_INTERVAL_MS = 500;
 const DEFAULT_TIMEOUT_MS = 20000;
-const ZOMBIE_GRACE_MS = 5000;
+const ZOMBIE_GRACE_MS = 12000;
 const POST_VERIFY_GRACE_MS = 30000;
 const STABLE_WINDOW_MS = 1000;
 

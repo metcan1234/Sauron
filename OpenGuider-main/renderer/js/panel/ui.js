@@ -88,6 +88,7 @@ export function queryPanelDom(doc = document) {
     errorBannerAction: doc.getElementById("error-banner-action"),
     errorBannerDismiss: doc.getElementById("error-banner-dismiss"),
     workspaceStatusBanner: doc.getElementById("workspace-status-banner"),
+    workspaceStatusChannelPill: doc.getElementById("workspace-status-channel-pill"),
     workspaceStatusTitle: doc.getElementById("workspace-status-title"),
     workspaceStatusMessage: doc.getElementById("workspace-status-message"),
     workspaceStatusFocus: doc.getElementById("workspace-status-focus"),
@@ -134,6 +135,7 @@ export function queryPanelDom(doc = document) {
 
 export function createPanelUI({ api, doc = document, dom, log, state }) {
   let workspaceStatusFocusCallback = null;
+  let workspaceStatusOwner = null;
 
   function normalizeUrl(url) {
     const trimmed = String(url || "").trim();
@@ -950,8 +952,21 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
       return;
     }
     dom.workspaceStatusBanner.classList.add("hidden");
-    dom.workspaceStatusBanner.classList.remove("is-success", "is-warning");
+    dom.workspaceStatusBanner.classList.remove(
+      "is-success",
+      "is-warning",
+      "is-channel-workspace",
+      "is-channel-gamedev",
+    );
+    dom.workspaceStatusChannelPill?.classList.add("hidden");
     workspaceStatusFocusCallback = null;
+    workspaceStatusOwner = null;
+  }
+
+  function clearWorkspaceStatusOwner(owner) {
+    if (!owner || workspaceStatusOwner === owner) {
+      workspaceStatusOwner = null;
+    }
   }
 
   async function invokeWorkspaceStatusFocus() {
@@ -962,29 +977,67 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     return false;
   }
 
+  const CHANNEL_PILL_LABELS = {
+    workspace: "⌘ Çalışma",
+    gamedev: "🎮 Game Dev",
+  };
+
   function showWorkspaceStatus({
     title = "Çalışma Kısmı",
     message = "",
     tone = "default",
+    channel = null,
     onFocus = null,
+    owner = null,
+    pin = false,
   } = {}) {
+    if (workspaceStatusOwner && owner !== workspaceStatusOwner) {
+      return false;
+    }
     if (!dom.workspaceStatusBanner) {
       showToast(message);
-      return;
+      return true;
     }
     dom.workspaceStatusTitle.textContent = title;
     dom.workspaceStatusMessage.textContent = message;
-    dom.workspaceStatusBanner.classList.remove("hidden", "is-success", "is-warning");
+    dom.workspaceStatusBanner.classList.remove(
+      "hidden",
+      "is-success",
+      "is-warning",
+      "is-channel-workspace",
+      "is-channel-gamedev",
+    );
     if (tone === "success") {
       dom.workspaceStatusBanner.classList.add("is-success");
     } else if (tone === "warning") {
       dom.workspaceStatusBanner.classList.add("is-warning");
     }
+    if (channel === "workspace") {
+      dom.workspaceStatusBanner.classList.add("is-channel-workspace");
+    } else if (channel === "gamedev") {
+      dom.workspaceStatusBanner.classList.add("is-channel-gamedev");
+    }
+    if (dom.workspaceStatusChannelPill) {
+      const pillLabel = CHANNEL_PILL_LABELS[channel];
+      if (pillLabel) {
+        dom.workspaceStatusChannelPill.textContent = pillLabel;
+        dom.workspaceStatusChannelPill.classList.remove("hidden");
+      } else {
+        dom.workspaceStatusChannelPill.textContent = "";
+        dom.workspaceStatusChannelPill.classList.add("hidden");
+      }
+    }
 
     workspaceStatusFocusCallback = typeof onFocus === "function" ? onFocus : null;
+    if (pin && owner) {
+      workspaceStatusOwner = owner;
+    } else if (owner) {
+      workspaceStatusOwner = owner;
+    }
+    return true;
   }
 
-  function renderHandoffHistory(items = []) {
+  function renderHandoffHistory(items = [], options = {}) {
     if (!dom.handoffHistoryList) {
       return;
     }
@@ -1004,7 +1057,8 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
       }
     }
 
-    if (!Array.isArray(items) || items.length === 0) {
+    const hideUnlessPending = options.hideUnlessPending === true;
+    if (!Array.isArray(items) || items.length === 0 || (hideUnlessPending && pendingCount === 0)) {
       dom.handoffHistoryPanel?.classList.add("hidden");
       dom.handoffHistoryList.innerHTML = "";
       return;
@@ -1573,6 +1627,7 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     hideErrorBanner,
     showWorkspaceStatus,
     hideWorkspaceStatus,
+    clearWorkspaceStatusOwner,
     invokeWorkspaceStatusFocus,
     renderHandoffHistory,
     renderBuildPipeline,

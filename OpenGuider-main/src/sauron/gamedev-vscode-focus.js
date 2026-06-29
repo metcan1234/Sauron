@@ -1,36 +1,28 @@
-const { launchVSCode, focusVSCodeWorkspace } = require("./handoff");
+const { focusOrLaunchChannelVSCode } = require("./channel-vscode-launch");
 
-const RELIABLE_VSCODE_LAUNCH_OPTIONS = {
+const GAMEDEV_VSCODE_LAUNCH_OPTIONS = {
   newWindow: false,
-  force: true,
+  respectRequestedNewWindow: true,
+  skipInterProfileRecovery: true,
   skipRecovery: true,
-  skipVerification: true,
-  bypassDebounce: true,
+  launchProfiles: [{ profile: "default", extraArgs: [] }],
+  requireWindowVerification: true,
+  verifyTimeoutMs: 20000,
 };
 
-async function focusOrLaunchWorkspaceVSCode(workspacePath) {
-  const resolved = String(workspacePath || "").trim();
-  if (!resolved) {
-    return { ok: false, error: "Workspace path is required." };
-  }
-
-  const focused = await focusVSCodeWorkspace(resolved, {
-    allowLaunch: false,
-    verifyTimeoutMs: 4000,
-    skipPostVerifySettle: true,
-  });
-
-  const launchResult = focused?.verified
-    ? focused
-    : await launchVSCode(resolved, RELIABLE_VSCODE_LAUNCH_OPTIONS);
-
-  return {
-    ok: true,
-    launchResult,
-    action: focused?.verified ? "focus_existing" : (launchResult?.skipped ? "launch_skipped" : "launch"),
+async function focusOrLaunchWorkspaceVSCode(workspacePath, options = {}) {
+  const channelMeta = {
+    engine: options.engine || null,
+    engineLabel: options.engineLabel || options.engine || "Unity",
   };
+
+  return focusOrLaunchChannelVSCode(workspacePath, "gamedev", channelMeta, {
+    ...GAMEDEV_VSCODE_LAUNCH_OPTIONS,
+    ...options,
+  });
 }
 
 module.exports = {
   focusOrLaunchWorkspaceVSCode,
+  GAMEDEV_VSCODE_LAUNCH_OPTIONS,
 };

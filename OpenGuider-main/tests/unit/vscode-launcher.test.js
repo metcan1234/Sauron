@@ -522,6 +522,43 @@ test("resolveEffectiveNewWindow keeps reuse when VS Code window is visible", asy
   assert.equal(await resolveEffectiveNewWindow(true), true);
 });
 
+test("resolveEffectiveNewWindow reuses window when respectRequestedNewWindow and process running", async (t) => {
+  if (process.platform !== "win32") {
+    t.skip("Windows-only");
+    return;
+  }
+
+  delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
+  delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
+  const focusModule = require("../../src/sauron/vscode-window-focus");
+  const original = focusModule.getVSCodeProcessState;
+  focusModule.getVSCodeProcessState = async () => ({
+    running: true,
+    pid: 4242,
+    hwnd: 0,
+    hasWindow: false,
+    title: "",
+  });
+
+  t.after(() => {
+    focusModule.getVSCodeProcessState = original;
+    delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
+    delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
+  });
+
+  const { resolveEffectiveNewWindow } = require("../../src/sauron/vscode-launcher");
+  assert.equal(await resolveEffectiveNewWindow(false, { respectRequestedNewWindow: true }), false);
+  assert.equal(await resolveEffectiveNewWindow(false), true);
+});
+
+test("toShortPath returns a usable path string", () => {
+  const { toShortPath } = require("../../src/sauron/vscode-launcher");
+  const sample = path.join(os.tmpdir(), "og-short-path-test");
+  const result = toShortPath(sample);
+  assert.equal(typeof result, "string");
+  assert.ok(result.length > 0);
+});
+
 test("openWorkspaceInVSCode reports launchMethod and verified when skipped", async (t) => {
   const { countLaunches } = installLaunchTransportMocks(t);
 
@@ -729,7 +766,7 @@ test("vscode-window-focus treats handle without title as visible window", () => 
   delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
   const { ZOMBIE_GRACE_MS, resetScriptCacheForTests } = require("../../src/sauron/vscode-window-focus");
   resetScriptCacheForTests();
-  assert.equal(ZOMBIE_GRACE_MS, 5000);
+  assert.equal(ZOMBIE_GRACE_MS, 12000);
 });
 
 test("focusWorkspaceInVSCode recovers from zombie process with cleanup and relaunch", async (t) => {

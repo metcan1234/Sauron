@@ -1,5 +1,6 @@
 const fs = require("fs");
 const channelRuntime = require("../sauron/channel-runtime");
+const { focusOrLaunchChannelVSCode, SAURON_CHANNEL_VSCODE_OPTIONS } = require("../sauron/channel-vscode-launch");
 const { getBlockersForChannel, checkVisionModelSupport } = require("../sauron/doctor");
 const {
   markHandoffLaunchVerified,
@@ -183,42 +184,40 @@ function registerWorkspaceIpc({
       if (!workspacePath || !fs.existsSync(workspacePath)) {
         return { ok: false, error: "Çalışma klasörü ayarlanmamış veya bulunamıyor." };
       }
-      let launchResult = await focusVSCodeWorkspace(workspacePath, {
-        force: true,
-      });
-      if (
-        !launchResult?.verified
-        && ["focus_only_no_window", "process_only"].includes(String(launchResult?.verificationReason || ""))
-      ) {
-        launchResult = await focusVSCodeWorkspace(workspacePath, {
-          force: true,
-          allowLaunch: true,
-        });
-      }
+      const launchResult = await focusOrLaunchChannelVSCode(workspacePath, "workspace");
+      const resolvedLaunch = launchResult?.launchResult || launchResult;
       debugLog("ipc:focus-workspace-vscode result", {
         workspacePath,
-        skipped: Boolean(launchResult?.skipped),
-        executable: launchResult?.executable,
-        executableKind: launchResult?.executableKind,
-        launchMethod: launchResult?.launchMethod,
-        launchProfile: launchResult?.launchProfile,
-        verified: Boolean(launchResult?.verified),
-        verificationReason: launchResult?.verificationReason,
-        action: launchResult?.action,
-        pid: launchResult?.pid,
+        skipped: Boolean(resolvedLaunch?.skipped),
+        executable: resolvedLaunch?.executable,
+        executableKind: resolvedLaunch?.executableKind,
+        launchMethod: resolvedLaunch?.launchMethod,
+        launchProfile: resolvedLaunch?.launchProfile,
+        verified: Boolean(resolvedLaunch?.verified),
+        verificationReason: resolvedLaunch?.verificationReason,
+        action: resolvedLaunch?.action,
+        pid: resolvedLaunch?.pid,
       });
-      if (launchResult?.skipped) {
-        return { ok: true, workspacePath, ...launchResult };
+      if (resolvedLaunch?.skipped) {
+        return { ok: true, workspacePath, ...resolvedLaunch };
       }
-      if (!launchResult?.verified) {
+      if (!resolvedLaunch?.verified) {
         return {
           ok: false,
-          error: buildVSCodeFocusErrorMessage(launchResult),
+          error: buildVSCodeFocusErrorMessage(resolvedLaunch),
           workspacePath,
-          ...launchResult,
+          channel: "workspace",
+          channelMarker: launchResult?.channelMarker,
+          ...resolvedLaunch,
         };
       }
-      return { ok: true, workspacePath, ...launchResult };
+      return {
+        ok: true,
+        workspacePath,
+        channel: "workspace",
+        channelMarker: launchResult?.channelMarker,
+        ...resolvedLaunch,
+      };
     } catch (error) {
       const message = String(error?.message || "");
       if (/VS Code CLI \(code\) not found/i.test(message)) {
@@ -368,19 +367,13 @@ function registerWorkspaceIpc({
         }
       }
       const written = writeHandoff(workspacePath, finopsEnriched.payload, runtimeSettings);
-      const focused = await focusVSCodeWorkspace(workspacePath, {
-        allowLaunch: false,
-        verifyTimeoutMs: 4000,
-        skipPostVerifySettle: true,
+      const vscodeLaunch = await focusOrLaunchChannelVSCode(workspacePath, "workspace", {
+        handoffFileName: written.fileName,
+      }, {
+        ...SAURON_CHANNEL_VSCODE_OPTIONS,
+        verifyTimeoutMs: 25000,
       });
-      const launchResult = focused?.verified
-        ? focused
-        : await launchVSCode(workspacePath, {
-          newWindow: false,
-          force: true,
-          skipRecovery: true,
-          skipVerification: true,
-        });
+      const launchResult = vscodeLaunch?.launchResult || null;
       appLogger.info("vscode-launch-resolve", {
         ...getLastResolvedVscodePathInfo(),
         executable: launchResult?.executable,
@@ -418,6 +411,8 @@ function registerWorkspaceIpc({
       return {
         ok: true,
         workspacePath,
+        channel: "workspace",
+        channelMarker: vscodeLaunch?.channelMarker,
         handoffPath: written.handoffPath,
         handoffId: written.handoffId,
         handoffFileName: written.fileName,

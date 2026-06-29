@@ -4,7 +4,18 @@ export function isWorkspaceHubEnabled(settings = {}) {
   return settings.workspaceHubEnabled !== false;
 }
 
-export async function refreshWorkspaceHub({ api, ui, settings, onFocus }) {
+export async function refreshWorkspaceHub({ api, ui, settings, onFocus, skipWhenGamedevActive = false }) {
+  if (skipWhenGamedevActive) {
+    return null;
+  }
+  try {
+    const gamedevStatus = await api.invoke("get-gamedev-status").catch(() => null);
+    if (gamedevStatus?.modeActive === true || gamedevStatus?.launchInProgress === true) {
+      return null;
+    }
+  } catch {
+    // continue with hub refresh
+  }
   if (!isWorkspaceHubEnabled(settings)) {
     return null;
   }
@@ -17,10 +28,12 @@ export async function refreshWorkspaceHub({ api, ui, settings, onFocus }) {
       return hub;
     }
     ui.showWorkspaceStatus({
-      title: hub.projectLabel || t("workspace"),
+      title: "⌘ Çalışma Kısmı · Cline",
       message: hub.summaryLine || "",
       tone: hub.tone || "default",
+      channel: "workspace",
       onFocus: typeof onFocus === "function" ? onFocus : null,
+      owner: "workspace",
     });
     return hub;
   } catch {

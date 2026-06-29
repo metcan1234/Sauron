@@ -317,7 +317,7 @@ async function init() {
         hintEl.textContent = "Browser runtime indirildi — Sistem tanısından ayrıntılı durumu görebilirsiniz.";
         return;
       }
-      hintEl.textContent = "Browser runtime indirilmemiş — Download Runtime ile kurun veya sistem Python 3.11+ kullanın.";
+      hintEl.textContent = "Tarayıcı runtime kurulu değil — «Runtime indir» ile kur veya sistem Python 3.11+ kullan.";
     } catch {
       hintEl.textContent = "Runtime durumu okunamadı";
     }
@@ -1336,7 +1336,7 @@ function normalizeAcceleratorKey(event) {
 function stopShortcutRecording(button) {
   if (!button) return;
   button.classList.remove("recording");
-  button.textContent = "Record";
+  button.textContent = "Kaydet";
   if (recordingButton === button) {
     recordingButton = null;
   }
@@ -1372,7 +1372,7 @@ function bindShortcutRecordButtons() {
       }
       recordingButton = button;
       recordingButton.classList.add("recording");
-      recordingButton.textContent = "Press keys";
+      recordingButton.textContent = "Tuşlara bas…";
     });
   });
 }

@@ -858,42 +858,53 @@ function checkGamedevUnrealBridge(settings = {}) {
  * @param {object} [options] - { settings }
  * @returns {string[]} array of user-facing blocker messages
  */
+function buildChannelBlockerRules(channelId, { settings, prerequisites, workspacePath }) {
+  switch (channelId) {
+    case "workspace":
+      return [
+        { ok: prerequisites.vscodeCli, msg: "VS Code CLI (code) bulunamadı", fix: "VS Code → Command Palette → Shell Command: Install \"code\" command in PATH" },
+        { ok: prerequisites.bridgeExtension, msg: "Sauron Bridge VSIX yüklü değil", fix: "⌘ ile otomatik kurulum yapın veya Settings → Bridge → Kur" },
+        { ok: prerequisites.clineExtension, msg: "Cline extension yüklü değil", fix: "VS Code Extensions → Cline (saoudrizwan.claude-dev) kurun" },
+        { ok: Boolean(workspacePath && fs.existsSync(workspacePath)), msg: "Workspace klasörü seçilmemiş veya bulunamıyor", fix: "Ayarlar → Çalışma Kısmı → klasör seçin" },
+        { ok: prerequisites.codeCmd ? !isCursorCliPath(prerequisites.codeCmd) : true, msg: "VS Code CLI Cursor shim gibi görünüyor", fix: "Gerçek VS Code kurun" },
+      ];
+    case "goose":
+      return [
+        { ok: Boolean(settings.gooseEnabled !== false && discoverGooseBinary(settings)), msg: "Goose CLI bulunamadı", fix: "Ayarlar → AI Ajanları → Goose yolunu kontrol edin" },
+        { ok: Boolean(workspacePath && fs.existsSync(workspacePath)), msg: "Workspace klasörü seçilmemiş", fix: "Ayarlar → Çalışma Kısmı → klasör seçin" },
+      ];
+    case "gamedev":
+      return [
+        { ok: prerequisites.vscodeCli, msg: "VS Code CLI (code) bulunamadı", fix: "VS Code → Shell Command: Install \"code\" command in PATH" },
+        { ok: prerequisites.clineExtension, msg: "Cline extension yüklü değil", fix: "VS Code → Cline kurun" },
+        { ok: Boolean(settings.gamedevEnabled !== false && probeGamedevMcpEntry(settings).ok), msg: "Game Dev MCP entry bulunamadı", fix: "extensions/gamedev-all-in-one/dist/index.js build edin" },
+        { ok: Boolean(workspacePath && fs.existsSync(workspacePath)), msg: "Workspace klasörü seçilmemiş", fix: "Ayarlar → Çalışma Kısmı → klasör seçin" },
+      ];
+    case "browser":
+      return [
+        { ok: Boolean(checkPythonSidecarScript().status === "pass"), msg: "Browser sidecar script (agent_server.py) bulunamadı", fix: "Uygulamayı yeniden kurun" },
+        { ok: Boolean(checkPythonRuntime().status === "pass" || checkPythonSystem().status === "pass"), msg: "Browser Python runtime hazır değil", fix: "Ayarlar → Eklentiler → Browser → Runtime indir veya sistem Python 3.11+ kurun" },
+      ];
+    default:
+      return [];
+  }
+}
+
 function getBlockersForChannel(channelId, store, options = {}) {
   const prerequisites = checkWorkspacePrerequisites();
   const settings = {
-    browserAgentEnabled: store?.get?.('browserAgentEnabled') !== false,
-    webStudioEnabled: store?.get?.('webStudioEnabled') !== false,
+    browserAgentEnabled: store?.get?.("browserAgentEnabled") !== false,
+    webStudioEnabled: store?.get?.("webStudioEnabled") !== false,
+    gooseEnabled: store?.get?.("gooseEnabled") !== false,
+    gamedevEnabled: store?.get?.("gamedevEnabled") !== false,
     ...(options.settings || {}),
   };
-  const workspacePath = String(store?.get?.('workspacePath') || '').trim();
+  const workspacePath = String(store?.get?.("workspacePath") || "").trim();
   const blockers = [];
-
-  const CHANNEL_BLOCKERS = {
-    workspace: [
-      { ok: prerequisites.vscodeCli, msg: 'VS Code CLI (code) bulunamadı', fix: 'VS Code → Command Palette → Shell Command: Install "code" command in PATH' },
-      { ok: prerequisites.bridgeExtension, msg: 'Sauron Bridge VSIX yüklü değil', fix: '⌘ ile otomatik kurulum yapın veya Settings → Bridge → Kur' },
-      { ok: prerequisites.clineExtension, msg: 'Cline extension yüklü değil', fix: 'VS Code Extensions → Cline (saoudrizwan.claude-dev) kurun' },
-      { ok: Boolean(workspacePath && fs.existsSync(workspacePath)), msg: 'Workspace klasörü seçilmemiş veya bulunamıyor', fix: 'Ayarlar → Çalışma Kısmı → klasör seçin' },
-      { ok: prerequisites.codeCmd ? !isCursorCliPath(prerequisites.codeCmd) : true, msg: 'VS Code CLI Cursor shim gibi görünüyor', fix: 'Gerçek VS Code kurun' },
-    ],
-    goose: [
-      { ok: Boolean(settings.gooseEnabled !== false && probeGooseBinary(settings).cliCapable), msg: 'Goose CLI bulunamadı', fix: 'Ayarlar → AI Ajanları → Goose yolunu kontrol edin' },
-      { ok: Boolean(workspacePath && fs.existsSync(workspacePath)), msg: 'Workspace klasörü seçilmemiş', fix: 'Ayarlar → Çalışma Kısmı → klasör seçin' },
-    ],
-    gamedev: [
-      { ok: prerequisites.vscodeCli, msg: 'VS Code CLI (code) bulunamadı', fix: 'VS Code → Shell Command: Install "code" command in PATH' },
-      { ok: prerequisites.clineExtension, msg: 'Cline extension yüklü değil', fix: 'VS Code → Cline kurun' },
-      { ok: Boolean(settings.gamedevEnabled !== false && probeGamedevMcpEntry(settings).ok), msg: 'Game Dev MCP entry bulunamadı', fix: 'extensions/gamedev-all-in-one/dist/index.js build edin' },
-      { ok: Boolean(workspacePath && fs.existsSync(workspacePath)), msg: 'Workspace klasörü seçilmemiş', fix: 'Ayarlar → Çalışma Kısmı → klasör seçin' },
-    ],
-    browser: [
-      { ok: Boolean(checkPythonSidecarScript().status === 'pass'), msg: 'Browser sidecar script (agent_server.py) bulunamadı', fix: 'Uygulamayı yeniden kurun' },
-      { ok: Boolean(checkPythonRuntime().status === 'pass' || checkPythonSystem().status === 'pass'), msg: 'Browser Python runtime hazır değil', fix: 'Ayarlar → Eklentiler → Browser → Runtime indir veya sistem Python 3.11+ kurun' },
-    ],
-  };
-
-  const rules = CHANNEL_BLOCKERS[channelId];
-  if (!rules) return blockers;
+  const rules = buildChannelBlockerRules(channelId, { settings, prerequisites, workspacePath });
+  if (!rules.length) {
+    return blockers;
+  }
 
   for (const rule of rules) {
     if (!rule.ok) {

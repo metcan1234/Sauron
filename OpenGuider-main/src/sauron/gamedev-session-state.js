@@ -1,5 +1,6 @@
 let storeRef = null;
 let gamedevModeActive = false;
+let gamedevLaunchInProgress = false;
 let lastSession = null;
 
 function attachGamedevSessionStore(store) {
@@ -13,6 +14,14 @@ function persistGamedevModeActive() {
   if (storeRef?.set) {
     storeRef.set("gamedevModeActive", gamedevModeActive);
   }
+}
+
+function setGamedevLaunchInProgress(active) {
+  gamedevLaunchInProgress = active === true;
+}
+
+function isGamedevLaunchInProgress() {
+  return gamedevLaunchInProgress;
 }
 
 function setGamedevModeActive(active, extra = {}) {
@@ -37,6 +46,9 @@ function setGamedevModeActive(active, extra = {}) {
 }
 
 function isGamedevModeActive() {
+  if (gamedevLaunchInProgress) {
+    return true;
+  }
   if (storeRef?.get) {
     return storeRef.get("gamedevModeActive") === true;
   }
@@ -56,12 +68,15 @@ function getLastGamedevSession() {
 
 function clearGamedevSession() {
   setGamedevModeActive(false);
+  gamedevLaunchInProgress = false;
   lastSession = null;
 }
 
 module.exports = {
   attachGamedevSessionStore,
   setGamedevModeActive,
+  setGamedevLaunchInProgress,
+  isGamedevLaunchInProgress,
   isGamedevModeActive,
   setLastGamedevSession,
   getLastGamedevSession,

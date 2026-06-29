@@ -18,6 +18,7 @@ const channelRuntime = require("./channel-runtime");
 const {
   setGamedevModeActive,
   isGamedevModeActive,
+  setGamedevLaunchInProgress,
   setLastGamedevSession,
   getLastGamedevSession,
   clearGamedevSession,
@@ -90,10 +91,26 @@ async function activateGamedevMode(settings = {}) {
   seedSauronRules(workspacePath);
 
   const alreadyActive = isGamedevModeActive();
-  const status = await getGamedevStatus(settings, engine);
-  const vscode = await focusOrLaunchWorkspaceVSCode(workspacePath);
-
   setGamedevModeActive(true, { engine, workspacePath });
+  setGamedevLaunchInProgress(true);
+  let status;
+  let vscode;
+  try {
+    status = await getGamedevStatus(settings, engine);
+    vscode = await focusOrLaunchWorkspaceVSCode(workspacePath, {
+      engine,
+      engineLabel: GAMEDEV_ENGINE_LABELS[engine],
+    });
+    if (!vscode?.ok) {
+      setGamedevModeActive(false);
+      return { ok: false, error: vscode?.error || "VS Code başlatılamadı." };
+    }
+  } catch (error) {
+    setGamedevModeActive(false);
+    return { ok: false, error: error?.message || "VS Code başlatılamadı." };
+  } finally {
+    setGamedevLaunchInProgress(false);
+  }
 
   return {
     ok: true,
@@ -319,7 +336,29 @@ async function launchGamedevSession({
     }
   }
   const written = writeHandoff(resolvedWorkspace, ultra.payload);
-  const vscodeLaunch = await focusOrLaunchWorkspaceVSCode(resolvedWorkspace);
+  setGamedevModeActive(true, {
+    engine,
+    workspacePath: resolvedWorkspace,
+    handoffId: written.handoffId,
+    handoffFileName: written.fileName,
+  });
+  setGamedevLaunchInProgress(true);
+  let vscodeLaunch;
+  try {
+    vscodeLaunch = await focusOrLaunchWorkspaceVSCode(resolvedWorkspace, {
+      engine,
+      engineLabel: GAMEDEV_ENGINE_LABELS[engine],
+    });
+    if (!vscodeLaunch?.ok) {
+      setGamedevModeActive(false);
+      return { ok: false, error: vscodeLaunch?.error || "VS Code başlatılamadı." };
+    }
+  } catch (error) {
+    setGamedevModeActive(false);
+    return { ok: false, error: error?.message || "VS Code başlatılamadı." };
+  } finally {
+    setGamedevLaunchInProgress(false);
+  }
   const launchResult = vscodeLaunch.launchResult || null;
   const status = await getGamedevStatus(settings, engine);
 
@@ -354,14 +393,7 @@ async function launchGamedevSession({
     goal: handoffMeta.optimizedTask,
   }, settings);
 
-  setGamedevModeActive(true, {
-    engine,
-    workspacePath: resolvedWorkspace,
-    handoffId: written.handoffId,
-    handoffFileName: written.fileName,
-  });
-
-  const session = {
+  setLastGamedevSession({
     sessionId: `gamedev-${Date.now()}`,
     modeActive: true,
     engine,
@@ -376,8 +408,9 @@ async function launchGamedevSession({
     vscode: vscodeLaunch,
     launchResult,
     status,
-  };
-  setLastGamedevSession(session);
+  });
+
+  const session = getLastGamedevSession();
 
   // Register VS Code PID with channel-runtime
   const vscodePid = vscodeLaunch?.pid || launchResult?.pid || vscodeLaunch?.launchResult?.pid;

@@ -70,12 +70,12 @@ test("plugin runtime buttons do not enter shortcut recording mode", async () => 
 
     const downloadButton = dom.window.document.getElementById("btn-download-agent");
     assert.ok(downloadButton);
-    assert.equal(downloadButton.textContent, "Download Runtime");
+    assert.equal(downloadButton.textContent, "Runtime indir");
 
     downloadButton.click();
     await new Promise((resolve) => setImmediate(resolve));
 
-    assert.equal(downloadButton.textContent, "Download Runtime");
+    assert.equal(downloadButton.textContent, "Runtime indir");
     assert.ok(invokedChannels.includes("download-browser-agent"));
   } finally {
     delete require.cache[require.resolve(settingsModulePath)];

@@ -9,6 +9,7 @@ const {
 } = require("../sauron/gamedev-launcher");
 const { attachGamedevSessionStore } = require("../sauron/gamedev-session-state");
 const { getGamedevStatus } = require("../sauron/gamedev-status");
+const { isGamedevLaunchInProgress } = require("../sauron/gamedev-session-state");
 const { probeGamedevMcpEntry } = require("../sauron/gamedev-path-resolver");
 const { summarizeGamedevLedger } = require("../sauron/gamedev-finops-ledger");
 const { getGamePipelineStatus } = require("../sauron/game-pipeline");
@@ -136,6 +137,7 @@ function registerGamedevIpc({
       ...status,
       session: sessionInfo.session,
       modeActive: sessionInfo.modeActive === true,
+      launchInProgress: isGamedevLaunchInProgress(),
       mcpEntryOk: probe.ok,
       enabled: settings.gamedevEnabled !== false,
       finops: finops ? { ...status.finops, ...finops } : status.finops,

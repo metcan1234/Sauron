@@ -64,21 +64,33 @@ async function main() {
     markHandoffLaunchVerified,
     recordVerifiedLaunch,
     isWithinPostVerifyGrace,
+    toShortPath,
   } = require("../src/sauron/vscode-launcher");
   const {
     getVSCodeProcessState,
     getVSCodeProcessCounts,
     resetScriptCacheForTests,
+    ZOMBIE_GRACE_MS,
   } = require("../src/sauron/vscode-window-focus");
 
   resetScriptCacheForTests();
   resetLaunchDebounceForTests();
 
   const workspacePath = readWorkspaceFromConfig();
+  const shortPath = toShortPath(workspacePath);
+  const shortPathAsciiSafe = !/[^\x00-\x7F]/.test(shortPath);
   const timeline = [];
   const terminateEvents = [];
   const zombieBeforeClean = await getVSCodeProcessCounts();
   timeline.push({ event: "zombie_before_clean", at: new Date().toISOString(), ...zombieBeforeClean });
+  timeline.push({
+    event: "path_check",
+    workspacePath,
+    shortPath,
+    shortPathAsciiSafe,
+    shortPathDiffers: shortPath !== workspacePath,
+    zombieGraceMs: ZOMBIE_GRACE_MS,
+  });
 
   forceCleanVSCodeProcesses();
   await sleep(1500);
@@ -146,6 +158,7 @@ async function main() {
       || (entry.processCounts && entry.processCounts.withWindow > 0),
   );
   const finalSnapshot = timeline.find((entry) => entry.event === "final") || {};
+  const finalCounts = finalSnapshot.processCounts || await getVSCodeProcessCounts();
   const focusUsedSafePath = ["focus_existing", "wait_then_focus", "launch", "launch_after_recovery", "launch_disable_gpu", "launch_safe_mode"].includes(focusResult.action)
     || focusResult.action?.startsWith("launch_")
     || focusResult.skipped === true
@@ -154,7 +167,11 @@ async function main() {
   const report = {
     ok: Boolean(launchResult.verified) && stillOpenAfter15s,
     workspacePath,
+    shortPath,
+    shortPathAsciiSafe,
+    zombieGraceMs: ZOMBIE_GRACE_MS,
     zombieBeforeClean,
+    zombieAfterStability: finalCounts,
     launchResult,
     focusResult,
     stillOpenAfter15s,
