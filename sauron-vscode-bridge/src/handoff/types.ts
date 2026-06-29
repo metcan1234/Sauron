@@ -17,6 +17,7 @@ export interface SauronHandoff {
 	complexityHint?: "low" | "medium" | "high"
 	projectType?: "corporate-web" | "electron-core" | "bridge-extension" | "monorepo-stack" | "generic"
 	pipelineId?: string
+	pipelineLabel?: string
 	pipelinePhase?: number
 	pipelineTotalPhases?: number
 	parentHandoffId?: string
