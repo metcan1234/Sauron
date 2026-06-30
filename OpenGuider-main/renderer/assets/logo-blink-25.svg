@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Sauron">
+  <defs>
+    <radialGradient id="inferno-25" cx="50%" cy="88%" r="42%">
+      <stop offset="0%" stop-color="#ffb300"/>
+      <stop offset="50%" stop-color="#ff6f00"/>
+      <stop offset="100%" stop-color="#6d1b00"/>
+    </radialGradient>
+    <linearGradient id="lid-25" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#0d0200" stop-opacity="0.99"/>
+      <stop offset="70%" stop-color="#1a0500" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#1a0500" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="blur-25" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="1.4"/>
+    </filter>
+    <filter id="glow-25" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="1" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="lower-25"><rect x="0" y="40" width="64" height="24"/></clipPath>
+    <clipPath id="eye-clip-25">
+      <path d="M6 32c6.5-13.5 15-19.5 26-19.5s19.5 6 26 19.5c-6.5 13.5-15 19.5-26 19.5S12.5 45.5 6 32z"/>
+    </clipPath>
+  </defs>
+  <ellipse cx="32" cy="32" rx="28" ry="18" fill="#ff6f00" opacity="0.08" filter="url(#blur-25)"/>
+  <g clip-path="url(#eye-clip-25)">
+    <g clip-path="url(#lower-25)">
+      <ellipse cx="32" cy="32" rx="27" ry="17" fill="#1a0500"/>
+      <ellipse cx="32" cy="32" rx="27" ry="17" fill="url(#inferno-25)"/>
+      <path d="M32 42 C33 38 33 40 32 44 C31 40 31 38 32 42 Z" fill="#000000"/>
+    </g>
+    <path d="M6 32c6.5-13.5 15-19.5 26-19.5s19.5 6 26 19.5" fill="url(#lid-25)"/>
+    <path d="M6 32c6.5-13.5 15-19.5 26-19.5s19.5 6 26 19.5" fill="none" stroke="#ff6f00" stroke-width="3" stroke-linecap="round" filter="url(#glow-25)"/>
+    <path d="M8 31.5 Q32 34 56 31.5" fill="none" stroke="#ffb300" stroke-width="0.8" opacity="0.45"/>
+  </g>
+  <path d="M6 32c6.5-13.5 15-19.5 26-19.5s19.5 6 26 19.5c-6.5 13.5-15 19.5-26 19.5S12.5 45.5 6 32z" fill="none" stroke="#ffab40" stroke-width="1.4" opacity="0.7" filter="url(#glow-25)"/>
+</svg>

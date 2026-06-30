@@ -88,6 +88,8 @@ test("all AI providers stream correctly with mocked fetch (no API keys)", async 
           aiModel: "",
           ollamaUrl: "http://localhost:11434",
           finopsCostOptimizerEnabled: false,
+          agentControlMode: "manual",
+          coreManualAgent: provider,
         },
         onChunk: (chunk) => {
           streamed += chunk;
@@ -139,6 +141,8 @@ test("openrouter retries once with lower max_tokens on affordable 402 response",
         aiModel: "",
         openrouterMaxTokens: 2048,
         finopsCostOptimizerEnabled: false,
+        agentControlMode: "manual",
+        coreManualAgent: "openrouter",
       },
       onChunk: (chunk) => {
         streamed += chunk;

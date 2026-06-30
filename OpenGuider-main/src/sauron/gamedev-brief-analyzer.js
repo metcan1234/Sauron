@@ -28,11 +28,23 @@ const MECHANIC_PATTERNS = [
   "inventory", "dialogue", "cutscene", "minigame", "tutorial",
 ];
 
-function detectArchetypes(text) {
+function patternMatchesText(text, pattern) {
   const lower = String(text || "").toLowerCase();
+  const token = String(pattern || "").trim().toLowerCase();
+  if (!token) {
+    return false;
+  }
+  if (token.includes(" ")) {
+    return lower.includes(token);
+  }
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?:^|[^a-z0-9])${escaped}(?:$|[^a-z0-9])`, "i").test(lower);
+}
+
+function detectArchetypes(text) {
   const found = [];
   for (const [archetype, patterns] of Object.entries(ARCHETYPE_PATTERNS)) {
-    if (patterns.some((p) => lower.includes(p))) {
+    if (patterns.some((p) => patternMatchesText(text, p))) {
       found.push(archetype);
     }
   }
@@ -40,10 +52,9 @@ function detectArchetypes(text) {
 }
 
 function detectMechanics(text) {
-  const lower = String(text || "").toLowerCase();
   const found = [];
   for (const pattern of MECHANIC_PATTERNS) {
-    if (lower.includes(pattern)) {
+    if (patternMatchesText(text, pattern)) {
       found.push(pattern);
     }
   }

@@ -40,7 +40,7 @@ test("compilePhaseGoalsHeuristic customizes genre phases from prompt", () => {
     templatePhases: template.phases,
     genre: "horror-coop",
   });
-  assert.equal(phases.length, 5);
+  assert.equal(phases.length, 6);
   assert.match(phases[1].goal, /brief:|horror|flashlight/i);
 });
 

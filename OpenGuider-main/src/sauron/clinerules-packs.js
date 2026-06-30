@@ -78,6 +78,12 @@ function normalizeProjectType(value) {
   return "generic";
 }
 
+function getPacksForProjectType(projectType) {
+  const normalized = normalizeProjectType(projectType);
+  const pack = PACKS[normalized] || PACKS.generic;
+  return [...(pack.files || [])];
+}
+
 function seedClinerulesPacks(workspacePath, projectType = "generic") {
   const resolved = String(workspacePath || "").trim();
   if (!resolved) {
@@ -90,9 +96,11 @@ function seedClinerulesPacks(workspacePath, projectType = "generic") {
   fs.mkdirSync(targetDir, { recursive: true });
 
   const seeded = [];
+  const skipped = [];
   for (const fileName of pack.files) {
     const targetPath = path.join(targetDir, fileName);
     if (fs.existsSync(targetPath)) {
+      skipped.push(fileName);
       continue;
     }
     const body = pack.content[fileName] || `# ${fileName}\n`;
@@ -100,12 +108,13 @@ function seedClinerulesPacks(workspacePath, projectType = "generic") {
     seeded.push(fileName);
   }
 
-  return { seeded, projectType: normalized };
+  return { seeded, skipped, projectType: normalized };
 }
 
 module.exports = {
   CLINERULES_DIR,
   PACKS,
   normalizeProjectType,
+  getPacksForProjectType,
   seedClinerulesPacks,
 };

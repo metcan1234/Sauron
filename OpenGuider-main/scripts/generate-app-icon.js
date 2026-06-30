@@ -8,13 +8,15 @@ const assetsDir = path.join(projectRoot, "renderer", "assets");
 const icoPath = path.join(assetsDir, "logo.ico");
 
 const LOGO_SOURCES = [
-  { svg: "logo-eye.svg", png: "logo.png", size: 512 },
-  { svg: "logo-eye-half.svg", png: "half-opened.png", size: 512 },
-  { svg: "logo-eye-closed.svg", png: "full-closed.png", size: 512 },
+  { svg: "logo.svg", png: "logo.png", size: 1024 },
+  { svg: "logo-blink-75.svg", png: "blink-75.png", size: 1024 },
+  { svg: "logo-blink-half.svg", png: "half-opened.png", size: 1024 },
+  { svg: "logo-blink-25.svg", png: "blink-25.png", size: 1024 },
+  { svg: "logo-blink-closed.svg", png: "full-closed.png", size: 1024 },
 ];
 
 async function renderSvgToPng(svgPath, pngPath, size) {
-  await sharp(svgPath, { density: 300 })
+  await sharp(svgPath, { density: 450 })
     .resize(size, size, {
       fit: "contain",
       background: { r: 0, g: 0, b: 0, alpha: 0 },
@@ -62,7 +64,7 @@ async function main() {
     // ignore temp cleanup failures
   }
 
-  console.log(`Wrote ${icoPath} (${buffer.length} bytes) from logo-eye.svg`);
+  console.log(`Wrote ${icoPath} (${buffer.length} bytes) from logo.svg`);
 }
 
 main().catch((error) => {

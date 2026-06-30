@@ -40,7 +40,7 @@ test("writeHandoff creates id-based file and payload id", () => {
 
     const saved = JSON.parse(fs.readFileSync(written.handoffPath, "utf8"));
     assert.equal(saved.id, written.handoffId);
-    assert.equal(saved.version, 2);
+    assert.equal(saved.version, 3);
     assert.match(saved.taskSummary, /test goal/);
     assert.ok(saved.complexityHint);
     assert.ok(saved.costContext);

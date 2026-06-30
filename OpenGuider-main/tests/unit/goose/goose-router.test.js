@@ -69,7 +69,7 @@ test("resolveGooseMode respects manual default when auto off", async () => {
     openaiApiKey: "sk-test",
   });
   assert.equal(routing.mode, "premium");
-  assert.equal(routing.reason, "manual-default");
+  assert.equal(routing.reason, "manual-goose");
 });
 
 test("applyBudgetDowngrade is opt-in via gooseBudgetAutoDowngrade", async () => {

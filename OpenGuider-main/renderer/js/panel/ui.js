@@ -1,4 +1,5 @@
 import { t } from "../i18n/index.js";
+import { createEyeBlinkController } from "../shared/eye-blink.js";
 
 const PROVIDER_COLORS = {
   groq: "#f97316",
@@ -9,14 +10,6 @@ const PROVIDER_COLORS = {
   deepseek: "#06b6d4",
   ollama: "#a855f7",
 };
-
-const BLINK_ASSETS = [
-  "assets/logo.png",
-  "assets/half-opened.png",
-  "assets/full-closed.png",
-  "assets/half-opened.png",
-  "assets/logo.png",
-];
 
 export function queryPanelDom(doc = document) {
   return {
@@ -40,6 +33,7 @@ export function queryPanelDom(doc = document) {
     chatMessages: doc.getElementById("chat-messages"),
     chatBackground: doc.getElementById("chat-background"),
     chatBackgroundLogo: doc.getElementById("chat-background-logo"),
+    headerLogo: doc.getElementById("header-logo"),
     textInput: doc.getElementById("text-input"),
     sendBtn: doc.getElementById("send-btn"),
     modelSelect: doc.getElementById("model-select"),
@@ -340,25 +334,10 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     }
   }
 
-  function startBackgroundBlinkLoop() {
-    if (!dom.chatBackgroundLogo) {
-      return;
-    }
-    const delay = 3000 + Math.random() * 2000;
-    window.setTimeout(() => executeBackgroundBlink(0), delay);
-  }
-
-  function executeBackgroundBlink(index) {
-    if (!dom.chatBackgroundLogo) {
-      return;
-    }
-    if (index >= BLINK_ASSETS.length) {
-      startBackgroundBlinkLoop();
-      return;
-    }
-    dom.chatBackgroundLogo.src = BLINK_ASSETS[index];
-    window.setTimeout(() => executeBackgroundBlink(index + 1), 80);
-  }
+  const eyeBlink = createEyeBlinkController({
+    basePath: "assets",
+    targets: [dom.chatBackgroundLogo, dom.headerLogo].filter(Boolean),
+  });
 
   function updateChatBackgroundState(messageCount) {
     const hasMessages = messageCount > 0;
@@ -1365,7 +1344,7 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     });
   }
 
-  startBackgroundBlinkLoop();
+  eyeBlink.start();
   updateChatBackgroundState(0);
 
   return {

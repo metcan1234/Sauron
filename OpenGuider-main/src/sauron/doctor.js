@@ -877,7 +877,7 @@ function getBlockersForChannel(channelId, store, options = {}) {
       { ok: prerequisites.codeCmd ? !isCursorCliPath(prerequisites.codeCmd) : true, msg: 'VS Code CLI Cursor shim gibi görünüyor', fix: 'Gerçek VS Code kurun' },
     ],
     goose: [
-      { ok: Boolean(settings.gooseEnabled !== false && probeGooseBinary(settings).cliCapable), msg: 'Goose CLI bulunamadı', fix: 'Ayarlar → AI Ajanları → Goose yolunu kontrol edin' },
+      { ok: Boolean(settings.gooseEnabled !== false && discoverGooseBinary(settings)), msg: 'Goose CLI bulunamadı', fix: 'Ayarlar → AI Ajanları → Goose yolunu kontrol edin' },
       { ok: Boolean(workspacePath && fs.existsSync(workspacePath)), msg: 'Workspace klasörü seçilmemiş', fix: 'Ayarlar → Çalışma Kısmı → klasör seçin' },
     ],
     gamedev: [

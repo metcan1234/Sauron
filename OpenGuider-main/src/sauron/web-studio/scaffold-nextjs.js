@@ -10,13 +10,10 @@ const {
   generateQualityChecklist,
   exportChecklistMarkdown,
 } = require("./quality-checklist");
-
-const PLACEHOLDER_MAP = {
-  "{{COMPANY_NAME}}": (brief) => brief.companyName,
-  "{{TAGLINE}}": (brief) => brief.tagline,
-  "{{PRIMARY_COLOR}}": (brief) => brief.primaryColor,
-  "{{ACCENT_COLOR}}": (brief) => brief.accentColor,
-};
+const {
+  buildSiteDataSource,
+  enrichBriefPlaceholders,
+} = require("./industry-content");
 
 const TEXT_EXTENSIONS = new Set([
   ".ts",
@@ -34,10 +31,31 @@ function getTemplateRoot(templateName = "corporate-nextjs") {
   return path.join(__dirname, "../../../templates", templateName);
 }
 
+function buildPlaceholderMap(brief) {
+  const enriched = enrichBriefPlaceholders(brief);
+  const map = {
+    "{{COMPANY_NAME}}": enriched.companyName,
+    "{{TAGLINE}}": enriched.tagline,
+    "{{PRIMARY_COLOR}}": enriched.primaryColor,
+    "{{ACCENT_COLOR}}": enriched.accentColor,
+  };
+
+  for (const [key, value] of Object.entries(enriched)) {
+    if (value == null || typeof value === "object") {
+      continue;
+    }
+    map[`{{${key}}}`] = String(value);
+    map[`{{${key.toUpperCase()}}}`] = String(value);
+  }
+
+  return map;
+}
+
 function injectPlaceholders(content, brief) {
   let result = String(content);
-  for (const [token, resolver] of Object.entries(PLACEHOLDER_MAP)) {
-    result = result.split(token).join(resolver(brief));
+  const replacements = buildPlaceholderMap(brief);
+  for (const [token, value] of Object.entries(replacements)) {
+    result = result.split(token).join(value);
   }
   return result;
 }
@@ -85,6 +103,13 @@ function writeQualityChecklist(workspacePath, brief) {
   return checklistPath;
 }
 
+function writeSiteDataFile(workspacePath, brief) {
+  const siteDataPath = path.join(workspacePath, "lib", "site-data.ts");
+  fs.mkdirSync(path.dirname(siteDataPath), { recursive: true });
+  fs.writeFileSync(siteDataPath, buildSiteDataSource(brief), "utf8");
+  return siteDataPath;
+}
+
 function scaffoldNextjs(workspacePath, briefInput = {}, options = {}) {
   const resolvedPath = String(workspacePath || "").trim();
   if (!resolvedPath) {
@@ -107,6 +132,7 @@ function scaffoldNextjs(workspacePath, briefInput = {}, options = {}) {
   }
 
   const copiedFiles = copyTemplateRecursive(templateRoot, resolvedPath, validation.brief);
+  const siteDataPath = writeSiteDataFile(resolvedPath, validation.brief);
 
   const briefResult = saveBrief(resolvedPath, validation.brief);
   if (!briefResult.ok) {
@@ -121,6 +147,7 @@ function scaffoldNextjs(workspacePath, briefInput = {}, options = {}) {
     workspacePath: resolvedPath,
     template: templateName,
     briefPath: briefResult.path,
+    siteDataPath,
     rulesPath: rulesResult.path,
     rulesSeeded: rulesResult.seeded,
     checklistPath,
@@ -133,5 +160,5 @@ module.exports = {
   injectPlaceholders,
   copyTemplateRecursive,
   scaffoldNextjs,
-  PLACEHOLDER_MAP,
+  buildPlaceholderMap,
 };

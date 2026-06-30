@@ -56,6 +56,20 @@ function clearTaskCompleteArtifact(workspacePath) {
   }
 }
 
+async function execVerificationCommand(command, cwd, timeoutMs) {
+  const shell = process.platform === "win32";
+  const { stdout, stderr } = await execFileAsync(
+    shell ? "cmd.exe" : "sh",
+    shell ? ["/c", command] : ["-c", command],
+    { cwd, timeout: timeoutMs, maxBuffer: 2 * 1024 * 1024 },
+  );
+  return {
+    ok: true,
+    stdout: String(stdout || "").slice(0, 2000),
+    stderr: String(stderr || "").slice(0, 1000),
+  };
+}
+
 async function runVerification(workspacePath, verification, { timeoutMs = 120000 } = {}) {
   if (!verification?.command) {
     return { ok: true, skipped: true };
@@ -66,18 +80,25 @@ async function runVerification(workspacePath, verification, { timeoutMs = 120000
     : workspacePath;
 
   try {
-    const shell = process.platform === "win32";
-    const { stdout, stderr } = await execFileAsync(
-      shell ? "cmd.exe" : "sh",
-      shell ? ["/c", verification.command] : ["-c", verification.command],
-      { cwd, timeout: timeoutMs, maxBuffer: 2 * 1024 * 1024 },
-    );
-    return {
-      ok: true,
-      stdout: String(stdout || "").slice(0, 2000),
-      stderr: String(stderr || "").slice(0, 1000),
-    };
+    return await execVerificationCommand(verification.command, cwd, timeoutMs);
   } catch (error) {
+    if (verification.fallbackCommand) {
+      try {
+        const fallback = await execVerificationCommand(
+          verification.fallbackCommand,
+          cwd,
+          timeoutMs,
+        );
+        return { ...fallback, usedFallback: true };
+      } catch (fallbackError) {
+        return {
+          ok: false,
+          error: fallbackError?.message || error?.message || "Verification failed",
+          stdout: String(fallbackError?.stdout || error?.stdout || "").slice(0, 2000),
+          stderr: String(fallbackError?.stderr || error?.stderr || "").slice(0, 1000),
+        };
+      }
+    }
     return {
       ok: false,
       error: error?.message || "Verification failed",

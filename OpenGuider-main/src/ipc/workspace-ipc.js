@@ -183,18 +183,15 @@ function registerWorkspaceIpc({
       if (!workspacePath || !fs.existsSync(workspacePath)) {
         return { ok: false, error: "Çalışma klasörü ayarlanmamış veya bulunamıyor." };
       }
-      let launchResult = await focusVSCodeWorkspace(workspacePath, {
-        force: true,
+      const launchResult = await focusVSCodeWorkspace(workspacePath, {
+        allowLaunch: true,
+        newWindow: false,
+        skipRecovery: true,
+        skipInterProfileRecovery: true,
+        launchProfiles: [{ profile: "default", extraArgs: [] }],
+        requireWindowVerification: false,
+        verifyTimeoutMs: 6000,
       });
-      if (
-        !launchResult?.verified
-        && ["focus_only_no_window", "process_only"].includes(String(launchResult?.verificationReason || ""))
-      ) {
-        launchResult = await focusVSCodeWorkspace(workspacePath, {
-          force: true,
-          allowLaunch: true,
-        });
-      }
       debugLog("ipc:focus-workspace-vscode result", {
         workspacePath,
         skipped: Boolean(launchResult?.skipped),
@@ -377,8 +374,10 @@ function registerWorkspaceIpc({
         ? focused
         : await launchVSCode(workspacePath, {
           newWindow: false,
-          force: true,
           skipRecovery: true,
+          skipInterProfileRecovery: true,
+          launchProfiles: [{ profile: "default", extraArgs: [] }],
+          requireWindowVerification: false,
           skipVerification: true,
         });
       appLogger.info("vscode-launch-resolve", {

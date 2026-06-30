@@ -33,7 +33,7 @@ test("compilePhaseGoalsHeuristic universal mode for empty pipeline", () => {
     genre: "empty",
     adaptive: true,
   });
-  assert.equal(phases.length, 4);
+  assert.equal(phases.length, 5);
   assert.equal(phases[0].compiledMode, "universal");
   assert.match(phases[2].goal, /açık dünya|GTA|mechanic/i);
 });

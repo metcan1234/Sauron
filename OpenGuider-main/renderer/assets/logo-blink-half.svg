@@ -1,20 +1,49 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="OpenGuider">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Sauron">
   <defs>
-    <radialGradient id="iris" cx="50%" cy="50%" r="55%">
-      <stop offset="0%" stop-color="#f3c27d"/>
-      <stop offset="45%" stop-color="#bb6b3e"/>
-      <stop offset="100%" stop-color="#2a1212"/>
+    <radialGradient id="inferno-half" cx="50%" cy="80%" r="55%">
+      <stop offset="0%" stop-color="#fff176"/>
+      <stop offset="30%" stop-color="#ffb300"/>
+      <stop offset="65%" stop-color="#ff6f00"/>
+      <stop offset="100%" stop-color="#6d1b00"/>
     </radialGradient>
-    <linearGradient id="ring" x1="0%" x2="100%" y1="0%" y2="100%">
-      <stop offset="0%" stop-color="#ff9a64"/>
-      <stop offset="100%" stop-color="#5b2017"/>
+    <linearGradient id="lid-falloff" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#0d0200" stop-opacity="0.98"/>
+      <stop offset="55%" stop-color="#1a0500" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#1a0500" stop-opacity="0"/>
     </linearGradient>
+    <filter id="blur-half" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="1.6"/>
+    </filter>
+    <filter id="glow-half" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="1.2" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <clipPath id="lower-half">
+      <rect x="0" y="30" width="64" height="34"/>
+    </clipPath>
+    <clipPath id="eye-clip-half">
+      <path d="M6 32c6.5-13.5 15-19.5 26-19.5s19.5 6 26 19.5c-6.5 13.5-15 19.5-26 19.5S12.5 45.5 6 32z"/>
+    </clipPath>
   </defs>
-  <rect width="64" height="64" rx="14" fill="#0b0f16"/>
-  <ellipse cx="32" cy="32" rx="23" ry="14.5" fill="none" stroke="url(#ring)" stroke-width="3.5"/>
-  <ellipse cx="32" cy="32" rx="11" ry="11" fill="url(#iris)"/>
-  <circle cx="32" cy="32" r="4.5" fill="#0b0f16"/>
-  <path d="M20 32c2.5-5.5 7.5-8.2 12-8.2 4.5 0 9.5 2.7 12 8.2-2.5 5.5-7.5 8.2-12 8.2-4.5 0-9.5-2.7-12-8.2Z" fill="none" stroke="#ffb07f" stroke-opacity=".45" stroke-width="1.1"/>
-  <ellipse cx="32" cy="22" rx="25" ry="11" fill="#0b0f16"/>
-  <ellipse cx="32" cy="44" rx="25" ry="9" fill="#0b0f16"/>
+
+  <ellipse cx="32" cy="32" rx="28" ry="18" fill="#ff6f00" opacity="0.1" filter="url(#blur-half)"/>
+
+  <g clip-path="url(#eye-clip-half)">
+    <g clip-path="url(#lower-half)">
+      <ellipse cx="32" cy="32" rx="27" ry="17" fill="#1a0500"/>
+      <ellipse cx="32" cy="32" rx="27" ry="17" fill="url(#inferno-half)"/>
+      <path d="M32 32 Q18 38 12 34 Q20 30 28 32 Q14 28 16 32 Q24 38 32 32" fill="#ff9100" opacity="0.45" filter="url(#glow-half)"/>
+      <path d="M32 32 Q46 38 52 34 Q44 30 36 32 Q50 28 48 32 Q40 38 32 32" fill="#ff9100" opacity="0.45" filter="url(#glow-half)"/>
+      <path d="M32 34 C33.4 28 33.6 32 32 38 C30.4 32 30.6 28 32 34 Z" fill="#000000"/>
+      <ellipse cx="33.4" cy="31" rx="0.55" ry="1.6" fill="#fffde7" opacity="0.55"/>
+    </g>
+    <path d="M6 32c6.5-13.5 15-19.5 26-19.5s19.5 6 26 19.5" fill="url(#lid-falloff)"/>
+    <path d="M6 32c6.5-13.5 15-19.5 26-19.5s19.5 6 26 19.5" fill="none" stroke="#ff6f00" stroke-width="2.8" stroke-linecap="round" filter="url(#glow-half)"/>
+    <path d="M8 31 Q32 35 56 31" fill="none" stroke="#ffb300" stroke-width="1" opacity="0.5"/>
+  </g>
+
+  <path d="M6 32c6.5-13.5 15-19.5 26-19.5s19.5 6 26 19.5c-6.5 13.5-15 19.5-26 19.5S12.5 45.5 6 32z" fill="none" stroke="#ffab40" stroke-width="1.6" opacity="0.75" filter="url(#glow-half)"/>
 </svg>

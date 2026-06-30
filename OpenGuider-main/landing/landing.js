@@ -1,3 +1,9 @@
+import {
+  createEyeBlinkController,
+  playEyeIntroSequence,
+  wait as eyeWait,
+} from "../renderer/js/shared/eye-blink.js";
+
 const modules = [
   {
     title: "Plugin Workspaces",
@@ -324,77 +330,47 @@ async function startEyeBlink() {
   }
   const primaryBase = await resolveAssetBase();
   const fallbackBase = primaryBase === "./assets" ? "../renderer/assets" : "./assets";
-
-  const blinkFrames = [
-    `${primaryBase}/logo.png`,
-    `${primaryBase}/half-opened.png`,
-    `${primaryBase}/full-closed.png`,
-    `${primaryBase}/half-opened.png`,
-    `${primaryBase}/logo.png`
-  ];
-
-  const fallbackFrames = [
-    `${fallbackBase}/logo.png`,
-    `${fallbackBase}/half-opened.png`,
-    `${fallbackBase}/full-closed.png`,
-    `${fallbackBase}/half-opened.png`,
-    `${fallbackBase}/logo.png`
-  ];
-
-  let activeFrames = blinkFrames;
+  let activeBase = primaryBase;
 
   eye.addEventListener("error", () => {
-    activeFrames = fallbackFrames;
-    eye.src = fallbackFrames[0];
+    activeBase = fallbackBase;
+    eye.src = `${activeBase}/logo.png`;
   });
-
-  function scheduleNextBlink() {
-    const nextDelayMs = 3000 + Math.random() * 2800;
-    window.setTimeout(() => playFrame(0), nextDelayMs);
-  }
-
-  function playFrame(index) {
-    if (index >= activeFrames.length) {
-      scheduleNextBlink();
-      return;
-    }
-    eye.src = activeFrames[index];
-    window.setTimeout(() => playFrame(index + 1), 80);
-  }
 
   async function runIntroSequence() {
     if (prefersReducedMotion) {
-      eye.src = activeFrames[0];
+      eye.src = `${activeBase}/logo.png`;
       return;
     }
     document.body.classList.add("intro-block-ui");
     document.body.classList.add("intro-active");
-    eye.src = activeFrames[2];
-    await wait(480);
-    eye.src = activeFrames[1];
-    await wait(340);
-    eye.src = activeFrames[2];
-    await wait(280);
-    eye.src = activeFrames[1];
-    await wait(300);
-    eye.src = activeFrames[0];
+    await playEyeIntroSequence(eye, activeBase);
     document.body.classList.add("intro-flash");
-    await wait(980);
+    await eyeWait(980);
     document.body.classList.remove("intro-flash");
     document.body.classList.add("intro-settle");
     document.body.classList.remove("intro-active");
     window.dispatchEvent(new Event("landing-intro-settle"));
-    await wait(120);
+    await eyeWait(120);
     document.body.classList.add("content-entering");
     document.body.classList.remove("intro-block-ui");
-    await wait(140);
+    await eyeWait(140);
     document.body.classList.add("intro-finished");
     document.body.classList.remove("intro-settle", "content-entering");
     window.dispatchEvent(new Event("landing-intro-finished"));
   }
 
   await runIntroSequence();
-  scheduleNextBlink();
+
+  if (prefersReducedMotion) {
+    return;
+  }
+
+  const blink = createEyeBlinkController({
+    basePath: activeBase,
+    targets: [eye],
+  });
+  blink.start();
 }
 
 async function initLogoFallbacks() {

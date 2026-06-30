@@ -47,7 +47,7 @@ test("startGamePipeline stores customized phases from compiler", async () => {
   });
   assert.equal(started.ok, true);
   assert.ok(Array.isArray(started.pipeline.phases));
-  assert.equal(started.pipeline.phases.length, 6);
+  assert.equal(started.pipeline.phases.length, 7);
   const phase = getCurrentPhaseGoal(tmp);
   assert.ok(phase.goal.length > 0);
   assert.ok(phase.briefMeta || fs.existsSync(path.join(tmp, ".sauron", "game-design-brief.json")));

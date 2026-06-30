@@ -42,6 +42,13 @@ function inferChannel(record = {}) {
   if (operation === "cline-task" || operation === "cline-task-readonly" || source === "cline") {
     return "workspace";
   }
+  if (
+    operation === "workspace-handoff"
+    || operation === "scaffold-web-project"
+    || operation === "build-pipeline-start"
+  ) {
+    return "workspace";
+  }
   if (operation === "token-ultra-saved") {
     return "core";
   }

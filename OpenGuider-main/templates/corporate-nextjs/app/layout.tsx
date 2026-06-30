@@ -21,10 +21,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="tr" className={inter.variable}>
       <body className="min-h-screen flex flex-col font-sans">
         <a href="#main-content" className="skip-link">
-          Skip to main content
+          {{SKIP_LINK_TEXT}}
         </a>
         <Navbar />
         <main id="main-content" className="flex-1">

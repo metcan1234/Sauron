@@ -4,6 +4,7 @@ const { spawn, execFileSync, execFile } = require("child_process");
 const vscodeWindowFocus = require("./vscode-window-focus");
 
 const LAUNCH_DEBOUNCE_MS = 3000;
+const SPAWN_COOLDOWN_MS = 9000;
 const POST_VERIFY_GRACE_MS = vscodeWindowFocus.POST_VERIFY_GRACE_MS || 30000;
 
 const LAUNCH_PROFILES = [
@@ -580,6 +581,38 @@ function shouldSkipDuplicateLaunch(key) {
   return Date.now() - last.at < LAUNCH_DEBOUNCE_MS;
 }
 
+function isWithinSpawnCooldown() {
+  return lastVsCodeSpawnAt > 0 && (Date.now() - lastVsCodeSpawnAt) < SPAWN_COOLDOWN_MS;
+}
+
+async function tryFocusInsteadOfSpawn(workspacePath, options = {}) {
+  const focused = await focusExistingVSCodeWindow(workspacePath, options);
+  if (focused?.verified) {
+    return focused;
+  }
+  const state = await vscodeWindowFocus.getVSCodeProcessState();
+  if (state.running && isWithinSpawnCooldown()) {
+    const waitResult = await vscodeWindowFocus.waitForVSCodeWindow({
+      timeoutMs: options.verifyTimeoutMs || 4000,
+    });
+    if (waitResult.verified) {
+      const focusResult = await vscodeWindowFocus.bringVSCodeToForeground(waitResult.hwnd);
+      recordVerifiedLaunch({ verified: true, hwnd: waitResult.hwnd });
+      return buildLaunchResult(waitResult, {
+        ...waitResult,
+        focused: focusResult.ok,
+        focusReason: focusResult.reason,
+      }, {
+        workspacePath,
+        action: "wait_then_focus",
+        skipped: true,
+        reason: "spawn_cooldown",
+      });
+    }
+  }
+  return null;
+}
+
 function resolveVSCodeExecutable(options = {}) {
   return resolveVSCodeLaunchExecutable(options);
 }
@@ -788,6 +821,30 @@ async function launchAndVerifyVSCode(workspacePath, executable, options = {}) {
   const launchProfile = options.launchProfile || "default";
   const requireWindowVerification = options.requireWindowVerification === true;
 
+  if (options._spawnAttempted || isWithinSpawnCooldown()) {
+    const reuseFocus = await tryFocusInsteadOfSpawn(workspacePath, options);
+    if (reuseFocus) {
+      return {
+        verifyResult: {
+          verified: true,
+          verificationReason: reuseFocus.verificationReason || "window_found",
+          pid: reuseFocus.pid || null,
+          hwnd: reuseFocus.hwnd || 0,
+          focused: Boolean(reuseFocus.focused),
+          focusReason: reuseFocus.focusReason || "reuse_focus",
+        },
+        launchMethod: getLaunchMethod(executable.kind),
+        effectiveNewWindow: false,
+        requestedNewWindow,
+        verifyTimeoutMs: options.verifyTimeoutMs || 0,
+        launchProfile,
+        launchArgs,
+        spawnOk: false,
+        skippedSpawn: true,
+      };
+    }
+  }
+
   await spawnVSCodeProcess(executable, launchArgs, {
     workspacePath,
     executable,
@@ -933,7 +990,27 @@ async function performOpenWorkspaceInVSCode(workspacePath, options = {}) {
 
   for (let profileIndex = 0; profileIndex < profiles.length; profileIndex += 1) {
     const { profile, extraArgs } = profiles[profileIndex];
-    const useNewWindow = profileIndex === 0 ? effectiveNewWindow : true;
+    const useNewWindow = profileIndex === 0 ? effectiveNewWindow : false;
+
+    if (profileIndex > 0) {
+      const state = await vscodeWindowFocus.getVSCodeProcessState();
+      if (state.hasWindow || state.running) {
+        const focused = await focusExistingVSCodeWindow(workspacePath, options);
+        if (focused?.verified) {
+          verifyResult = {
+            verified: true,
+            verificationReason: focused.verificationReason || "window_found",
+            pid: focused.pid || null,
+            hwnd: focused.hwnd || 0,
+            focused: Boolean(focused.focused),
+            focusReason: focused.focusReason || "profile_retry_focus",
+          };
+          usedProfile = profile;
+          action = "focus_existing";
+          break;
+        }
+      }
+    }
 
     try {
       launchOutcome = await launchAndVerifyVSCode(workspacePath, executable, {
@@ -942,6 +1019,8 @@ async function performOpenWorkspaceInVSCode(workspacePath, options = {}) {
         newWindow: useNewWindow,
         extraArgs,
         launchProfile: profile,
+        _spawnAttempted: profileIndex > 0,
+        forceSpawn: profileIndex === 0 && options.force === true,
       });
     } catch (launchError) {
       if (profileIndex >= profiles.length - 1) {
@@ -1026,15 +1105,24 @@ async function escalateToLaunchWithRecovery(workspacePath, options = {}, escalat
   }
 
   const launchOptions = {
-    newWindow: true,
-    force: true,
+    newWindow: false,
+    force: options.force === true,
     forceRecovery: true,
     requireWindowVerification: true,
     recovery: recoveryTag,
     skipRecovery: false,
     recoveryAlreadyAttempted: recoveryTag === "zombie_cleanup",
+    launchProfiles: [{ profile: "default", extraArgs: [] }],
     ...options,
   };
+
+  const stateBeforeLaunch = await vscodeWindowFocus.getVSCodeProcessState();
+  if (stateBeforeLaunch.hasWindow) {
+    const focused = await focusExistingVSCodeWindow(workspacePath, options);
+    if (focused?.verified) {
+      return focused;
+    }
+  }
 
   if (!options.launchProfile && !options.launchProfiles) {
     const fallbackProfiles = LAUNCH_PROFILES.filter((entry) => entry.profile !== "default");
@@ -1130,6 +1218,7 @@ function resetLaunchDebounceForTests() {
 
 module.exports = {
   LAUNCH_DEBOUNCE_MS,
+  SPAWN_COOLDOWN_MS,
   LAUNCH_PROFILES,
   isCursorCliPath,
   isVSCodeCliWrapper,

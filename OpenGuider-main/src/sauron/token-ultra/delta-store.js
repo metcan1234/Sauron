@@ -54,15 +54,23 @@ function recordHandoffSnapshot(workspacePath, { handoffId, goal, summary, sceneH
   return next;
 }
 
-function recordSavings(workspacePath, charsSaved = 0, settings = {}) {
+function recordSavings(workspacePath, charsSaved = 0, settings = {}, channel = "core") {
   const existing = readTokenUltraCache(workspacePath) || {};
-  const savings = existing.savings || { estimatedCharsSaved: 0, handoffCount: 0 };
+  const savings = existing.savings || { estimatedCharsSaved: 0, handoffCount: 0, byChannel: {} };
   const saved = Math.max(0, Number(charsSaved) || 0);
+  const channelKey = String(channel || "core").trim() || "core";
+  const byChannel = { ...(savings.byChannel || {}) };
+  const channelStats = byChannel[channelKey] || { estimatedCharsSaved: 0, handoffCount: 0 };
+  byChannel[channelKey] = {
+    estimatedCharsSaved: Number(channelStats.estimatedCharsSaved || 0) + saved,
+    handoffCount: Number(channelStats.handoffCount || 0) + 1,
+  };
   const next = {
     ...existing,
     savings: {
       estimatedCharsSaved: Number(savings.estimatedCharsSaved || 0) + saved,
       handoffCount: Number(savings.handoffCount || 0) + 1,
+      byChannel,
     },
   };
   writeTokenUltraCache(workspacePath, next);

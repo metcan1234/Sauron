@@ -2,10 +2,17 @@ const { launchVSCode, focusVSCodeWorkspace } = require("./handoff");
 
 const RELIABLE_VSCODE_LAUNCH_OPTIONS = {
   newWindow: false,
-  force: true,
+  respectRequestedNewWindow: true,
+  skipInterProfileRecovery: true,
   skipRecovery: true,
+  launchProfiles: [{ profile: "default", extraArgs: [] }],
+  requireWindowVerification: false,
   skipVerification: true,
-  bypassDebounce: true,
+};
+
+const GAMEDEV_VSCODE_LAUNCH_OPTIONS = {
+  ...RELIABLE_VSCODE_LAUNCH_OPTIONS,
+  requireWindowVerification: true,
 };
 
 async function focusOrLaunchWorkspaceVSCode(workspacePath) {
@@ -22,7 +29,7 @@ async function focusOrLaunchWorkspaceVSCode(workspacePath) {
 
   const launchResult = focused?.verified
     ? focused
-    : await launchVSCode(resolved, RELIABLE_VSCODE_LAUNCH_OPTIONS);
+    : await launchVSCode(resolved, GAMEDEV_VSCODE_LAUNCH_OPTIONS);
 
   return {
     ok: true,
@@ -33,4 +40,6 @@ async function focusOrLaunchWorkspaceVSCode(workspacePath) {
 
 module.exports = {
   focusOrLaunchWorkspaceVSCode,
+  GAMEDEV_VSCODE_LAUNCH_OPTIONS,
+  RELIABLE_VSCODE_LAUNCH_OPTIONS,
 };

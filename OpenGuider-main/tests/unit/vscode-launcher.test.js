@@ -1335,3 +1335,81 @@ test("focusWorkspaceInVSCode escalates during post-verify grace when window is l
   assert.equal(result.verified, true);
   assert.ok(countLaunchCalls(execCalls, spawnCalls) >= 1);
 });
+
+test("openWorkspaceInVSCode reuses focus during spawn cooldown instead of spawning again", async (t) => {
+  if (process.platform !== "win32") {
+    t.skip("Windows-only spawn cooldown");
+    return;
+  }
+
+  delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
+  delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
+  const focusModule = require("../../src/sauron/vscode-window-focus");
+  const originalGetState = focusModule.getVSCodeProcessState;
+  const originalVerify = focusModule.verifyAndFocusVSCode;
+  const originalBring = focusModule.bringVSCodeToForeground;
+
+  focusModule.getVSCodeProcessState = async () => ({
+    running: true,
+    pid: 4242,
+    hwnd: 8080,
+    hasWindow: true,
+    title: "Workspace",
+  });
+  focusModule.bringVSCodeToForeground = async () => ({
+    ok: true,
+    hwnd: 8080,
+    reason: "focused",
+  });
+  focusModule.verifyAndFocusVSCode = async () => ({
+    verified: true,
+    verificationReason: "window_found",
+    pid: 4242,
+    hwnd: 8080,
+    focused: true,
+    focusReason: "focused",
+  });
+
+  const { countLaunches, spawnCalls } = installLaunchTransportMocks(t);
+
+  t.after(() => {
+    focusModule.getVSCodeProcessState = originalGetState;
+    focusModule.verifyAndFocusVSCode = originalVerify;
+    focusModule.bringVSCodeToForeground = originalBring;
+    delete require.cache[require.resolve("../../src/sauron/vscode-launcher")];
+    delete require.cache[require.resolve("../../src/sauron/vscode-window-focus")];
+  });
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "og-vscode-cooldown-"));
+  const {
+    openWorkspaceInVSCode,
+    resetLaunchDebounceForTests,
+    resolveVSCodeExecutable,
+    getLastVsCodeSpawnAt,
+  } = require("../../src/sauron/vscode-launcher");
+  resetLaunchDebounceForTests();
+
+  if (!resolveVSCodeExecutable()) {
+    t.skip("VS Code not installed in this environment");
+    return;
+  }
+
+  await openWorkspaceInVSCode(tmpDir, {
+    newWindow: false,
+    force: true,
+    skipVerification: true,
+    launchProfiles: [{ profile: "default", extraArgs: [] }],
+  });
+  assert.ok(getLastVsCodeSpawnAt() > 0);
+  assert.equal(countLaunches(), 1);
+
+  const second = await openWorkspaceInVSCode(tmpDir, {
+    newWindow: false,
+    skipVerification: true,
+    launchProfiles: [{ profile: "default", extraArgs: [] }],
+  });
+
+  assert.equal(countLaunches(), 1);
+  assert.equal(second.verified, true);
+  assert.ok(["focus_existing", "wait_then_focus"].includes(second.action) || second.skipped);
+});

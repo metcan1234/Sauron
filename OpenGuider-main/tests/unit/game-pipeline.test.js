@@ -23,7 +23,7 @@ test("planGamePipeline creates active state", async () => {
   const planned = await planGamePipeline("unity-empty-v1", { taskDescription: "red cube" });
   assert.equal(planned.ok, true);
   assert.equal(planned.pipeline.status, "active");
-  assert.equal(planned.pipeline.totalPhases, 4);
+  assert.equal(planned.pipeline.totalPhases, 5);
 });
 
 test("startGamePipeline resumes active pipeline", async () => {
@@ -65,6 +65,6 @@ test("advanceGamePipeline moves to next phase after task complete artifact", asy
 
 test("getGamePipeline returns phase definitions", () => {
   const pipeline = getGamePipeline("unity-social-deduction-v1");
-  assert.equal(pipeline.phases.length, 6);
+  assert.equal(pipeline.phases.length, 7);
   assert.equal(pipeline.templateId, "social-deduction");
 });

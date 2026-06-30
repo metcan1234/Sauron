@@ -2,6 +2,7 @@ const { buildCachePointer, formatPointerLine } = require("./context-pointer");
 const { compressHandoffSummary } = require("./compress-brief");
 const { recordHandoffSnapshot, recordSavings, shouldUseDeltaFromCache } = require("./delta-store");
 const { writeRepoMapCache } = require("./repo-map");
+const { resolveChannelMaxChars } = require("./channel-limit-resolver");
 const { buildTokenBudgetHints } = require("./token-budget-hints");
 const { sandboxLargeOutput } = require("./tool-output-sandbox");
 const { buildSessionSummary } = require("./session-compactor");
@@ -61,7 +62,9 @@ function applyTokenUltraToHandoff(payload, settings = {}, options = {}) {
     }
   }
 
-  const maxChars = Number(settings.tokenUltraMaxHandoffChars) || 6000;
+  const channel = String(payload?.channel || options.channel || "workspace").trim().toLowerCase();
+  const channelKey = channel === "gamedev" || channel === "goose" ? channel : "workspace";
+  const maxChars = resolveChannelMaxChars(settings, channelKey);
   const compressed = compressHandoffSummary(taskSummary, maxChars);
   taskSummary = compressed.text;
   savedChars += compressed.savedChars || 0;
@@ -102,7 +105,7 @@ function applyTokenUltraToHandoff(payload, settings = {}, options = {}) {
       repoMapHash: options.repoMapHash,
     });
     if (savedChars > 0) {
-      recordSavings(workspacePath, savedChars, settings);
+      recordSavings(workspacePath, savedChars, settings, channelKey);
     }
   }
 

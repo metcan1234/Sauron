@@ -28,6 +28,31 @@ const PIPELINE_REGISTRY = {
       },
     ],
   },
+  "corporate-web-v2": {
+    id: "corporate-web-v2",
+    label: "Kurumsal Web Sitesi v2",
+    projectType: "corporate-web",
+    phases: [
+      { phase: 1, goal: "Verify Next.js scaffold and install dependencies", complexityHint: "low", verification: { command: "npm install" } },
+      { phase: 2, goal: "Implement localized layout, navigation, and SEO metadata", complexityHint: "medium" },
+      { phase: 3, goal: "Build page content from web brief and site-data module", complexityHint: "medium" },
+      { phase: 4, goal: "Add contact form, accessibility, and responsive polish", complexityHint: "low" },
+      { phase: 5, goal: "Run production build and quality checklist", complexityHint: "low", verification: { command: "npm run build" } },
+    ],
+  },
+  "corporate-web-v3": {
+    id: "corporate-web-v3",
+    label: "Kurumsal Web Sitesi v3",
+    projectType: "corporate-web",
+    phases: [
+      { phase: 1, goal: "Verify Next.js scaffold and install dependencies", complexityHint: "low", verification: { command: "npm install" } },
+      { phase: 2, goal: "Generate lib/site-data.ts from industry brief", complexityHint: "medium" },
+      { phase: 3, goal: "Run corporate visual verification", complexityHint: "low", verification: { command: "node scripts/verify-corporate-visual.js" } },
+      { phase: 4, goal: "Implement localized pages and navigation", complexityHint: "medium" },
+      { phase: 5, goal: "Add contact form and accessibility fixes", complexityHint: "low" },
+      { phase: 6, goal: "Run production build", complexityHint: "low", verification: { command: "npm run build" } },
+    ],
+  },
   "self-improve-feature-v1": {
     id: "self-improve-feature-v1",
     label: "Sauron Self-Improve",

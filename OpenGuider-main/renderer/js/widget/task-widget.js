@@ -1,3 +1,5 @@
+import { createEyeBlinkController } from "../shared/eye-blink.js";
+
 export function createTaskWidgetController({ api, doc = document }) {
   const TERMINAL_BROWSER_STATUSES = new Set(["success", "failed", "aborted"]);
   const dom = {
@@ -51,13 +53,10 @@ export function createTaskWidgetController({ api, doc = document }) {
       .trim();
   }
 
-  const BLINK_ASSETS = [
-    "assets/logo.png",
-    "assets/half-opened.png",
-    "assets/full-closed.png",
-    "assets/half-opened.png",
-    "assets/logo.png",
-  ];
+  const eyeBlink = createEyeBlinkController({
+    basePath: "assets",
+    targets: [dom.statusLogo].filter(Boolean),
+  });
 
   function isActiveBrowserExecution(browserExecution) {
     return Boolean(browserExecution) && !TERMINAL_BROWSER_STATUSES.has(browserExecution.status);
@@ -103,21 +102,6 @@ export function createTaskWidgetController({ api, doc = document }) {
       return value;
     }
     return `${value.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
-  }
-
-  function startBlinkLoop() {
-    const delay = 3000 + Math.random() * 3000;
-    window.setTimeout(() => executeBlink(0), delay);
-  }
-
-  function executeBlink(index) {
-    if (index >= BLINK_ASSETS.length) {
-      startBlinkLoop();
-      return;
-    }
-
-    dom.statusLogo.src = BLINK_ASSETS[index];
-    window.setTimeout(() => executeBlink(index + 1), 80);
   }
 
   function renderStep(plan) {
@@ -489,7 +473,7 @@ export function createTaskWidgetController({ api, doc = document }) {
     renderStep(session?.activePlan || null);
     updateStatusDisplay(session?.status || "idle");
     setBusy(false);
-    startBlinkLoop();
+    eyeBlink.start();
   }
 
   return {

@@ -1,4 +1,5 @@
 const { generateHandoffId, writeHandoff, seedSauronRules } = require("./handoff");
+const { applyTokenUltraToHandoff } = require("./token-ultra");
 const { mergeCostOptimizerConfig } = require("./finops/cost-optimizer-config");
 const { buildGamedevHandoffSummary } = require("./gamedev-task-optimizer");
 const { seedGamedevRules, seedGamedevGenreRules } = require("./gamedev-instructions");
@@ -182,7 +183,12 @@ async function writeGamedevPhaseHandoff({
     },
   };
 
-  const written = writeHandoff(resolvedWorkspace, payload);
+  const ultra = applyTokenUltraToHandoff(payload, settings, {
+    workspacePath: resolvedWorkspace,
+    goal: handoffMeta.optimizedTask,
+    handoffId,
+  });
+  const written = writeHandoff(resolvedWorkspace, ultra.payload);
   const status = await getGamedevStatus(settings, engine);
 
   updateGamedevSceneCache(resolvedWorkspace, {

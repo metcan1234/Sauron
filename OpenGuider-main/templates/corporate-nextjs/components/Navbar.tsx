@@ -5,10 +5,10 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 const NAV_LINKS = [
-  { href: "/", label: "Home" },
-  { href: "/about", label: "About" },
-  { href: "/services", label: "Services" },
-  { href: "/contact", label: "Contact" },
+  { href: "/", label: "Ana Sayfa" },
+  { href: "/about", label: "Hakkımızda" },
+  { href: "/services", label: "Hizmetler" },
+  { href: "/contact", label: "İletişim" },
 ];
 
 export default function Navbar() {
@@ -17,7 +17,7 @@ export default function Navbar() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-surface/95 backdrop-blur">
-      <nav className="container-page flex h-16 items-center justify-between" aria-label="Main navigation">
+      <nav className="container-page flex h-16 items-center justify-between" aria-label="Ana menü">
         <Link href="/" className="text-lg font-bold text-foreground">
           {{COMPANY_NAME}}
         </Link>
@@ -29,7 +29,7 @@ export default function Navbar() {
           aria-controls="mobile-menu"
           onClick={() => setOpen((prev) => !prev)}
         >
-          <span className="sr-only">Toggle menu</span>
+          <span className="sr-only">Menüyü aç/kapat</span>
           <span aria-hidden="true">{open ? "✕" : "☰"}</span>
         </button>
 

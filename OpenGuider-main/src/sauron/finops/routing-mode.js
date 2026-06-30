@@ -65,6 +65,12 @@ function shouldAutoRouteCline(settings = {}) {
 }
 
 function shouldAutoRouteGoose(settings = {}) {
+  if (settings.gooseAutoMode === false) {
+    return false;
+  }
+  if (settings.gooseAutoMode === true) {
+    return true;
+  }
   return isChannelAuto(settings, "goose");
 }
 
@@ -87,16 +93,24 @@ function resolveManualAgentModel(settings = {}, agentId) {
 }
 
 function resolveManualCoreAgent(settings = {}) {
-  const agentId = normalizeManualAgent(
-    settings.coreManualAgent || settings.aiProvider,
-    "gemini",
-  );
-  const resolved = resolveManualAgentModel(settings, agentId);
+  const requested = String(settings.coreManualAgent || settings.aiProvider || "gemini")
+    .trim()
+    .toLowerCase();
+  if (MANUAL_AGENTS.includes(requested)) {
+    const resolved = resolveManualAgentModel(settings, requested);
+    return {
+      ...resolved,
+      coreModelTier: requested,
+      optimizerEnabled: true,
+      reason: "manual-core",
+    };
+  }
   return {
-    ...resolved,
-    coreModelTier: agentId,
+    aiProvider: requested,
+    aiModel: String(settings.aiModel || "").trim() || "default",
+    coreModelTier: requested,
     optimizerEnabled: true,
-    reason: "manual-core",
+    reason: "manual-core-direct",
   };
 }
 
