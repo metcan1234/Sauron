@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "id": "2026-06-21T16-50-41-094Z-59d62bc4-8a01-4ce9-bf83-7d92b31cc2b0",
+  "source": "sauron-core",
+  "workspacePath": "C:\\Users\\Can\\OneDrive\\Desktop\\Sauron Core\\OpenGuider-main",
+  "taskSummary": "Chat session: Ekranımda yardım et\n\nLatest chat context:\nUser: selamlar\nAssistant: Merhaba! Size nasıl yardımcı olabilirim?",
+  "goal": "",
+  "sessionId": "0e401810-cca8-403c-b7c0-97c9f4e0a612",
+  "createdAt": "2026-06-21T16:50:41.098Z",
+  "autoStart": true,
+  "autoChain": false,
+  "complexityHint": "low",
+  "costContext": {
+    "coreModelTier": "economy",
+    "optimizerEnabled": true,
+    "mode": "balanced",
+    "budgetGovernorActive": false,
+    "suggestedClineAgent": {
+      "providerId": "deepseek",
+      "modelId": "deepseek-chat",
+      "agentId": "deepseek",
+      "reason": "complexity-low",
+      "walletFallbackFrom": null,
+      "allCloudExhausted": false
+    }
+  },
+  "projectType": "electron-core"
+}

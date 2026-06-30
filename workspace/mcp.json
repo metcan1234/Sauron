@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "gamedev-all-in-one": {
+      "command": "node",
+      "args": [
+        "C:/Users/Can/OneDrive/Desktop/Sauron-2.2.11/OpenGuider-main/extensions/gamedev-all-in-one/dist/index.js"
+      ],
+      "env": {
+        "SAURON_GAMEDEV_WORKSPACE": "C:\\Users\\Can\\OneDrive\\Desktop\\SauronWorkspace",
+        "UNITY_PROJECT_PATH": "C:\\Users\\Can\\OneDrive\\Desktop\\SauronWorkspace",
+        "UNITY_BRIDGE_PORT": "7890"
+      }
+    }
+  }
+}
