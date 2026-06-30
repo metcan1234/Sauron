@@ -38,18 +38,23 @@ function resolveModeProviderConfig(mode, settings = {}) {
         model: deepseekModel,
         envOverrides: {
           OPENAI_API_KEY: String(settings.deepseekApiKey).trim(),
+          OPENAI_HOST: deepseekBaseUrl,
           GOOSE_PROVIDER__HOST: deepseekHost,
         },
         routeNote: "deepseek-openai-compat",
       };
     } else if (String(settings.openrouterApiKey || "").trim()) {
+      const openrouterHost = String(settings.openrouterBaseUrl || "https://openrouter.ai/api/v1")
+        .trim()
+        .replace(/\/$/, "");
       providerConfig = {
         ...base,
         provider: "openai",
         model: "deepseek/deepseek-chat",
         envOverrides: {
           OPENAI_API_KEY: String(settings.openrouterApiKey).trim(),
-          GOOSE_PROVIDER__HOST: "https://openrouter.ai/api/v1",
+          OPENAI_HOST: openrouterHost,
+          GOOSE_PROVIDER__HOST: openrouterHost,
         },
         routeNote: "openrouter-openai-compat",
       };

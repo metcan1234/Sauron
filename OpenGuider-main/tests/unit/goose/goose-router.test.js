@@ -17,6 +17,7 @@ test("resolveModeProviderConfig uses deepseek via openai-compatible host when ke
   assert.equal(cfg.provider, "openai");
   assert.equal(cfg.model, "deepseek-chat");
   assert.equal(cfg.envOverrides.OPENAI_API_KEY, "sk-test");
+  assert.equal(cfg.envOverrides.OPENAI_HOST, "https://api.deepseek.com");
   assert.equal(cfg.envOverrides.GOOSE_PROVIDER__HOST, "https://api.deepseek.com/v1");
   assert.equal(cfg.routeNote, "deepseek-openai-compat");
 });
@@ -27,6 +28,7 @@ test("resolveModeProviderConfig uses openrouter via openai-compatible host", () 
   });
   assert.equal(cfg.provider, "openai");
   assert.equal(cfg.model, "deepseek/deepseek-chat");
+  assert.equal(cfg.envOverrides.OPENAI_HOST, "https://openrouter.ai/api/v1");
   assert.equal(cfg.envOverrides.GOOSE_PROVIDER__HOST, "https://openrouter.ai/api/v1");
   assert.equal(cfg.envOverrides.OPENAI_API_KEY, "sk-or-test");
 });
