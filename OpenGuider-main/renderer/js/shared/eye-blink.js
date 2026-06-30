@@ -12,10 +12,10 @@ export const EYE_BLINK_FRAME_FILES = [
   "logo.png",
 ];
 
-const CLOSE_FRAME_DELAYS_MS = [0, 110, 110, 110, 110];
-const OPEN_FRAME_DELAYS_MS = [120, 65, 65, 65, 65];
-const IDLE_MIN_MS = 3000;
-const IDLE_JITTER_MS = 2000;
+const CLOSE_FRAME_DELAYS_MS = [0, 130, 120, 110, 140];
+const OPEN_FRAME_DELAYS_MS = [150, 90, 80, 70, 90];
+const IDLE_MIN_MS = 4200;
+const IDLE_JITTER_MS = 2800;
 
 function prefersReducedMotion() {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {

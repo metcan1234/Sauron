@@ -137,6 +137,7 @@ html, body {
   object-fit: contain;
   display: block;
   transition: opacity 0.06s ease-out;
+  filter: drop-shadow(0 0 6px rgba(255, 120, 20, 0.55)) drop-shadow(0 0 14px rgba(255, 70, 0, 0.25));
 }
 
 .header-title,
@@ -1924,10 +1925,11 @@ html, body {
 .empty-logo {
   width: 96px;
   height: 96px;
-  opacity: 0.38;
+  opacity: 0.72;
   object-fit: contain;
   margin-bottom: 4px;
   transition: opacity 0.06s ease-out;
+  filter: drop-shadow(0 0 18px rgba(255, 110, 20, 0.45)) drop-shadow(0 0 36px rgba(255, 60, 0, 0.2));
 }
 .empty-state p { font-size: 14px; line-height: 1.6; letter-spacing: 0.5px; }
 .empty-state strong { color: var(--accent); }
