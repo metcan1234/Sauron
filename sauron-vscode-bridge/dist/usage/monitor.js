@@ -37,7 +37,6 @@ exports.startCostMonitor = startCostMonitor;
 exports.resetMonitorStateForTests = resetMonitorStateForTests;
 const vscode = __importStar(require("vscode"));
 const task_complete_1 = require("../handoff/task-complete");
-const cline_activity_journal_1 = require("../activity/cline-activity-journal");
 const config_1 = require("./config");
 const export_1 = require("./export");
 const workspaceStates = new Map();
@@ -50,37 +49,24 @@ async function pollWorkspace(workspaceRoot, getCline) {
     if (!config.enabled) {
         return;
     }
-    const state = workspaceStates.get(workspaceRoot) ?? {
-        hadActiveTask: false,
-        lastMetrics: null,
-        lastActivitySignature: null,
-    };
+    const state = workspaceStates.get(workspaceRoot) ?? { hadActiveTask: false, lastMetrics: null };
     const hasActiveTask = cline.hasActiveTask();
     const metrics = hasActiveTask ? cline.getActiveTaskMetrics() : null;
     if (hasActiveTask && metrics) {
         state.lastMetrics = metrics;
-        const signature = `${metrics.taskId}:${metrics.tokensIn}:${metrics.tokensOut}:${metrics.modelId}`;
-        if (signature !== state.lastActivitySignature) {
-            state.lastActivitySignature = signature;
-            await (0, cline_activity_journal_1.journalTaskActivity)(workspaceRoot, metrics, metrics.taskId || "active").catch(() => { });
-        }
     }
     if (state.hadActiveTask && !hasActiveTask && state.lastMetrics) {
         await (0, export_1.exportTaskMetricsIfNew)(workspaceRoot, state.lastMetrics, config);
         if (cline) {
             const summary = (0, task_complete_1.resolveTaskSummary)(cline, state.lastMetrics);
-            const handoff = (0, task_complete_1.getLastConsumedHandoff)();
-            const artifact = (0, task_complete_1.buildTaskCompleteArtifact)(handoff, state.lastMetrics, summary);
+            const artifact = (0, task_complete_1.buildTaskCompleteArtifact)((0, task_complete_1.getLastConsumedHandoff)(), state.lastMetrics, summary);
             await (0, task_complete_1.writeTaskCompleteArtifact)(workspaceRoot, artifact).catch(() => { });
-            await (0, cline_activity_journal_1.journalTaskReport)(workspaceRoot, summary, handoff?.id).catch(() => { });
         }
         state.lastMetrics = null;
-        state.lastActivitySignature = null;
     }
     workspaceStates.set(workspaceRoot, {
         hadActiveTask: hasActiveTask,
         lastMetrics: state.lastMetrics,
-        lastActivitySignature: state.lastActivitySignature,
     });
 }
 function startCostMonitor(context, getCline) {

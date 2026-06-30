@@ -116,6 +116,7 @@ async function init() {
   if (chatBackupPathEl) chatBackupPathEl.value = settings.chatBackupPath || "";
 
   initFinOpsSettings();
+  initAgentControlSettings();
 
   // Plugin fields
   const executionMode = normalizeExecutionMode(settings.executionMode);
@@ -757,6 +758,105 @@ function collectAgentWallets() {
   return result;
 }
 
+function resolveAgentControlModeFromSettings(current = {}) {
+  if (current.agentControlMode) {
+    return current.agentControlMode;
+  }
+  if (current.finopsTrackingOnly === true) {
+    return "manual";
+  }
+  return "auto";
+}
+
+function updateAgentControlVisibility() {
+  const mode = document.getElementById("agentControlMode")?.value || "auto";
+  const manualFields = document.getElementById("agentControlManualFields");
+  const mixedFields = document.getElementById("agentControlMixedFields");
+  const autoSummary = document.getElementById("agentControlAutoSummary");
+  if (manualFields) manualFields.classList.toggle("hidden", mode !== "manual");
+  if (mixedFields) mixedFields.classList.toggle("hidden", mode !== "mixed");
+  if (autoSummary) autoSummary.classList.toggle("hidden", mode !== "auto");
+}
+
+function initAgentControlSettings() {
+  const mode = resolveAgentControlModeFromSettings(settings);
+  const modeEl = document.getElementById("agentControlMode");
+  if (modeEl) modeEl.value = mode;
+
+  const coreManual = settings.coreManualAgent || settings.aiProvider || "gemini";
+  const clineManual = settings.clineManualAgent || "deepseek";
+  const gooseManual = settings.gooseManualMode || settings.gooseDefaultMode || "balanced";
+
+  const setVal = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.value = value;
+  };
+
+  setVal("coreManualAgent", coreManual);
+  setVal("clineManualAgent", clineManual);
+  setVal("gooseManualMode", gooseManual);
+  setVal("coreManualAgentMixed", coreManual);
+  setVal("clineManualAgentMixed", clineManual);
+  setVal("gooseManualModeMixed", gooseManual);
+
+  const coreAuto = document.getElementById("coreRoutingAuto");
+  const clineAuto = document.getElementById("clineRoutingAuto");
+  const gooseAuto = document.getElementById("gooseRoutingAuto");
+  if (coreAuto) coreAuto.checked = (settings.coreRoutingMode || "auto") === "auto";
+  if (clineAuto) clineAuto.checked = (settings.clineRoutingMode || "auto") === "auto";
+  if (gooseAuto) gooseAuto.checked = (settings.gooseRoutingMode || "auto") === "auto";
+
+  const gooseEnabledEl = document.getElementById("gooseEnabled");
+  if (gooseEnabledEl) gooseEnabledEl.checked = settings.gooseEnabled !== false;
+
+  updateAgentControlVisibility();
+  modeEl?.addEventListener("change", updateAgentControlVisibility);
+}
+
+function collectAgentControlSettings() {
+  const mode = document.getElementById("agentControlMode")?.value || "auto";
+  const coreManualAgent = mode === "mixed"
+    ? (document.getElementById("coreManualAgentMixed")?.value || "gemini")
+    : (document.getElementById("coreManualAgent")?.value || "gemini");
+  const clineManualAgent = mode === "mixed"
+    ? (document.getElementById("clineManualAgentMixed")?.value || "deepseek")
+    : (document.getElementById("clineManualAgent")?.value || "deepseek");
+  const gooseManualMode = mode === "mixed"
+    ? (document.getElementById("gooseManualModeMixed")?.value || "balanced")
+    : (document.getElementById("gooseManualMode")?.value || "balanced");
+
+  const coreRoutingMode = mode === "mixed" && document.getElementById("coreRoutingAuto")?.checked === false
+    ? "manual"
+    : mode === "manual" ? "manual" : "auto";
+  const clineRoutingMode = mode === "mixed" && document.getElementById("clineRoutingAuto")?.checked === false
+    ? "manual"
+    : mode === "manual" ? "manual" : "auto";
+  const gooseRoutingMode = mode === "mixed" && document.getElementById("gooseRoutingAuto")?.checked === false
+    ? "manual"
+    : mode === "manual" ? "manual" : "auto";
+
+  const autoCore = mode === "auto" || (mode === "mixed" && coreRoutingMode === "auto");
+  const autoCline = mode === "auto" || (mode === "mixed" && clineRoutingMode === "auto");
+  const autoGoose = mode === "auto" || (mode === "mixed" && gooseRoutingMode === "auto");
+
+  return {
+    agentControlMode: mode,
+    coreManualAgent,
+    clineManualAgent,
+    gooseManualMode,
+    coreRoutingMode,
+    clineRoutingMode,
+    gooseRoutingMode,
+    finopsTrackingOnly: !(autoCore || autoCline),
+    finopsCoreModelOverlay: autoCore,
+    finopsCostOptimizerEnabled: document.getElementById("finopsCostOptimizerEnabled")?.checked !== false,
+    gooseAutoMode: autoGoose,
+    gooseDefaultMode: gooseManualMode,
+    gooseEnabled: document.getElementById("gooseEnabled")?.checked !== false,
+    aiProvider: coreManualAgent,
+  };
+}
+
 function initFinOpsSettings() {
   document.getElementById("finopsTotalBudgetTl").value = String(settings.finopsTotalBudgetTl ?? 0);
   const hardBudgetEl = document.getElementById("finopsHardBudgetEnabled");
@@ -1284,8 +1384,10 @@ async function saveSettings() {
   const executionMode = normalizeExecutionMode(document.getElementById("executionMode").value);
   const trustLevel = normalizeTrustLevel(document.getElementById("trustLevel").value, executionMode);
 
+  const agentControl = collectAgentControlSettings();
+
   const newSettings = {
-    aiProvider:              "gemini",
+    aiProvider:              agentControl.aiProvider || activeProvider,
     aiModel:                 activeModel,
     claudeModelCustom:       modelMap.claude,
     openaiModelCustom:       modelMap.openai,
@@ -1351,6 +1453,7 @@ async function saveSettings() {
     finopsModelPriceOverrides: collectOverrideMap("finopsModelOverrides"),
     finopsCostOptimizerEnabled: document.getElementById("finopsCostOptimizerEnabled")?.checked !== false,
     finopsCostOptimizerMode: document.getElementById("finopsCostOptimizerMode")?.value || "balanced",
+    ...agentControl,
     finopsCoreModelTier: document.getElementById("finopsCoreModelTier")?.value || "economy",
     finopsHandoffMaxChars: Number(document.getElementById("finopsHandoffMaxChars")?.value) || 4000,
     finopsCodeContextMaxChars: Number(document.getElementById("finopsCodeContextMaxChars")?.value) || 4000,
@@ -1363,7 +1466,7 @@ async function saveSettings() {
     finopsMemoryCompressThreshold: Number(settings.finopsMemoryCompressThreshold) || 40,
     finopsMemoryCompressBatch: Number(settings.finopsMemoryCompressBatch) || 20,
     finopsPresetBackup: settings.finopsPresetBackup || {},
-    finopsTrackingOnly: document.getElementById("finopsTrackingOnly")?.checked !== false,
+    finopsTrackingOnly: agentControl.finopsTrackingOnly,
     finopsRestrictModels: settings.finopsRestrictModels === true,
     tokenUltraEnabled: document.getElementById("tokenUltraEnabled")?.checked !== false,
     tokenUltraUseDeltaHandoff: document.getElementById("tokenUltraUseDeltaHandoff")?.checked !== false,

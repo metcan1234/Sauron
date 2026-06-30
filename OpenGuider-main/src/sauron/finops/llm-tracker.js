@@ -5,6 +5,10 @@ const { checkPreCallBudgetAlert, maybePostCallBudgetAlert, emitBudgetAlert } = r
 const { resolveCoreModelOverlay } = require("./cost-optimizer-config");
 const { resolveAgentForCore, ECONOMY_VISION_OPERATIONS } = require("./agent-matrix");
 const {
+  shouldAutoRouteCore,
+  resolveManualCoreAgent,
+} = require("./routing-mode");
+const {
   resolveAgentWalletState,
   buildWalletFallbackAlert,
   buildExhaustedAgentAlerts,
@@ -126,9 +130,14 @@ async function prepareLlmCall(settings = {}, options = {}) {
 
   const { agentWallets } = await resolveAgentWalletState(liveSettings);
 
-  const overlay =
-    resolveAgentForCore(operation, complexityHint, liveSettings, { agentWallets }) ||
-    resolveCoreModelOverlay(liveSettings);
+  let overlay = null;
+  if (shouldAutoRouteCore(liveSettings)) {
+    overlay =
+      resolveAgentForCore(operation, complexityHint, liveSettings, { agentWallets }) ||
+      resolveCoreModelOverlay(liveSettings);
+  } else {
+    overlay = resolveManualCoreAgent(liveSettings);
+  }
   if (!overlay) {
     return liveSettings;
   }
@@ -152,6 +161,7 @@ async function prepareLlmCall(settings = {}, options = {}) {
     _finopsCoreOverlay: {
       coreModelTier: overlay.coreModelTier,
       agentId: overlay.agentId,
+      reason: overlay.reason || "auto-core",
       originalProvider: liveSettings.aiProvider,
       originalModel: liveSettings.aiModel,
     },

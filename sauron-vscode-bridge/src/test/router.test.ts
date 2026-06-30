@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { computeComplexityHint, resolveClineAgent } from "../cost-optimizer/router.ts"
+import { computeComplexityHint, resolveClineAgent, resolveManualClineAgent } from "../cost-optimizer/router.ts"
 
 test("resolveClineAgent routes low complexity to deepseek", () => {
 	const selection = resolveClineAgent("low", undefined)
@@ -31,6 +31,13 @@ test("computeComplexityHint keeps simple fixes low", () => {
 	assert.equal(computeComplexityHint("fix typo"), "low")
 	assert.equal(computeComplexityHint("refactor login button"), "medium")
 	assert.equal(computeComplexityHint("migrate database schema auth"), "high")
+})
+
+test("resolveManualClineAgent returns ollama selection", () => {
+	const selection = resolveManualClineAgent("ollama", undefined)
+	assert.ok(selection)
+	assert.equal(selection?.providerId, "ollama")
+	assert.equal(selection?.reason, "manual-cline")
 })
 
 test("resolveClineAgent skips agent with walletAvailable false", () => {

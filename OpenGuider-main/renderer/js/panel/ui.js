@@ -6,6 +6,7 @@ const PROVIDER_COLORS = {
   openrouter: "#10a37f",
   openai: "#10b981",
   gemini: "#3b82f6",
+  deepseek: "#06b6d4",
   ollama: "#a855f7",
 };
 
@@ -42,6 +43,7 @@ export function queryPanelDom(doc = document) {
     textInput: doc.getElementById("text-input"),
     sendBtn: doc.getElementById("send-btn"),
     modelSelect: doc.getElementById("model-select"),
+    providerSelect: doc.getElementById("provider-select"),
     providerDot: doc.getElementById("provider-dot"),
     pttBtn: doc.getElementById("ptt-btn"),
     waveform: doc.getElementById("waveform"),
@@ -363,9 +365,27 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     dom.chatArea.classList.toggle("has-messages", hasMessages);
   }
 
+  function resolveCoreRoutingMode(settings = {}) {
+    if (settings.agentControlMode === "manual") return "manual";
+    if (settings.agentControlMode === "mixed") {
+      return settings.coreRoutingMode || "auto";
+    }
+    return "auto";
+  }
+
+  function buildProviderSelector() {
+    if (!dom.providerSelect) {
+      return;
+    }
+    const settings = state.getSettings();
+    const provider = settings.coreManualAgent || settings.aiProvider || "gemini";
+    dom.providerSelect.value = provider;
+    updateProviderDot();
+  }
+
   function buildModelSelector() {
     const settings = state.getSettings();
-    const provider = settings.aiProvider || "gemini";
+    const provider = settings.coreManualAgent || settings.aiProvider || "gemini";
     const customKey = provider + "ModelCustom";
     const savedModel = settings[customKey] || settings.aiModel || "";
 
@@ -411,9 +431,15 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
   }
 
   function updateProviderDot() {
-    const provider = state.getSetting("aiProvider") || "gemini";
+    const settings = state.getSettings();
+    const provider = settings.coreManualAgent || state.getSetting("aiProvider") || "gemini";
+    const routingMode = resolveCoreRoutingMode(settings);
+    const modeLabel = routingMode === "manual" ? "MANUAL" : "AUTO";
     dom.providerDot.style.background = PROVIDER_COLORS[provider] || "#64748b";
-    dom.providerDot.title = provider;
+    dom.providerDot.title = `${modeLabel} · ${provider}`;
+    if (dom.providerSelect && dom.providerSelect.value !== provider) {
+      dom.providerSelect.value = provider;
+    }
   }
 
   function appendMemorySummaryMessage(text, messageIndex) {
@@ -1350,6 +1376,7 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     appendRawElement,
     appendUserMessage,
     buildModelSelector,
+    buildProviderSelector,
     clearConversation,
     escapeHtml,
     removeAllTypingIndicators,

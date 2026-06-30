@@ -5,7 +5,7 @@ import type { SauronHandoff } from "../handoff/types"
 import { probeClineCapabilities } from "../cline-capabilities"
 import { appendUsageRecord } from "../usage/export"
 import { resolveBudgetDowngrade, GOVERNOR_ALERT_MESSAGE } from "./governor"
-import { resolveClineAgent } from "./router"
+import { resolveClineAgent, resolveManualClineAgent } from "./router"
 
 export interface ApplyClineModelResult {
 	applied: boolean
@@ -31,31 +31,43 @@ export async function applyClineModelBeforeHandoff(
 ): Promise<ApplyClineModelResult> {
 	const optimizer = finopsConfig.costOptimizer
 	const trackingOnly = finopsConfig.trackingOnly !== false
+	const autoRouteCline = finopsConfig.shouldAutoRoute?.cline ?? !trackingOnly
 	const caps = probeClineCapabilities(cline)
-	if (trackingOnly || !optimizer?.enabled || !caps.canRouteModel) {
+	if (!optimizer?.enabled || !caps.canRouteModel) {
 		return { applied: false }
 	}
 
-	const budgetGovernorActive = await resolveBudgetDowngrade(
-		workspaceRoot,
-		optimizer,
-		handoff.id,
-		handoff.projectType,
-	)
+	const budgetGovernorActive = autoRouteCline
+		? await resolveBudgetDowngrade(
+				workspaceRoot,
+				optimizer,
+				handoff.id,
+				handoff.projectType,
+			)
+		: false
 
 	if (budgetGovernorActive) {
 		void vscode.window.showInformationMessage(GOVERNOR_ALERT_MESSAGE)
 	}
 
-	const planSelection = resolveClineAgent("low", optimizer.agentMatrix, {
-		budgetGovernorActive,
-		fallbackText: handoff.taskSummary || handoff.goal || "",
-	})
+	const manualAgent = finopsConfig.manualAgents?.cline
+	const manualSelection = !autoRouteCline && manualAgent
+		? resolveManualClineAgent(manualAgent, optimizer.agentMatrix)
+		: null
 
-	const actSelection = resolveClineAgent(handoff.complexityHint, optimizer.agentMatrix, {
-		budgetGovernorActive,
-		fallbackText: handoff.taskSummary || handoff.goal || "",
-	})
+	const planSelection = autoRouteCline
+		? resolveClineAgent("low", optimizer.agentMatrix, {
+				budgetGovernorActive,
+				fallbackText: handoff.taskSummary || handoff.goal || "",
+			})
+		: manualSelection
+
+	const actSelection = autoRouteCline
+		? resolveClineAgent(handoff.complexityHint, optimizer.agentMatrix, {
+				budgetGovernorActive,
+				fallbackText: handoff.taskSummary || handoff.goal || "",
+			})
+		: manualSelection
 
 	if (!actSelection) {
 		return { applied: false }

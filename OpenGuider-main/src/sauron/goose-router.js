@@ -4,6 +4,10 @@ const { GOOSE_TOKEN_MODES } = require("./goose-config");
 const { checkOllamaRunning } = require("./goose-ollama-check");
 const { applyModeProfileToProviderConfig } = require("./goose-mode-profiles");
 const { buildBudgetWarnNotice, buildGovernorNotice } = require("./goose-budget-policy");
+const {
+  shouldAutoRouteGoose,
+  resolveManualGooseMode,
+} = require("./finops/routing-mode");
 
 function hasOllamaConfigured(settings = {}) {
   const url = String(settings.ollamaUrl || "").trim();
@@ -98,9 +102,9 @@ async function resolveGooseMode(taskText, settings = {}) {
     return { mode: "balanced", reason: "goose-disabled", providerConfig: null, notices: [] };
   }
 
-  let mode = settings.gooseAutoMode === false
-    ? String(settings.gooseDefaultMode || "balanced")
-    : detectGooseComplexity(taskText);
+  let mode = shouldAutoRouteGoose(settings)
+    ? detectGooseComplexity(taskText)
+    : resolveManualGooseMode(settings).mode;
 
   const notices = [];
   const spentTl = await getGooseTodaySpentTl(settings);
@@ -121,7 +125,7 @@ async function resolveGooseMode(taskText, settings = {}) {
   }
 
   let providerConfig = resolveModeProviderConfig(mode, settings);
-  let reason = settings.gooseAutoMode === false ? "manual-default" : "complexity-route";
+  let reason = shouldAutoRouteGoose(settings) ? "complexity-route" : "manual-goose";
 
   if (mode === "economy" && !hasOllamaConfigured(settings)) {
     mode = "balanced";

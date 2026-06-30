@@ -55,7 +55,7 @@ const DEFAULT_AGENT_MATRIX: AgentMatrix = {
 	],
 	routing: {
 		core: { low: "gemini", medium: "gemini", high: "deepseek" },
-		cline: { ...CLINE_COMPLEXITY_MAP },
+		cline: { low: "deepseek", medium: "deepseek", high: "openai" },
 	},
 }
 
@@ -185,5 +185,23 @@ export function resolveClineAgent(
 		modelId: agent.cline.modelId,
 		agentId: agent.id,
 		reason,
+	}
+}
+
+export function resolveManualClineAgent(
+	agentId: string | undefined,
+	agentMatrix: AgentMatrix | undefined,
+): ClineAgentSelection | null {
+	const matrix = agentMatrix || DEFAULT_AGENT_MATRIX
+	const normalized = String(agentId || "deepseek").trim().toLowerCase()
+	const agent = matrix.agents.find((entry) => entry.id === normalized)
+	if (!agent) {
+		return null
+	}
+	return {
+		providerId: agent.cline.providerId,
+		modelId: agent.cline.modelId,
+		agentId: agent.id,
+		reason: "manual-cline",
 	}
 }

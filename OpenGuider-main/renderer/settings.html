@@ -62,6 +62,99 @@
           <span class="hint">Yerel fallback — GPU yoksa boş bırakılabilir. Varsayılan: <code>http://localhost:11434</code></span>
         </div>
 
+        <div class="settings-section" id="agent-control-section" style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.08);">
+          <h3>Agent Kontrol</h3>
+          <p class="settings-lead">Otomatik modda Sauron görev karmaşıklığına göre model seçer. Manuel veya karışık modda kanal bazında kendiniz seçebilirsiniz.</p>
+
+          <div class="form-group">
+            <label>Kontrol modu</label>
+            <select class="form-select" id="agentControlMode">
+              <option value="auto">Otomatik (önerilen)</option>
+              <option value="manual">Manuel (tüm kanallar)</option>
+              <option value="mixed">Karışık (kanal bazlı)</option>
+            </select>
+          </div>
+
+          <div class="form-group" id="agentControlAutoSummary">
+            <label>Otomatik özet</label>
+            <div class="hint" id="agentControlSummaryText">Panel: Gemini · Cline: DeepSeek → GPT · Goose: karmaşıklığa göre</div>
+          </div>
+
+          <div id="agentControlManualFields" class="hidden">
+            <div class="form-group">
+              <label>Panel sohbet agent</label>
+              <select class="form-select" id="coreManualAgent">
+                <option value="gemini">Gemini</option>
+                <option value="deepseek">DeepSeek</option>
+                <option value="openai">OpenAI (GPT)</option>
+                <option value="ollama">Ollama (yerel)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Cline agent</label>
+              <select class="form-select" id="clineManualAgent">
+                <option value="gemini">Gemini</option>
+                <option value="deepseek">DeepSeek</option>
+                <option value="openai">OpenAI (GPT)</option>
+                <option value="ollama">Ollama (yerel)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Goose modu</label>
+              <select class="form-select" id="gooseManualMode">
+                <option value="economy">Economy (Ollama)</option>
+                <option value="balanced">Balanced (DeepSeek)</option>
+                <option value="premium">Premium (GPT)</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="agentControlMixedFields" class="hidden">
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="coreRoutingAuto" checked/>
+                Panel sohbet otomatik
+              </label>
+              <select class="form-select" id="coreManualAgentMixed" style="margin-top:6px;">
+                <option value="gemini">Gemini</option>
+                <option value="deepseek">DeepSeek</option>
+                <option value="openai">OpenAI (GPT)</option>
+                <option value="ollama">Ollama (yerel)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="clineRoutingAuto" checked/>
+                Cline otomatik
+              </label>
+              <select class="form-select" id="clineManualAgentMixed" style="margin-top:6px;">
+                <option value="gemini">Gemini</option>
+                <option value="deepseek">DeepSeek</option>
+                <option value="openai">OpenAI (GPT)</option>
+                <option value="ollama">Ollama (yerel)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="gooseRoutingAuto" checked/>
+                Goose otomatik
+              </label>
+              <select class="form-select" id="gooseManualModeMixed" style="margin-top:6px;">
+                <option value="economy">Economy (Ollama)</option>
+                <option value="balanced">Balanced (DeepSeek)</option>
+                <option value="premium">Premium (GPT)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="gooseEnabled" checked/>
+              Goose agent etkin (🪿)
+            </label>
+          </div>
+        </div>
+
         <div class="form-group">
           <details id="clineSetupDetails">
             <summary style="cursor:pointer;font-weight:600;">Cline kurulumu (otomatik senkron)</summary>
@@ -72,7 +165,6 @@
               <li>OpenAI → Cline OpenAI provider</li>
               <li>Ollama → Cline Ollama URL</li>
             </ul>
-          </details>
           </details>
         </div>
 

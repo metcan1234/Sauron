@@ -49,7 +49,7 @@ const CORE_COMPLEXITY_MAP = {
 };
 
 const CLINE_COMPLEXITY_MAP = {
-  low: "gemini",
+  low: "deepseek",
   medium: "deepseek",
   high: "openai",
 };

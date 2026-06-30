@@ -3,6 +3,7 @@ const path = require("path");
 const { mergeCostOptimizerConfig } = require("./cost-optimizer-config");
 const { buildAgentMatrixForWorkspace } = require("./agent-matrix");
 const { resolveAgentWalletState } = require("./agent-usage");
+const { buildAgentControlPayload } = require("./routing-mode");
 
 const HANDOFF_DIR = ".sauron";
 const FINOPS_CONFIG_FILENAME = "finops-config.json";
@@ -25,6 +26,7 @@ async function buildFinOpsConfigFromSettings(settings = {}) {
     enabled: true,
     trackingOnly: settings.finopsTrackingOnly !== false,
     restrictModels: settings.finopsRestrictModels === true,
+    ...buildAgentControlPayload(settings),
     finopsUsdToTl: Number.isFinite(Number(settings.finopsUsdToTl))
       ? Number(settings.finopsUsdToTl)
       : DEFAULT_FINOPS_CONFIG.finopsUsdToTl,

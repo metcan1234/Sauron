@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.computeComplexityHint = computeComplexityHint;
 exports.resolveClineAgent = resolveClineAgent;
+exports.resolveManualClineAgent = resolveManualClineAgent;
 const CLINE_COMPLEXITY_MAP = {
     low: "deepseek",
     medium: "deepseek",
@@ -45,7 +46,7 @@ const DEFAULT_AGENT_MATRIX = {
     ],
     routing: {
         core: { low: "gemini", medium: "gemini", high: "deepseek" },
-        cline: { ...CLINE_COMPLEXITY_MAP },
+        cline: { low: "deepseek", medium: "deepseek", high: "openai" },
     },
 };
 function normalizeComplexityHint(hint) {
@@ -146,6 +147,20 @@ function resolveClineAgent(complexityHint, agentMatrix, options = {}) {
         modelId: agent.cline.modelId,
         agentId: agent.id,
         reason,
+    };
+}
+function resolveManualClineAgent(agentId, agentMatrix) {
+    const matrix = agentMatrix || DEFAULT_AGENT_MATRIX;
+    const normalized = String(agentId || "deepseek").trim().toLowerCase();
+    const agent = matrix.agents.find((entry) => entry.id === normalized);
+    if (!agent) {
+        return null;
+    }
+    return {
+        providerId: agent.cline.providerId,
+        modelId: agent.cline.modelId,
+        agentId: agent.id,
+        reason: "manual-cline",
     };
 }
 //# sourceMappingURL=router.js.map

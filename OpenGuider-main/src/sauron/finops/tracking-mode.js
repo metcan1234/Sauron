@@ -1,5 +1,11 @@
+const {
+  shouldAutoRouteCore,
+  shouldAutoRouteCline,
+  shouldAutoRouteGoose,
+} = require("./routing-mode");
+
 function isFinOpsTrackingOnly(settings = {}) {
-  return settings.finopsTrackingOnly !== false;
+  return !shouldAutoRouteCore(settings) && !shouldAutoRouteCline(settings);
 }
 
 function shouldRestrictModels(settings = {}) {
@@ -10,24 +16,22 @@ function shouldRestrictModels(settings = {}) {
 }
 
 function shouldApplyCostOptimizerRouting(settings = {}) {
-  if (isFinOpsTrackingOnly(settings)) {
-    return false;
-  }
-  return settings.finopsCostOptimizerEnabled !== false;
+  return shouldAutoRouteCore(settings) || shouldAutoRouteCline(settings);
 }
 
 function shouldApplyBudgetGovernor(settings = {}, optimizer = {}) {
-  if (isFinOpsTrackingOnly(settings)) {
+  if (!shouldAutoRouteCore(settings) && !shouldAutoRouteCline(settings)) {
     return false;
   }
   return optimizer?.budgetGovernor?.enabled !== false;
 }
 
 function shouldApplyCoreModelOverlay(settings = {}) {
-  if (isFinOpsTrackingOnly(settings)) {
-    return false;
-  }
-  return settings.finopsCoreModelOverlay !== false;
+  return shouldAutoRouteCore(settings);
+}
+
+function shouldApplyGooseAutoRouting(settings = {}) {
+  return shouldAutoRouteGoose(settings);
 }
 
 module.exports = {
@@ -36,4 +40,5 @@ module.exports = {
   shouldApplyCostOptimizerRouting,
   shouldApplyBudgetGovernor,
   shouldApplyCoreModelOverlay,
+  shouldApplyGooseAutoRouting,
 };

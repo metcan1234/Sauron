@@ -5,6 +5,19 @@ const CHANNEL_LABELS = {
   gamedev: "Game Dev",
 };
 
+export function formatAgentRoutingBadge(settings = {}) {
+  const mode = settings.agentControlMode
+    || (settings.finopsTrackingOnly === true ? "manual" : "auto");
+  const provider = settings.coreManualAgent || settings.aiProvider || "gemini";
+  if (mode === "auto") {
+    return `AUTO · ${provider}`;
+  }
+  if (mode === "mixed" && (settings.coreRoutingMode || "auto") === "auto") {
+    return `AUTO · ${provider}`;
+  }
+  return `MANUAL · ${provider}`;
+}
+
 export function formatFinOpsBadgeText(summary = {}, options = {}) {
   const budget = Number(summary.budgetTl) || 0;
   const totalSpent = Number(summary.totalSpentTl) || 0;

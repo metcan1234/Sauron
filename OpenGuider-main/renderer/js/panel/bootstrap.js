@@ -946,7 +946,7 @@ export function createPanelController({
       }
 
       state.setSetting("aiModel", selectedModel);
-      const providerKey = (state.getSetting("aiProvider") || "claude") + "ModelCustom";
+      const providerKey = (state.getSetting("coreManualAgent") || state.getSetting("aiProvider") || "claude") + "ModelCustom";
       state.setSetting(providerKey, selectedModel);
 
       log("ipc:save-settings invoke", providerKey);
@@ -955,6 +955,40 @@ export function createPanelController({
         [providerKey]: selectedModel,
       });
     });
+
+    if (dom.providerSelect) {
+      dom.providerSelect.addEventListener("change", async () => {
+        const agentId = dom.providerSelect.value;
+        if (!agentId) {
+          return;
+        }
+
+        const current = state.getSettings();
+        const mode = current.agentControlMode
+          || (current.finopsTrackingOnly === true ? "manual" : "auto");
+        const patch = {
+          coreManualAgent: agentId,
+          aiProvider: agentId,
+        };
+
+        if (mode === "auto") {
+          patch.agentControlMode = "mixed";
+          patch.coreRoutingMode = "manual";
+          patch.clineRoutingMode = "auto";
+          patch.gooseRoutingMode = "auto";
+          patch.finopsCoreModelOverlay = false;
+          patch.finopsTrackingOnly = false;
+        } else if (mode === "mixed") {
+          patch.coreRoutingMode = "manual";
+        }
+
+        Object.entries(patch).forEach(([key, value]) => state.setSetting(key, value));
+        log("ipc:save-settings provider override", agentId);
+        await api.invoke("save-settings", patch);
+        ui.buildProviderSelector();
+        ui.buildModelSelector();
+      });
+    }
 
     dom.btnSettings.addEventListener("click", () => {
       log("ipc:open-settings invoke");
@@ -1123,6 +1157,7 @@ export function createPanelController({
     api.on("settings-changed", (nextSettings) => {
       log("ipc:settings-changed received");
       state.setSettings(nextSettings);
+      ui.buildProviderSelector();
       ui.buildModelSelector();
       ui.updateProviderDot();
       applyShortcutTitles();
@@ -1270,6 +1305,7 @@ export function createPanelController({
       const session = await api.invoke("get-active-session");
       state.setSettings(settings);
       state.setSessionSnapshot(session);
+      ui.buildProviderSelector();
       ui.buildModelSelector();
       ui.updateProviderDot();
       ui.renderConversation(session?.messages || []);

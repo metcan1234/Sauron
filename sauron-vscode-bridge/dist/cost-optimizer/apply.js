@@ -42,22 +42,33 @@ const router_1 = require("./router");
 async function applyClineModelBeforeHandoff(cline, handoff, finopsConfig, workspaceRoot) {
     const optimizer = finopsConfig.costOptimizer;
     const trackingOnly = finopsConfig.trackingOnly !== false;
+    const autoRouteCline = finopsConfig.shouldAutoRoute?.cline ?? !trackingOnly;
     const caps = (0, cline_capabilities_1.probeClineCapabilities)(cline);
-    if (trackingOnly || !optimizer?.enabled || !caps.canRouteModel) {
+    if (!optimizer?.enabled || !caps.canRouteModel) {
         return { applied: false };
     }
-    const budgetGovernorActive = await (0, governor_1.resolveBudgetDowngrade)(workspaceRoot, optimizer, handoff.id, handoff.projectType);
+    const budgetGovernorActive = autoRouteCline
+        ? await (0, governor_1.resolveBudgetDowngrade)(workspaceRoot, optimizer, handoff.id, handoff.projectType)
+        : false;
     if (budgetGovernorActive) {
         void vscode.window.showInformationMessage(governor_1.GOVERNOR_ALERT_MESSAGE);
     }
-    const planSelection = (0, router_1.resolveClineAgent)("low", optimizer.agentMatrix, {
-        budgetGovernorActive,
-        fallbackText: handoff.taskSummary || handoff.goal || "",
-    });
-    const actSelection = (0, router_1.resolveClineAgent)(handoff.complexityHint, optimizer.agentMatrix, {
-        budgetGovernorActive,
-        fallbackText: handoff.taskSummary || handoff.goal || "",
-    });
+    const manualAgent = finopsConfig.manualAgents?.cline;
+    const manualSelection = !autoRouteCline && manualAgent
+        ? (0, router_1.resolveManualClineAgent)(manualAgent, optimizer.agentMatrix)
+        : null;
+    const planSelection = autoRouteCline
+        ? (0, router_1.resolveClineAgent)("low", optimizer.agentMatrix, {
+            budgetGovernorActive,
+            fallbackText: handoff.taskSummary || handoff.goal || "",
+        })
+        : manualSelection;
+    const actSelection = autoRouteCline
+        ? (0, router_1.resolveClineAgent)(handoff.complexityHint, optimizer.agentMatrix, {
+            budgetGovernorActive,
+            fallbackText: handoff.taskSummary || handoff.goal || "",
+        })
+        : manualSelection;
     if (!actSelection) {
         return { applied: false };
     }

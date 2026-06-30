@@ -22,6 +22,22 @@
 - OpenAI: yalnızca sıkı `high` complexity (mimari, auth, schema, çoklu risk)
 - Governor: günlük bütçe aşıldığında **yalnızca** high→OpenAI yerine DeepSeek (Ollama'ya otomatik düşüş yok)
 
+## Agent Kontrol (otomatik + manuel)
+
+Settings → **AI Ajanları → Agent Kontrol**:
+
+| Mod | Davranış |
+|-----|----------|
+| **Otomatik** | Panel/Cline/Goose karmaşıklığa göre agent matrix kullanır (varsayılan) |
+| **Manuel** | Kanal başına seçtiğiniz agent sabit kalır (Ollama dahil) |
+| **Karışık** | Her kanal için ayrı Auto/Manuel (ör. Panel manuel Ollama, Cline otomatik) |
+
+Panel model çubuğundaki provider dropdown ile hızlı geçiş yapabilirsiniz; otomatik moddayken provider değiştirmek **Karışık** moda geçirir ve yalnızca paneli manuel yapar.
+
+Manuel Cline agent handoff öncesi Bridge tarafından `setActiveModel` ile uygulanır (Cline fork gerekir).
+
+Resolver: `OpenGuider-main/src/sauron/finops/routing-mode.js`
+
 ## Complexity hint (sıkı)
 
 - **high:** ≥2 risk keyword (`architecture`, `security`, `auth`, `migrate`, `schema`, `database`) veya 1 risk keyword + 400+ kelime veya 1200+ kelime
@@ -50,6 +66,7 @@ Settings → Bütçe / FinOps → **Agent Bakiyeleri**:
 |---------|-------|-----|
 | Agent matrix | `OpenGuider-main/src/sauron/finops/agent-matrix.js` | Core/Cline agent çözümleme, settings sync |
 | Optimizer config | `OpenGuider-main/src/sauron/finops/cost-optimizer-config.js` | Tier defaults, complexity hint |
+| Agent control | `OpenGuider-main/src/sauron/finops/routing-mode.js` | Auto/manual/mixed kanal routing |
 | DeepSeek provider | `OpenGuider-main/src/ai/deepseek.js` | Native OpenAI-compatible API |
 | Workspace sync | `OpenGuider-main/src/sauron/finops/workspace-config.js` | `costOptimizer.agentMatrix` yazar |
 | Bridge router | `sauron-vscode-bridge/src/cost-optimizer/router.ts` | Handoff → Cline agent |

@@ -38,8 +38,11 @@ Her mod için Goose env değişkenleri oturum başında set edilir:
 
 `--system` talimatları moda göre kısaltılır (economy ~2K, balanced ~4K, premium ~8K karakter).
 
-## Ayarlar (AI Ajanları)
+## Ayarlar (AI Ajanları → Agent Kontrol)
 
+- `agentControlMode` — auto | manual | mixed
+- `coreManualAgent` / `clineManualAgent` — gemini | deepseek | openai | ollama
+- `gooseManualMode` — economy (Ollama) | balanced (DeepSeek) | premium (GPT)
 - `gooseEnabled` — panel butonu (varsayılan: açık)
 - `gooseBinaryPath` — boş = PATH / `%USERPROFILE%\.local\bin\goose.exe`
 - `gooseDefaultMode` — economy | balanced | premium

@@ -52,8 +52,6 @@ const apply_1 = require("./cost-optimizer/apply");
 const sync_1 = require("./credentials/sync");
 const config_1 = require("./usage/config");
 const monitor_1 = require("./usage/monitor");
-const cline_activity_journal_1 = require("./activity/cline-activity-journal");
-const channel_indicator_1 = require("./channel-indicator");
 const CLINE_EXTENSION_ID = "saoudrizwan.claude-dev";
 const CLINE_SIDEBAR_FOCUS = "claude-dev.SidebarProvider.focus";
 const DEBOUNCE_MS = 500;
@@ -131,7 +129,6 @@ async function handleIncomingHandoffWithActiveTask(cline, fullPath, userChoice) 
     }
     const action = (0, handleIncomingHandoff_1.resolveHandoffAction)((0, cline_capabilities_1.safeHasActiveTask)(cline), handoff.autoStart, userChoice, handoff.autoChain);
     if (action === "waitForUser") {
-        await (0, cline_activity_journal_1.journalHandoffQuestion)(workspaceRoot, handoff.id || path.basename(fullPath), "Aktif bir Cline görevi var. Mevcut görevi bitirip yenisini başlatmak ister misiniz?").catch(() => { });
         const choice = await promptForActiveTaskChoice();
         return handleIncomingHandoffWithActiveTask(cline, fullPath, choice);
     }
@@ -149,15 +146,11 @@ async function handleIncomingHandoffWithActiveTask(cline, fullPath, userChoice) 
         await copyHandoffToClipboard(prompt);
         await (0, discovery_1.markHandoffConsumed)(fullPath);
         (0, task_complete_1.setLastConsumedHandoff)(handoff, fullPath);
-        await (0, cline_activity_journal_1.journalHandoffPlan)(workspaceRoot, handoff).catch(() => { });
-        await (0, cline_activity_journal_1.journalHandoffActivityStart)(workspaceRoot, handoff).catch(() => { });
         vscode.window.showInformationMessage("Sauron görev özeti panoya kopyalandı. Cline sidebar'ına yapıştırıp gönderin.");
         return true;
     }
     await (0, discovery_1.markHandoffConsumed)(fullPath);
     (0, task_complete_1.setLastConsumedHandoff)(handoff, fullPath);
-    await (0, cline_activity_journal_1.journalHandoffPlan)(workspaceRoot, handoff).catch(() => { });
-    await (0, cline_activity_journal_1.journalHandoffActivityStart)(workspaceRoot, handoff).catch(() => { });
     if (delivery === "startNewTask") {
         vscode.window.showInformationMessage("Sauron'dan gelen görev Cline'a yüklendi.");
     }
@@ -232,7 +225,6 @@ async function scanAllWorkspaces(context) {
     }));
 }
 function activate(context) {
-    (0, channel_indicator_1.registerChannelIndicator)(context);
     void scanAllWorkspaces(context);
     (0, monitor_1.startCostMonitor)(context, getClineApi);
 }

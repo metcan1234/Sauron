@@ -55,6 +55,20 @@ export interface FinOpsConfig {
 	emitMode?: "task-complete" | "per-request"
 	trackingOnly?: boolean
 	restrictModels?: boolean
+	agentControlMode?: "auto" | "manual" | "mixed"
+	coreRoutingMode?: "auto" | "manual"
+	clineRoutingMode?: "auto" | "manual"
+	gooseRoutingMode?: "auto" | "manual"
+	manualAgents?: {
+		core: string
+		cline: string
+		goose: string
+	}
+	shouldAutoRoute?: {
+		core: boolean
+		cline: boolean
+		goose: boolean
+	}
 	costOptimizer?: CostOptimizerConfig
 }
 
