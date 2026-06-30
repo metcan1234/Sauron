@@ -41,8 +41,8 @@ test("resolveAgentForCore picks deepseek for high complexity", () => {
 
 test("resolveAgentForCline maps complexity to agents", () => {
   const low = resolveAgentForCline("low", baseSettings);
-  assert.equal(low.providerId, "gemini");
-  assert.equal(low.modelId, "gemini-2.5-flash");
+  assert.equal(low.providerId, "deepseek");
+  assert.equal(low.modelId, "deepseek-chat");
 
   const medium = resolveAgentForCline("medium", baseSettings);
   assert.equal(medium.providerId, "deepseek");
@@ -106,6 +106,6 @@ test("buildAgentMatrixForWorkspace marks configured agents", () => {
   assert.equal(matrix.agents.find((a) => a.id === "gemini")?.configured, true);
   assert.equal(hasAgentCredential({ ollamaUrl: "http://localhost:11434", ollamaModelCustom: "qwen2.5-coder:7b" }, "ollama"), true);
   assert.equal(hasAgentCredential({ ollamaUrl: "http://localhost:11434" }, "ollama"), false);
-  assert.equal(matrix.routing.cline.low, "gemini");
+  assert.equal(matrix.routing.cline.low, "deepseek");
   assert.equal(matrix.routing.cline.medium, "deepseek");
 });

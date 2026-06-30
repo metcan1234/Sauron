@@ -12,10 +12,12 @@ const { resolvePreferredEngine } = require("../../src/sauron/gamedev-engine-prob
 const { applyRecipeToTask } = require("../../src/sauron/goose-recipes");
 const { getBundledGoosePaths } = require("../../src/sauron/goose-config");
 
-test("tracking-only disables model restrictions by default", () => {
-  assert.equal(isFinOpsTrackingOnly({}), true);
+test("tracking-only disables model restrictions when routing is manual", () => {
+  assert.equal(isFinOpsTrackingOnly({}), false);
+  assert.equal(isFinOpsTrackingOnly({ finopsTrackingOnly: true }), true);
   assert.equal(shouldRestrictModels({}), false);
   assert.equal(shouldApplyCostOptimizerRouting({ finopsTrackingOnly: true }), false);
+  assert.equal(shouldApplyCostOptimizerRouting({ agentControlMode: "auto" }), true);
 });
 
 test("applyTokenUltraToHandoff adds tokenUltra block", () => {
