@@ -1,7 +1,12 @@
 const { execFileSync, execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
-const { resolveVSCodeCommand } = require("./handoff");
+const {
+  resolveVSCodeCommand,
+  isVSCodeGuiExecutable,
+  deriveCliPathFromGuiExecutable,
+} = require("./vscode-launcher");
+const { isBridgeMarkerValid } = require("./bridge-install-marker");
 
 const CLINE_EXTENSION_IDS = [
   "saoudrizwan.claude-dev",
@@ -9,6 +14,7 @@ const CLINE_EXTENSION_IDS = [
 ];
 
 const BRIDGE_EXTENSION_ID = "sauron-local.sauron-vscode-bridge";
+const EXTENSION_LIST_CACHE_MS = 60_000;
 
 const SETUP_STEPS = [
   {
@@ -28,28 +34,64 @@ const SETUP_STEPS = [
   },
 ];
 
-function listInstalledExtensions(codeCmd) {
-  if (!codeCmd) {
+let extensionListCache = {
+  codeCmd: null,
+  extensions: null,
+  at: 0,
+};
+
+function resolveHeadlessVSCodeCli(codeCmd) {
+  const resolved = String(codeCmd || "").trim();
+  if (!resolved) {
+    return null;
+  }
+  if (!isVSCodeGuiExecutable(resolved)) {
+    return resolved;
+  }
+  return deriveCliPathFromGuiExecutable(resolved);
+}
+
+function listInstalledExtensions(codeCmd, options = {}) {
+  const cliPath = resolveHeadlessVSCodeCli(codeCmd);
+  if (!cliPath) {
     return [];
   }
+
+  const force = options.force === true;
+  const now = Date.now();
+  if (
+    !force
+    && extensionListCache.codeCmd === cliPath
+    && Array.isArray(extensionListCache.extensions)
+    && (now - extensionListCache.at) < EXTENSION_LIST_CACHE_MS
+  ) {
+    return extensionListCache.extensions;
+  }
+
   try {
     const result = process.platform === "win32"
-      ? execSync(`"${codeCmd}" --list-extensions`, {
+      ? execSync(`"${cliPath}" --list-extensions`, {
         encoding: "utf8",
         timeout: 15000,
         stdio: ["ignore", "pipe", "ignore"],
         windowsHide: true,
       })
-      : execFileSync(codeCmd, ["--list-extensions"], {
+      : execFileSync(cliPath, ["--list-extensions"], {
         encoding: "utf8",
         timeout: 15000,
         stdio: ["ignore", "pipe", "ignore"],
       });
-    return result
+    const extensions = result
       .trim()
       .split(/\r?\n/)
       .map((line) => line.trim().toLowerCase())
       .filter(Boolean);
+    extensionListCache = {
+      codeCmd: cliPath,
+      extensions,
+      at: now,
+    };
+    return extensions;
   } catch {
     return [];
   }
@@ -65,54 +107,72 @@ function findExtensionMatch(installed, candidates) {
   return null;
 }
 
-function checkWorkspacePrerequisites() {
+function checkWorkspacePrerequisites(options = {}) {
+  const probeExtensions = options.probeExtensions !== false;
   const codeCmd = resolveVSCodeCommand();
-  const vscodeCli = Boolean(codeCmd && fs.existsSync(codeCmd));
-  const installed = vscodeCli ? listInstalledExtensions(codeCmd) : [];
+  const headlessCli = resolveHeadlessVSCodeCli(codeCmd);
+  const vscodeCli = Boolean(headlessCli && fs.existsSync(headlessCli));
+  const installed = vscodeCli && probeExtensions ? listInstalledExtensions(codeCmd) : [];
 
-  const clineMatch = findExtensionMatch(installed, CLINE_EXTENSION_IDS);
-  const bridgeMatch = installed.includes(BRIDGE_EXTENSION_ID.toLowerCase())
+  const clineMatch = probeExtensions ? findExtensionMatch(installed, CLINE_EXTENSION_IDS) : null;
+  const bridgeFromMarker = probeExtensions && isBridgeMarkerValid(BRIDGE_EXTENSION_ID);
+  const bridgeMatch = bridgeFromMarker
     ? BRIDGE_EXTENSION_ID
-    : null;
+    : (probeExtensions && installed.includes(BRIDGE_EXTENSION_ID.toLowerCase())
+      ? BRIDGE_EXTENSION_ID
+      : null);
 
   const steps = SETUP_STEPS.map((step) => {
     if (step.id === "vscode-cli") {
       return {
         ...step,
         ok: vscodeCli,
-        detail: vscodeCli ? codeCmd : "code komutu bulunamadı",
+        detail: vscodeCli ? headlessCli : "code komutu bulunamadı",
       };
     }
     if (step.id === "cline") {
       return {
         ...step,
-        ok: Boolean(clineMatch),
-        detail: clineMatch ? `Yüklü: ${clineMatch}` : "Cline extension bulunamadı",
+        ok: probeExtensions ? Boolean(clineMatch) : true,
+        detail: !probeExtensions
+          ? "Başlangıçta taranmadı"
+          : (clineMatch ? `Yüklü: ${clineMatch}` : "Cline extension bulunamadı"),
       };
     }
     if (step.id === "bridge") {
       return {
         ...step,
-        ok: Boolean(bridgeMatch),
-        detail: bridgeMatch ? `Yüklü: ${bridgeMatch}` : "Sauron Bridge bulunamadı",
+        ok: probeExtensions ? Boolean(bridgeMatch) : true,
+        detail: !probeExtensions
+          ? "Başlangıçta taranmadı"
+          : (bridgeMatch ? `Yüklü: ${bridgeMatch}` : "Sauron Bridge bulunamadı"),
       };
     }
     return { ...step, ok: false, detail: "" };
   });
 
-  const missingSteps = steps.filter((step) => !step.ok);
+  const missingSteps = probeExtensions ? steps.filter((step) => !step.ok) : steps.filter((step) => step.id === "vscode-cli" && !step.ok);
   const warnings = missingSteps.map((step) => step.detail);
 
   return {
-    ok: missingSteps.length === 0,
+    ok: probeExtensions ? missingSteps.length === 0 : vscodeCli,
     vscodeCli,
-    codeCmd: codeCmd || null,
+    codeCmd: headlessCli || null,
     clineExtension: clineMatch,
     bridgeExtension: bridgeMatch,
     steps,
     warnings,
     canOpenWorkspace: vscodeCli,
+    extensionProbeSkipped: !probeExtensions,
     setupGuidePath: path.join(__dirname, "..", "..", "docs", "agent-setup-cline.md"),
+  };
+}
+
+function resetExtensionListCacheForTests() {
+  extensionListCache = {
+    codeCmd: null,
+    extensions: null,
+    at: 0,
   };
 }
 
@@ -121,4 +181,6 @@ module.exports = {
   CLINE_EXTENSION_IDS,
   checkWorkspacePrerequisites,
   listInstalledExtensions,
+  resolveHeadlessVSCodeCli,
+  resetExtensionListCacheForTests,
 };

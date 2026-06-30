@@ -27,6 +27,13 @@ function extractHandoffClarifySource(snapshot = {}) {
   return "";
 }
 
+function hasHandoffTaskContext(snapshot = {}, draftTaskText = "") {
+  if (String(draftTaskText || "").trim()) {
+    return true;
+  }
+  return Boolean(extractHandoffClarifySource(snapshot));
+}
+
 function normalizeClarifyText(text) {
   return String(text || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -146,6 +153,7 @@ module.exports = {
   MAX_CLARIFY_OUTPUT_CHARS,
   SKIP_CLARIFY_MAX_CHARS,
   extractHandoffClarifySource,
+  hasHandoffTaskContext,
   shouldSkipClarify,
   clarifyHandoffTask,
 };

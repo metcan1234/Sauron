@@ -9,10 +9,41 @@ export function createChannelControls({
   state,
   log,
   openWorkspaceHandoff,
+  setVsCodeLaunchBusy,
+  isVsCodeLaunchBusy,
 }) {
   let activeChannel = "core";
   let gamedevModeActive = false;
   let gooseModeActive = false;
+
+  function getWorkspaceDraftText() {
+    return String(dom.textInput?.value ?? "").trim();
+  }
+
+  function hasWorkspaceTaskContext(draftText = getWorkspaceDraftText()) {
+    if (draftText) {
+      return true;
+    }
+    const snapshot = state.getSessionSnapshot?.() || null;
+    if (!snapshot) {
+      return false;
+    }
+    const messages = Array.isArray(snapshot.messages) ? snapshot.messages : [];
+    const lastUser = [...messages].reverse().find((entry) => entry?.role === "user" && entry?.content);
+    if (lastUser?.content?.trim()) {
+      return true;
+    }
+    if (snapshot.goalIntent?.trim()) {
+      return true;
+    }
+    if (snapshot.activePlan?.goal?.trim()) {
+      return true;
+    }
+    if (snapshot.browserExecution?.goal?.trim()) {
+      return true;
+    }
+    return false;
+  }
 
   function syncChannelVisuals() {
     dom.btnGoose?.classList.toggle("channel-active", activeChannel === "goose");
@@ -75,6 +106,12 @@ export function createChannelControls({
       ui.showToast("Game Dev için oyun fikri veya görev gerekli.", true);
       return { ok: false };
     }
+    if (typeof isVsCodeLaunchBusy === "function" && isVsCodeLaunchBusy()) {
+      return { ok: false, skipped: true, reason: "launch_busy" };
+    }
+    if (typeof setVsCodeLaunchBusy === "function") {
+      setVsCodeLaunchBusy(true);
+    }
     try {
       if (!gamedevModeActive) {
         const activated = await api.invoke("activate-gamedev-mode");
@@ -99,10 +136,20 @@ export function createChannelControls({
       log("channel:start-gamedev error", error);
       ui.showToast(error?.message || "Game Dev oturumu başlatılamadı", true);
       return { ok: false };
+    } finally {
+      if (typeof setVsCodeLaunchBusy === "function") {
+        setVsCodeLaunchBusy(false);
+      }
     }
   }
 
   async function toggleGamedevMode() {
+    if (typeof isVsCodeLaunchBusy === "function" && isVsCodeLaunchBusy()) {
+      return { ok: false, skipped: true, reason: "launch_busy" };
+    }
+    if (typeof setVsCodeLaunchBusy === "function") {
+      setVsCodeLaunchBusy(true);
+    }
     try {
       const wasActive = gamedevModeActive;
       const result = await api.invoke("toggle-gamedev-mode");
@@ -126,6 +173,10 @@ export function createChannelControls({
       log("channel:toggle-gamedev error", error);
       ui.showToast(error?.message || "Game Dev modu değiştirilemedi", true);
       return { ok: false };
+    } finally {
+      if (typeof setVsCodeLaunchBusy === "function") {
+        setVsCodeLaunchBusy(false);
+      }
     }
   }
 
@@ -162,6 +213,11 @@ export function createChannelControls({
         dom.textInput.value = "";
         dom.textInput.style.height = "auto";
         return startGamedevSession(text);
+      }
+      if (activeChannel === "workspace" && text) {
+        dom.textInput.value = "";
+        dom.textInput.style.height = "auto";
+        return openWorkspaceHandoff({ draftTaskText: text });
       }
       return originalSend(overrideText, options);
     };
@@ -215,8 +271,16 @@ export function createChannelControls({
   }
 
   function onWorkspaceClick() {
+    if (typeof isVsCodeLaunchBusy === "function" && isVsCodeLaunchBusy()) {
+      return;
+    }
     selectWorkspaceChannel();
-    void openWorkspaceHandoff();
+    const draftTaskText = getWorkspaceDraftText();
+    if (!hasWorkspaceTaskContext(draftTaskText)) {
+      ui.showToast("Görevi yaz → ⌘ ile VS Code'da Cline'a aktar");
+      return;
+    }
+    void openWorkspaceHandoff({ draftTaskText: draftTaskText || undefined });
   }
 
   return {

@@ -160,7 +160,7 @@ async function advanceGamePipelineAfterComplete(workspacePath, settings = {}, de
       scaffoldOnPhaseOne: false,
     });
     clearTaskCompleteArtifact(resolvedPath);
-    if (deps.launchVSCode !== false) {
+    if (deps.launchVSCode === true) {
       await focusOrLaunchWorkspaceVSCode(resolvedPath).catch(() => null);
     }
     return {
@@ -195,7 +195,7 @@ async function advanceGamePipelineAfterComplete(workspacePath, settings = {}, de
     scaffoldOnPhaseOne: nextPhase === 1,
   });
 
-  if (deps.launchVSCode !== false) {
+  if (deps.launchVSCode === true) {
     await focusOrLaunchWorkspaceVSCode(resolvedPath).catch(() => null);
   }
 

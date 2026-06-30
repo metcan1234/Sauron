@@ -12,7 +12,8 @@ const RELIABLE_VSCODE_LAUNCH_OPTIONS = {
 
 const GAMEDEV_VSCODE_LAUNCH_OPTIONS = {
   ...RELIABLE_VSCODE_LAUNCH_OPTIONS,
-  requireWindowVerification: true,
+  requireWindowVerification: false,
+  skipVerification: true,
 };
 
 async function focusOrLaunchWorkspaceVSCode(workspacePath) {

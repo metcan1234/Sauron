@@ -9,6 +9,16 @@ const {
 } = require("../app-paths");
 const { resolveVSCodeCommand } = require("./handoff");
 const { BRIDGE_EXTENSION_ID, listInstalledExtensions } = require("./workspace-setup");
+const {
+  getBridgeMarkerPath,
+  readBridgeMarker,
+  writeBridgeMarker,
+  isBridgeMarkerValid,
+  clearBridgeMarkerForTests,
+} = require("./bridge-install-marker");
+const { setBridgeInstallInProgress } = require("./vscode-launcher");
+
+let ensureBridgeInstallPromise = null;
 
 function buildBridgeVsixIfMissing() {
   const vsixPath = getBridgeVsixPath();
@@ -62,7 +72,10 @@ function buildBridgeVsixIfMissing() {
   return { ok: true, vsixPath, built: true };
 }
 
-function isBridgeInstalled(codeCmd) {
+function isBridgeInstalled(codeCmd, options = {}) {
+  if (!options.skipMarker && isBridgeMarkerValid(BRIDGE_EXTENSION_ID)) {
+    return true;
+  }
   const installed = listInstalledExtensions(codeCmd);
   return installed.includes(BRIDGE_EXTENSION_ID.toLowerCase());
 }
@@ -94,14 +107,32 @@ function installBridgeExtension(codeCmd, vsixPath) {
     };
   }
 
-  if (!isBridgeInstalled(codeCmd)) {
-    return { ok: false, error: "Bridge kuruldu ama doğrulanamadı. VS Code'u yeniden başlatın." };
+  if (isBridgeInstalled(codeCmd, { skipMarker: false })) {
+    writeBridgeMarker({
+      extensionId: BRIDGE_EXTENSION_ID,
+      installedAt: new Date().toISOString(),
+      codeCmd: String(codeCmd || ""),
+      vsixPath: String(vsixPath || ""),
+    });
+    return { ok: true, vsixPath, verified: true };
   }
 
-  return { ok: true, vsixPath };
+  writeBridgeMarker({
+    extensionId: BRIDGE_EXTENSION_ID,
+    installedAt: new Date().toISOString(),
+    codeCmd: String(codeCmd || ""),
+    vsixPath: String(vsixPath || ""),
+    verifyWarning: true,
+  });
+  return {
+    ok: true,
+    vsixPath,
+    verified: false,
+    verifyWarning: "Bridge kuruldu ama CLI doğrulaması başarısız — marker ile devam ediliyor.",
+  };
 }
 
-function ensureBridgeInstalled(options = {}) {
+async function performEnsureBridgeInstalled(options = {}) {
   const force = Boolean(options.force);
   const codeCmd = resolveVSCodeCommand();
 
@@ -129,11 +160,37 @@ function ensureBridgeInstalled(options = {}) {
     built: buildResult.built,
     vsixPath: buildResult.vsixPath,
     codeCmd,
+    verifyWarning: installResult.verifyWarning || null,
+    verified: installResult.verified !== false,
   };
+}
+
+function ensureBridgeInstalled(options = {}) {
+  if (ensureBridgeInstallPromise) {
+    return ensureBridgeInstallPromise;
+  }
+
+  const installPromise = performEnsureBridgeInstalled(options)
+    .finally(() => {
+      if (ensureBridgeInstallPromise === installPromise) {
+        ensureBridgeInstallPromise = null;
+      }
+      setBridgeInstallInProgress(null);
+    });
+
+  ensureBridgeInstallPromise = installPromise;
+  setBridgeInstallInProgress(installPromise);
+  return installPromise;
 }
 
 function installWorkspaceStack(options = {}) {
   return ensureBridgeInstalled(options);
+}
+
+function resetBridgeInstallStateForTests() {
+  ensureBridgeInstallPromise = null;
+  setBridgeInstallInProgress(null);
+  clearBridgeMarkerForTests();
 }
 
 module.exports = {
@@ -142,6 +199,11 @@ module.exports = {
   ensureBridgeInstalled,
   getBridgeProjectRoot,
   getBridgeVsixPath,
+  getBridgeMarkerPath,
   installWorkspaceStack,
   isBridgeInstalled,
+  installBridgeExtension,
+  readBridgeMarker,
+  resetBridgeInstallStateForTests,
+  writeBridgeMarker,
 };

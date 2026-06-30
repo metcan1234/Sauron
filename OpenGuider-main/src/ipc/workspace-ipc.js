@@ -1,4 +1,5 @@
 const fs = require("fs");
+const { hasHandoffTaskContext } = require("../sauron/handoff-task-clarify");
 const channelRuntime = require("../sauron/channel-runtime");
 const { getBlockersForChannel, checkVisionModelSupport } = require("../sauron/doctor");
 const {
@@ -80,7 +81,7 @@ function registerWorkspaceIpc({
   ipcMain.handle("install-workspace-stack", async (_event, options = {}) => {
     debugLog("ipc:install-workspace-stack", options);
     try {
-      const result = installWorkspaceStack({ force: Boolean(options?.force) });
+      const result = await installWorkspaceStack({ force: Boolean(options?.force) });
       const prerequisites = checkWorkspacePrerequisites();
       return { ...result, prerequisites };
     } catch (error) {
@@ -91,10 +92,10 @@ function registerWorkspaceIpc({
     }
   });
 
-  ipcMain.handle("check-workspace-prerequisites", () => {
-    debugLog("ipc:check-workspace-prerequisites");
+  ipcMain.handle("check-workspace-prerequisites", (_event, options = {}) => {
+    debugLog("ipc:check-workspace-prerequisites", options);
     try {
-      return { ok: true, ...checkWorkspacePrerequisites() };
+      return { ok: true, ...checkWorkspacePrerequisites(options) };
     } catch (error) {
       return {
         ok: false,
@@ -183,15 +184,21 @@ function registerWorkspaceIpc({
       if (!workspacePath || !fs.existsSync(workspacePath)) {
         return { ok: false, error: "Çalışma klasörü ayarlanmamış veya bulunamıyor." };
       }
-      const launchResult = await focusVSCodeWorkspace(workspacePath, {
-        allowLaunch: true,
-        newWindow: false,
-        skipRecovery: true,
-        skipInterProfileRecovery: true,
-        launchProfiles: [{ profile: "default", extraArgs: [] }],
-        requireWindowVerification: false,
-        verifyTimeoutMs: 6000,
+      const focused = await focusVSCodeWorkspace(workspacePath, {
+        allowLaunch: false,
+        verifyTimeoutMs: 4000,
+        skipPostVerifySettle: true,
       });
+      const launchResult = focused?.verified
+        ? focused
+        : await launchVSCode(workspacePath, {
+          newWindow: false,
+          skipRecovery: true,
+          skipInterProfileRecovery: true,
+          launchProfiles: [{ profile: "default", extraArgs: [] }],
+          requireWindowVerification: false,
+          skipVerification: true,
+        });
       debugLog("ipc:focus-workspace-vscode result", {
         workspacePath,
         skipped: Boolean(launchResult?.skipped),
@@ -289,7 +296,7 @@ function registerWorkspaceIpc({
       }
 
       if (!prerequisites.bridgeExtension) {
-        const installResult = installWorkspaceStack();
+        const installResult = await installWorkspaceStack();
         if (!installResult.ok) {
           return {
             ok: false,
@@ -314,13 +321,32 @@ function registerWorkspaceIpc({
         rejectPendingHandoffs(workspacePath);
       }
 
+      const draftTaskText = String(options?.draftTaskText || "").trim();
       const snapshot = sessionManager ? sessionManager.getSnapshot() : {};
+      if (!hasHandoffTaskContext(snapshot, draftTaskText)) {
+        return {
+          ok: false,
+          needsTask: true,
+          error: "Önce görevi yaz, sonra ⌘ ile VS Code'a aktar.",
+        };
+      }
+
       persistActiveSession(store, snapshot);
       const runtimeSettings = await getRuntimeSettings();
-      const enrichedSnapshot = {
+      let enrichedSnapshot = {
         ...snapshot,
         chatSessionTitle: getActiveChatSessionTitle(store),
       };
+      if (draftTaskText) {
+        enrichedSnapshot = {
+          ...enrichedSnapshot,
+          goalIntent: enrichedSnapshot.goalIntent || draftTaskText,
+          messages: [
+            ...(Array.isArray(enrichedSnapshot.messages) ? enrichedSnapshot.messages : []),
+            { role: "user", content: draftTaskText },
+          ],
+        };
+      }
       const finopsEnriched = await prepareHandoffPayloadAsync({
         sessionSnapshot: enrichedSnapshot,
         workspacePath,

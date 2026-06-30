@@ -5,6 +5,12 @@ const {
   extractHandoffClarifySource,
 } = require("../../src/sauron/handoff-task-clarify");
 
+test("hasHandoffTaskContext accepts draft text without snapshot", () => {
+  const { hasHandoffTaskContext } = require("../../src/sauron/handoff-task-clarify");
+  assert.equal(hasHandoffTaskContext({}, "login sayfasini duzelt"), true);
+  assert.equal(hasHandoffTaskContext({}, ""), false);
+});
+
 test("extractHandoffClarifySource prefers last user message", () => {
   const source = extractHandoffClarifySource({
     goalIntent: "fallback goal",

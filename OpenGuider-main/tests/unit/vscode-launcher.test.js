@@ -238,6 +238,26 @@ test("buildLaunchArgs uses -n only for new windows", () => {
   const workspace = "C:\\work\\demo";
   assert.deepEqual(buildLaunchArgs(workspace, { newWindow: true }), ["-n", workspace]);
   assert.deepEqual(buildLaunchArgs(workspace, { newWindow: false }), ["-r", workspace]);
+  assert.deepEqual(buildLaunchArgs(workspace), ["-r", workspace]);
+});
+
+test("resolveLaunchProfiles defaults to single default profile", () => {
+  const { resolveLaunchProfiles, LAUNCH_PROFILES } = require("../../src/sauron/vscode-launcher");
+  const profiles = resolveLaunchProfiles({});
+  assert.equal(profiles.length, 1);
+  assert.equal(profiles[0].profile, "default");
+  const retryProfiles = resolveLaunchProfiles({ explicitRetry: true });
+  assert.equal(retryProfiles.length, LAUNCH_PROFILES.length);
+});
+
+test("resolveLaunchProfiles honors skipInterProfileRecovery", () => {
+  const { resolveLaunchProfiles } = require("../../src/sauron/vscode-launcher");
+  const profiles = resolveLaunchProfiles({
+    explicitRetry: true,
+    skipInterProfileRecovery: true,
+  });
+  assert.equal(profiles.length, 1);
+  assert.equal(profiles[0].profile, "default");
 });
 
 test("buildLaunchArgs uses long flags for Code.exe fallback", () => {
@@ -519,7 +539,7 @@ test("resolveEffectiveNewWindow keeps reuse when VS Code window is visible", asy
 
   const { resolveEffectiveNewWindow } = require("../../src/sauron/vscode-launcher");
   assert.equal(await resolveEffectiveNewWindow(false), false);
-  assert.equal(await resolveEffectiveNewWindow(true), true);
+  assert.equal(await resolveEffectiveNewWindow(true), false);
 });
 
 test("openWorkspaceInVSCode reports launchMethod and verified when skipped", async (t) => {
@@ -1231,6 +1251,7 @@ test("openWorkspaceInVSCode tries disable-gpu profile when default launch fails 
   const result = await openWorkspaceInVSCode(tmpDir, {
     newWindow: true,
     force: true,
+    explicitRetry: true,
     skipPostVerifySettle: true,
     requireWindowVerification: true,
   });

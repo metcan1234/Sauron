@@ -2,9 +2,12 @@ const fs = require("fs");
 const path = require("path");
 const {
   resolveVSCodeExecutable,
-  spawnVSCodeProcess,
+  focusExistingVSCodeWindow,
+  isWithinSpawnCooldown,
+  launchVSCode,
   toShortPath,
 } = require("./vscode-launcher");
+const vscodeWindowFocus = require("./vscode-window-focus");
 const { applyChannelVSCodeTheme, getChannelThemeBanner } = require("./channel-vscode-theme");
 
 const CHANNEL_FILES = {
@@ -107,16 +110,34 @@ function prepareChannelVSCode(workspacePath, channel, meta = {}) {
 
 async function revealWelcomeFile(workspacePath, channel, meta = {}, existingPrep = null) {
   const prep = existingPrep || prepareChannelVSCode(workspacePath, channel, meta);
+  const resolved = path.resolve(workspacePath);
+
+  const focused = await focusExistingVSCodeWindow(resolved, {
+    verifyTimeoutMs: 3000,
+    skipPostVerifySettle: true,
+  });
+  if (focused?.verified) {
+    return prep;
+  }
+
+  const state = await vscodeWindowFocus.getVSCodeProcessState();
+  if (state.hasWindow || state.running || isWithinSpawnCooldown()) {
+    return prep;
+  }
+
   const executable = resolveVSCodeExecutable();
   if (!executable) {
     return prep;
   }
 
-  const workspace = pathForLaunch(workspacePath);
-  const file = pathForLaunch(prep.welcomePath);
   try {
-    await spawnVSCodeProcess(executable, ["-g", file, "-r", workspace], {
-      options: { useCliShim: true },
+    await launchVSCode(resolved, {
+      newWindow: false,
+      skipRecovery: true,
+      skipInterProfileRecovery: true,
+      launchProfiles: [{ profile: "default", extraArgs: [] }],
+      requireWindowVerification: false,
+      skipVerification: true,
     });
   } catch {
     // non-fatal

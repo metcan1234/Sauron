@@ -88,7 +88,7 @@ function registerGamePipelineIpc({
       const settings = await getRuntimeSettings();
       const resolved = resolveWorkspacePath(workspacePath);
       const result = await advanceGamePipelineAfterComplete(resolved, settings, {
-        launchVSCode: true,
+        launchVSCode: false,
       });
       const status = getGamePipelineStatus(resolved);
       broadcastPipelineEvent(status);

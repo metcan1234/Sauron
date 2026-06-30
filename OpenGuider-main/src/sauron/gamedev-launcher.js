@@ -318,7 +318,13 @@ async function launchGamedevSession({
     }
   }
   const written = writeHandoff(resolvedWorkspace, ultra.payload);
-  const vscodeLaunch = await focusOrLaunchWorkspaceVSCode(resolvedWorkspace);
+  const vscodeLaunch = isGamedevModeActive()
+    ? {
+      ok: true,
+      action: "skipped_already_active",
+      launchResult: { verified: true, action: "skipped_already_active", skipped: true },
+    }
+    : await focusOrLaunchWorkspaceVSCode(resolvedWorkspace);
   const launchResult = vscodeLaunch.launchResult || null;
   const status = await getGamedevStatus(settings, engine);
 

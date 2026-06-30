@@ -12,8 +12,10 @@ const LAUNCH_PROFILES = [
   { profile: "disable-gpu", extraArgs: ["--disable-gpu"] },
   { profile: "safe-mode", extraArgs: ["--disable-gpu", "--disable-extensions"] },
 ];
+const DEFAULT_LAUNCH_PROFILE = [{ profile: "default", extraArgs: [] }];
 const recentLaunches = new Map();
 let launchInProgress = null;
+let bridgeInstallInProgress = null;
 let lastVerifiedLaunchAt = 0;
 let lastVerifiedHwnd = 0;
 let lastHandoffVerifiedAt = 0;
@@ -224,6 +226,42 @@ function getConfiguredVscodePath() {
   return configuredVscodePath;
 }
 
+function isVSCodeGuiExecutable(candidatePath) {
+  if (!candidatePath) {
+    return false;
+  }
+  const normalized = String(candidatePath).trim().toLowerCase();
+  return normalized.endsWith(".exe") && !normalized.endsWith("code.cmd");
+}
+
+function deriveCliPathFromGuiExecutable(guiPath) {
+  const resolvedGui = path.resolve(String(guiPath || "").trim());
+  if (!resolvedGui) {
+    return null;
+  }
+  const installRoot = path.dirname(resolvedGui);
+  const candidates = [
+    path.join(installRoot, "bin", "code.cmd"),
+    path.join(installRoot, "bin", "code"),
+    path.join(installRoot, "resources", "app", "bin", "code.cmd"),
+    path.join(installRoot, "resources", "app", "bin", "code"),
+  ];
+  for (const candidate of candidates) {
+    if (candidate && fs.existsSync(candidate) && !isVSCodeGuiExecutable(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function resolveConfiguredGuiExecutable(options = {}) {
+  const configuredPath = String(options.configuredPath ?? configuredVscodePath ?? "").trim();
+  if (configuredPath && fs.existsSync(configuredPath) && isVSCodeGuiExecutable(configuredPath)) {
+    return configuredPath;
+  }
+  return null;
+}
+
 function getCommonVSCodeCliCandidates() {
   if (process.platform === "win32") {
     return [
@@ -269,9 +307,18 @@ function pickVSCodeCliFromPathMatches(matches) {
 function resolveVscodeExecutablePath(options = {}) {
   const configuredPath = String(options.configuredPath ?? configuredVscodePath ?? "").trim();
   if (configuredPath && fs.existsSync(configuredPath)) {
-    lastResolvedVscodePath = configuredPath;
-    lastResolvedVscodeSource = "settings";
-    return configuredPath;
+    if (isVSCodeGuiExecutable(configuredPath)) {
+      const derivedCli = deriveCliPathFromGuiExecutable(configuredPath);
+      if (derivedCli) {
+        lastResolvedVscodePath = derivedCli;
+        lastResolvedVscodeSource = "settings-cli-from-gui";
+        return derivedCli;
+      }
+    } else if (!isCursorCliPath(configuredPath)) {
+      lastResolvedVscodePath = configuredPath;
+      lastResolvedVscodeSource = "settings";
+      return configuredPath;
+    }
   }
 
   for (const candidate of getCommonVSCodeCliCandidates()) {
@@ -316,6 +363,11 @@ function resolveVSCodeCommand(options = {}) {
 }
 
 function resolveVSCodeAppExe(options = {}) {
+  const configuredGui = resolveConfiguredGuiExecutable(options);
+  if (configuredGui) {
+    return configuredGui;
+  }
+
   const codeCmd = resolveVSCodeCommand(options);
   if (codeCmd) {
     const appExe = path.join(path.dirname(path.dirname(codeCmd)), "Code.exe");
@@ -354,7 +406,7 @@ function resolveVSCodeLaunchExecutable(options = {}) {
   return codeCmd ? { kind: "cmd", path: codeCmd } : null;
 }
 
-function buildLaunchArgs(workspacePath, { newWindow = true, executableKind = "cmd", extraArgs = [] } = {}) {
+function buildLaunchArgs(workspacePath, { newWindow = false, executableKind = "cmd", extraArgs = [] } = {}) {
   const normalized = path.resolve(workspacePath);
   const flags = [];
   if (executableKind === "exe") {
@@ -368,14 +420,25 @@ function buildLaunchArgs(workspacePath, { newWindow = true, executableKind = "cm
 }
 
 function resolveLaunchProfiles(options = {}) {
+  let profiles;
   if (options.launchProfile) {
     const match = LAUNCH_PROFILES.filter((entry) => entry.profile === options.launchProfile);
-    return match.length > 0 ? match : LAUNCH_PROFILES;
+    profiles = match.length > 0 ? match : LAUNCH_PROFILES;
+  } else if (options.launchProfiles) {
+    profiles = options.launchProfiles;
+  } else if (options.explicitRetry === true) {
+    profiles = LAUNCH_PROFILES;
+  } else {
+    profiles = DEFAULT_LAUNCH_PROFILE;
   }
-  if (options.launchProfiles) {
-    return options.launchProfiles;
+  if (options.skipInterProfileRecovery === true && profiles.length > 1) {
+    return [profiles[0]];
   }
-  return LAUNCH_PROFILES;
+  return profiles;
+}
+
+function setBridgeInstallInProgress(promise) {
+  bridgeInstallInProgress = promise || null;
 }
 
 function getLaunchMethod(executableKind) {
@@ -533,6 +596,9 @@ async function resolveEffectiveNewWindow(requestedNewWindow) {
     return requestedNewWindow;
   }
   const state = await vscodeWindowFocus.getVSCodeProcessState();
+  if (state.running && state.hasWindow) {
+    return false;
+  }
   if (!state.running || !state.hasWindow) {
     return true;
   }
@@ -810,7 +876,7 @@ async function confirmVerifiedWindowStable(verifyResult, settleMs = 1500, option
 }
 
 async function launchAndVerifyVSCode(workspacePath, executable, options = {}) {
-  const requestedNewWindow = options.newWindow !== false;
+  const requestedNewWindow = options.newWindow === true;
   const effectiveNewWindow = options.effectiveNewWindow ?? await resolveEffectiveNewWindow(requestedNewWindow);
   const launchArgs = buildLaunchArgs(workspacePath, {
     newWindow: effectiveNewWindow,
@@ -845,6 +911,49 @@ async function launchAndVerifyVSCode(workspacePath, executable, options = {}) {
     }
   }
 
+  const spawnBudget = options._spawnBudget;
+  if (spawnBudget && spawnBudget.count >= spawnBudget.max) {
+    const reuseFocus = await tryFocusInsteadOfSpawn(workspacePath, options);
+    if (reuseFocus) {
+      return {
+        verifyResult: {
+          verified: true,
+          verificationReason: reuseFocus.verificationReason || "spawn_budget_exhausted",
+          pid: reuseFocus.pid || null,
+          hwnd: reuseFocus.hwnd || 0,
+          focused: Boolean(reuseFocus.focused),
+          focusReason: reuseFocus.focusReason || "spawn_budget_focus",
+        },
+        launchMethod: getLaunchMethod(executable.kind),
+        effectiveNewWindow: false,
+        requestedNewWindow,
+        verifyTimeoutMs: options.verifyTimeoutMs || 0,
+        launchProfile,
+        launchArgs,
+        spawnOk: false,
+        skippedSpawn: true,
+      };
+    }
+    return {
+      verifyResult: {
+        verified: false,
+        verificationReason: "spawn_budget_exhausted",
+        pid: null,
+        hwnd: 0,
+        focused: false,
+        focusReason: "spawn_budget_exhausted",
+      },
+      launchMethod,
+      effectiveNewWindow,
+      requestedNewWindow,
+      verifyTimeoutMs: options.verifyTimeoutMs || 0,
+      launchProfile,
+      launchArgs,
+      spawnOk: false,
+      skippedSpawn: true,
+    };
+  }
+
   await spawnVSCodeProcess(executable, launchArgs, {
     workspacePath,
     executable,
@@ -853,6 +962,9 @@ async function launchAndVerifyVSCode(workspacePath, executable, options = {}) {
     requestedNewWindow,
     effectiveNewWindow,
   });
+  if (spawnBudget) {
+    spawnBudget.count += 1;
+  }
 
   if (options.skipVerification) {
     const verifyResult = {
@@ -928,6 +1040,10 @@ async function openWorkspaceInVSCode(workspacePath, options = {}) {
     throw new Error("Workspace path is invalid or does not exist.");
   }
 
+  if (bridgeInstallInProgress) {
+    await bridgeInstallInProgress.catch(() => null);
+  }
+
   if (launchInProgress) {
     await launchInProgress;
     const focused = await focusExistingVSCodeWindow(workspacePath, options);
@@ -952,9 +1068,16 @@ async function openWorkspaceInVSCode(workspacePath, options = {}) {
 }
 
 async function performOpenWorkspaceInVSCode(workspacePath, options = {}) {
-  const requestedNewWindow = options.newWindow !== false;
+  const requestedNewWindow = options.newWindow === true;
   const effectiveNewWindow = await resolveEffectiveNewWindow(requestedNewWindow);
   const debounceKey = getDebounceKey(workspacePath);
+  const spawnBudget = {
+    count: 0,
+    max: options.explicitRetry === true ? LAUNCH_PROFILES.length : 1,
+  };
+  const allowRecoveryRelaunch = options.explicitRetry === true
+    && options.skipRecovery !== true
+    && options.skipInterProfileRecovery !== true;
 
   if (!options.force && shouldSkipDuplicateLaunch(debounceKey)) {
     const focused = await focusExistingVSCodeWindow(workspacePath, options);
@@ -1020,6 +1143,7 @@ async function performOpenWorkspaceInVSCode(workspacePath, options = {}) {
         extraArgs,
         launchProfile: profile,
         _spawnAttempted: profileIndex > 0,
+        _spawnBudget: spawnBudget,
         forceSpawn: profileIndex === 0 && options.force === true,
       });
     } catch (launchError) {
@@ -1040,7 +1164,8 @@ async function performOpenWorkspaceInVSCode(workspacePath, options = {}) {
     }
 
     if (
-      options.requireWindowVerification
+      allowRecoveryRelaunch
+      && options.requireWindowVerification
       && !options.skipRecovery
       && !recoveryAttempted
       && verifyResult.verificationReason === "process_only"
@@ -1057,6 +1182,7 @@ async function performOpenWorkspaceInVSCode(workspacePath, options = {}) {
           newWindow: true,
           extraArgs,
           launchProfile: profile,
+          _spawnBudget: spawnBudget,
         });
         verifyResult = launchOutcome.verifyResult;
         if (verifyResult.verified) {
@@ -1067,7 +1193,9 @@ async function performOpenWorkspaceInVSCode(workspacePath, options = {}) {
     }
 
     if (
-      options.requireWindowVerification
+      allowRecoveryRelaunch
+      && options.requireWindowVerification
+      && !options.skipInterProfileRecovery
       && profileIndex < profiles.length - 1
       && process.platform === "win32"
     ) {
@@ -1124,9 +1252,15 @@ async function escalateToLaunchWithRecovery(workspacePath, options = {}, escalat
     }
   }
 
-  if (!options.launchProfile && !options.launchProfiles) {
+  if (
+    options.explicitRetry === true
+    && options.skipInterProfileRecovery !== true
+    && !options.launchProfile
+    && !options.launchProfiles
+  ) {
     const fallbackProfiles = LAUNCH_PROFILES.filter((entry) => entry.profile !== "default");
     launchOptions.launchProfiles = fallbackProfiles.length > 0 ? fallbackProfiles : LAUNCH_PROFILES;
+    launchOptions.explicitRetry = true;
   }
 
   return openWorkspaceInVSCode(workspacePath, launchOptions);
@@ -1210,6 +1344,7 @@ function launchVSCode(workspacePath, options = {}) {
 function resetLaunchDebounceForTests() {
   recentLaunches.clear();
   launchInProgress = null;
+  bridgeInstallInProgress = null;
   lastVerifiedLaunchAt = 0;
   lastVerifiedHwnd = 0;
   lastHandoffVerifiedAt = 0;
@@ -1227,6 +1362,7 @@ module.exports = {
   resolveVscodeExecutablePath,
   getLastResolvedVscodePathInfo,
   getLastVsCodeSpawnAt,
+  isWithinSpawnCooldown,
   getLastSpawnDiagnostic,
   setSpawnDiagnosticsEnabled,
   setVsCodeLaunchLogger,
@@ -1236,6 +1372,9 @@ module.exports = {
   buildSpawnOkVerifyResult,
   resolveVSCodeCommand,
   resolveVSCodeAppExe,
+  resolveConfiguredGuiExecutable,
+  deriveCliPathFromGuiExecutable,
+  isVSCodeGuiExecutable,
   resolveVSCodeLaunchExecutable,
   resolveVSCodeExecutable,
   buildLaunchArgs,
@@ -1258,4 +1397,6 @@ module.exports = {
   mapCliArgsToExeArgs,
   spawnVSCodeProcess,
   resetLaunchDebounceForTests,
+  setBridgeInstallInProgress,
+  DEFAULT_LAUNCH_PROFILE,
 };

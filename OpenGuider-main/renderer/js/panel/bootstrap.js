@@ -151,6 +151,24 @@ export function createPanelController({
   let modeBarHideTimer = null;
   let workspacePollTimer = null;
   let focusInProgress = false;
+  let handoffInProgress = false;
+  let lastHandoffLaunchVerified = false;
+
+  function setVsCodeLaunchBusy(busy) {
+    handoffInProgress = Boolean(busy);
+    if (dom.btnWorkspace) {
+      dom.btnWorkspace.disabled = handoffInProgress;
+      dom.btnWorkspace.classList.toggle("launch-busy", handoffInProgress);
+    }
+    if (dom.btnGamedev) {
+      dom.btnGamedev.disabled = handoffInProgress;
+      dom.btnGamedev.classList.toggle("launch-busy", handoffInProgress);
+    }
+  }
+
+  function isVsCodeLaunchBusy() {
+    return handoffInProgress;
+  }
 
   const HANDOFF_POLL_INTERVAL_MS = 2000;
   const HANDOFF_POLL_TIMEOUT_MS = 90000;
@@ -207,7 +225,7 @@ export function createPanelController({
   }
 
   async function focusWorkspaceVSCode() {
-    if (focusInProgress) {
+    if (focusInProgress || handoffInProgress) {
       return { ok: false, skipped: true, reason: "in_flight" };
     }
 
@@ -325,7 +343,9 @@ export function createPanelController({
       return;
     }
     try {
-      const prerequisites = await api.invoke("check-workspace-prerequisites");
+      const prerequisites = await api.invoke("check-workspace-prerequisites", {
+        probeExtensions: false,
+      });
       dom.btnWorkspace.classList.remove("workspace-ready", "workspace-warning");
       if (prerequisites?.ok) {
         dom.btnWorkspace.classList.add("workspace-ready");
@@ -341,13 +361,21 @@ export function createPanelController({
     }
   }
 
-  async function openWorkspaceHandoff() {
+  async function openWorkspaceHandoff(options = {}) {
     log("ipc:open-workspace-handoff invoke");
-    if (dom.btnWorkspace.disabled) {
+    if (dom.btnWorkspace.disabled || handoffInProgress) {
       return;
     }
 
-    dom.btnWorkspace.disabled = true;
+    const draftTaskText = String(
+      options?.draftTaskText ?? dom.textInput?.value ?? "",
+    ).trim();
+    const handoffOptions = {
+      ...(options?.force ? { force: true } : {}),
+      ...(draftTaskText ? { draftTaskText } : {}),
+    };
+
+    setVsCodeLaunchBusy(true);
     ui.hideWorkspaceStatus();
 
     try {
@@ -391,7 +419,7 @@ export function createPanelController({
         }
       }
 
-      let result = await api.invoke("open-workspace-handoff");
+      let result = await api.invoke("open-workspace-handoff", handoffOptions);
       if (result?.needsConfirm) {
         const proceed = await ui.confirmDialog({
           title: "Çalışma Kısmına geçilsin mi?",
@@ -403,10 +431,14 @@ export function createPanelController({
         if (!proceed) {
           return;
         }
-        result = await api.invoke("open-workspace-handoff", { force: true });
+        result = await api.invoke("open-workspace-handoff", { ...handoffOptions, force: true });
       }
 
       if (!result?.ok) {
+        if (result?.needsTask) {
+          ui.showToast(result.error || "Görevi yaz → ⌘ ile VS Code'da Cline'a aktar", true);
+          return;
+        }
         if (result?.prerequisites) {
           ui.showErrorBanner({
             title: "Çalışma Kısmı açılamadı",
@@ -434,6 +466,8 @@ export function createPanelController({
         );
       }
 
+      lastHandoffLaunchVerified = Boolean(result?.launchResult?.verified);
+
       ui.showWorkspaceStatus({
         title: result?.launchResult?.verified ? "VS Code açıldı" : "VS Code bekleniyor",
         message: result?.launchResult?.verified
@@ -450,10 +484,16 @@ export function createPanelController({
       if (result.handoffFileName && result.workspacePath) {
         await pollHandoffUntilSettled(result.workspacePath, result.handoffFileName);
       }
+
+      if (draftTaskText) {
+        dom.textInput.value = "";
+        dom.textInput.style.height = "auto";
+      }
     } catch (error) {
       ui.showToast(error?.message || "Çalışma Kısmı açılamadı", true);
     } finally {
-      dom.btnWorkspace.disabled = false;
+      setVsCodeLaunchBusy(false);
+      void updateWorkspaceButtonState();
     }
   }
 
@@ -805,6 +845,8 @@ export function createPanelController({
     state,
     log,
     openWorkspaceHandoff,
+    setVsCodeLaunchBusy,
+    isVsCodeLaunchBusy,
   });
   channelControls.wrapMessagingSend(messaging);
 
