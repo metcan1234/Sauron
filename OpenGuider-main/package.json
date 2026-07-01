@@ -1,6 +1,6 @@
 {
   "name": "openguider",
-  "version": "2.5.0",
+  "version": "2.5.1",
   "description": "Sauron AI Companion",
   "author": {
     "name": "Mehmet Can Bayatlı"
@@ -47,7 +47,8 @@
     "electron": "^34.3.0",
     "electron-builder": "^26.8.1",
     "jsdom": "^27.0.1",
-    "png-to-ico": "^3.0.1"
+    "png-to-ico": "^3.0.1",
+    "rcedit": "^5.0.2"
   },
   "build": {
     "appId": "com.sauron.desktop",
@@ -121,7 +122,8 @@
       "createStartMenuShortcut": true,
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false,
-      "uninstallDisplayName": "Sauron OpenGuider",
+      "uninstallDisplayName": "Sauron",
+      "shortcutName": "Sauron",
       "installerIcon": "renderer/assets/logo.ico",
       "uninstallerIcon": "renderer/assets/logo.ico",
       "installerHeaderIcon": "renderer/assets/logo.ico"
@@ -136,7 +138,6 @@
     }
   },
   "optionalDependencies": {
-    "keytar": "^7.9.0",
-    "rcedit": "^5.0.2"
+    "keytar": "^7.9.0"
   }
 }

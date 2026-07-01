@@ -29,9 +29,11 @@ async function setWindowsExecutableMetadata(context) {
   let rcedit;
   try {
     ({ rcedit } = require("rcedit"));
-  } catch (_error) {
-    // Skip metadata mutation when rcedit is unavailable.
-    return;
+  } catch (error) {
+    throw new Error(
+      `rcedit is required to embed the Sauron icon in ${context.packager.appInfo.productFilename}.exe. Install devDependencies before building.`,
+      { cause: error },
+    );
   }
 
   const projectDir = context.packager.projectDir;

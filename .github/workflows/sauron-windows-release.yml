@@ -30,7 +30,7 @@ jobs:
 
       - name: Install OpenGuider dependencies
         shell: pwsh
-        run: npm ci --omit=optional
+        run: npm ci
 
       - name: Build Windows installer
         shell: pwsh
