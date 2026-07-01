@@ -9,7 +9,7 @@ const { writeGamedevMcpConfig, mergeMcpConfig } = require("../../src/sauron/game
 test("mergeMcpConfig adds gamedev-all-in-one without removing other servers", () => {
   const merged = mergeMcpConfig(
     { mcpServers: { other: { command: "echo" } } },
-    { command: "node", args: ["/tmp/index.js"] },
+    { "gamedev-all-in-one": { command: "node", args: ["/tmp/index.js"] } },
   );
   assert.ok(merged.mcpServers.other);
   assert.ok(merged.mcpServers["gamedev-all-in-one"]);

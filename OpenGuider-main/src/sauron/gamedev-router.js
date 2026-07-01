@@ -1,4 +1,5 @@
 const { mergeCostOptimizerConfig } = require("./finops/cost-optimizer-config");
+const { resolveAgentForCline } = require("./finops/agent-matrix");
 
 const GAMEDEV_MODES = ["economy", "balanced", "premium"];
 
@@ -50,11 +51,28 @@ function resolveGamedevMode(settings = {}) {
   };
 }
 
-function resolveGamedevClineAgent(settings = {}) {
+function resolveGamedevClineAgent(settings = {}, options = {}) {
+  const routed = resolveAgentForCline("low", settings, {
+    budgetGovernorActive: options.budgetGovernorActive === true,
+    agentWallets: options.agentWallets || null,
+  });
+
+  if (routed) {
+    return {
+      providerId: routed.providerId,
+      modelId: routed.modelId,
+      agentId: routed.agentId,
+      reason: routed.reason || "gamedev-agent-matrix",
+      walletFallbackFrom: routed.walletFallbackFrom || null,
+      allCloudExhausted: routed.allCloudExhausted === true,
+    };
+  }
+
   return {
     providerId: "deepseek",
     modelId: String(settings.deepseekModelCustom || "deepseek-chat").trim() || "deepseek-chat",
-    reason: "gamedev-low-complexity-script-fallback",
+    agentId: "deepseek",
+    reason: "gamedev-fallback",
   };
 }
 

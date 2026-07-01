@@ -5,6 +5,7 @@ const RELIABLE_VSCODE_LAUNCH_OPTIONS = {
   respectRequestedNewWindow: true,
   skipInterProfileRecovery: true,
   skipRecovery: true,
+  skipVerification: true,
   launchProfiles: [{ profile: "default", extraArgs: [] }],
   requireWindowVerification: false,
   skipVerification: true,

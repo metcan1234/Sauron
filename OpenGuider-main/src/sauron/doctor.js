@@ -986,13 +986,19 @@ function runSauronDoctor(store, options = {}) {
   pushCheck(checks, checkAiCredentials(runtimeSettings));
 
   pushCheck(checks, checkFinOpsLedgerWritable({ workspacePath, ...runtimeSettings }));
-  pushCheck(checks, checkGamedevTcpBridgeSync());
+
+  const {
+    checkGamedevEngineBridgeSync,
+    checkGamedevProjectEngineMatch,
+    checkGamedevCompatManifest,
+  } = require("./gamedev-health");
+  pushCheck(checks, checkGamedevEngineBridgeSync(runtimeSettings, workspacePath));
+  pushCheck(checks, checkGamedevProjectEngineMatch(runtimeSettings, workspacePath));
+  pushCheck(checks, checkGamedevCompatManifest(runtimeSettings, workspacePath));
 
   // ── Additional channel-specific checks ───────────────────────────────
   pushCheck(checks, checkGooseBinary(runtimeSettings));
   pushCheck(checks, checkGamedevMcpEntry(runtimeSettings));
-  pushCheck(checks, checkGamedevUnityBridge(runtimeSettings));
-  pushCheck(checks, checkGamedevUnrealBridge(runtimeSettings));
 
   // ── Channel Runtime Health ────────────────────────────────────────────
   const channelLabels = { workspace: '⌘ Çalışma Kısmı', goose: '🪿 Goose', gamedev: '🎮 Game Dev', browser: 'Browser Agent' };

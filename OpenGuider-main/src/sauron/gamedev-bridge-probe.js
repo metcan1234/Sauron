@@ -1,39 +1,6 @@
-const net = require("net");
 const { spawnSync } = require("child_process");
-
-const DEFAULT_TCP_PORTS = [
-  { port: 7890, label: "Unity MCP bridge" },
-  { port: 55557, label: "Unreal MCP bridge" },
-];
-
-function probeTcpPort(host, port, timeoutMs = 800) {
-  return new Promise((resolve) => {
-    const socket = new net.Socket();
-    let settled = false;
-
-    const finish = (result) => {
-      if (settled) return;
-      settled = true;
-      try {
-        socket.destroy();
-      } catch {
-        // ignore
-      }
-      resolve(result);
-    };
-
-    socket.setTimeout(timeoutMs);
-    socket.once("connect", () => finish({ ok: true, port, host }));
-    socket.once("timeout", () => finish({ ok: false, port, host, error: "timeout" }));
-    socket.once("error", (error) => finish({ ok: false, port, host, error: error?.message || "error" }));
-
-    try {
-      socket.connect(port, host);
-    } catch (error) {
-      finish({ ok: false, port, host, error: error?.message || "connect-failed" });
-    }
-  });
-}
+const { probeEngineBridge, probeTcpPort } = require("./gamedev-engine-discovery");
+const { getBridgeProbeProfile, normalizeGamedevEngine } = require("./gamedev-config");
 
 function probeTcpPortSync(host = "127.0.0.1", port = 7890, timeoutMs = 700) {
   if (process.platform === "win32") {
@@ -52,27 +19,45 @@ function probeTcpPortSync(host = "127.0.0.1", port = 7890, timeoutMs = 700) {
   return result.status === 0;
 }
 
-async function probeGamedevBridgePorts(host = "127.0.0.1", ports = DEFAULT_TCP_PORTS) {
+async function probeGamedevBridgePorts(host = "127.0.0.1", engine = null, workspacePath = "") {
+  const engines = engine
+    ? [normalizeGamedevEngine(engine)]
+    : ["unity", "unreal"];
+
   const results = [];
-  for (const entry of ports) {
-    const probe = await probeTcpPort(host, entry.port);
+  for (const entry of engines) {
+    const probe = await probeEngineBridge(entry, { host, workspacePath });
     results.push({
+      engine: entry,
       ...probe,
-      label: entry.label,
     });
   }
+
   const anyOpen = results.some((entry) => entry.ok);
   return {
     ok: anyOpen,
     host,
     results,
-    summary: results.map((entry) => `${entry.label}:${entry.port}=${entry.ok ? "open" : "closed"}`).join(", "),
+    summary: results
+      .map((entry) => `${entry.engine}=${entry.ok ? entry.transport || "open" : "closed"}`)
+      .join(", "),
   };
 }
 
+async function probeGamedevBridgeForEngine(engine, options = {}) {
+  return probeEngineBridge(normalizeGamedevEngine(engine), options);
+}
+
+function buildLegacyDefaultTcpPorts() {
+  return getBridgeProbeProfile("unity")
+    .filter((entry) => entry.kind === "tcp")
+    .concat(getBridgeProbeProfile("unreal").filter((entry) => entry.kind === "tcp"));
+}
+
 module.exports = {
-  DEFAULT_TCP_PORTS,
+  buildLegacyDefaultTcpPorts,
   probeTcpPort,
   probeTcpPortSync,
   probeGamedevBridgePorts,
+  probeGamedevBridgeForEngine,
 };

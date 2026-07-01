@@ -58,19 +58,11 @@ function appendGamedevChecks(checks, store, settings = {}) {
   });
 
   if (engine === "unity") {
-    push({
-      id: "gamedev-unity-bridge",
-      status: "warn",
-      message: "Unity Editor bridge ayrı kurulmalı (CoplayDev/unity-mcp)",
-      fixHint: `Unity → Package Manager → Git URL: ${UNITY_BRIDGE_PACKAGE_URL}`,
-    });
+    const { checkGamedevEngineBridgeSync } = require("./gamedev-health");
+    push(checkGamedevEngineBridgeSync(settings, workspacePath));
   } else if (engine === "unreal") {
-    push({
-      id: "gamedev-unreal-bridge",
-      status: "warn",
-      message: "Unreal Editor + MCP bridge eklentisi açık olmalı (TCP 55557)",
-      fixHint: "Unreal Editor'ı açın, gamedev-all-in-one bridge eklentisini etkinleştirin.",
-    });
+    const { checkGamedevEngineBridgeSync } = require("./gamedev-health");
+    push(checkGamedevEngineBridgeSync(settings, workspacePath));
   }
 
   const workspacePath = String(settings.workspacePath || store?.get?.("workspacePath") || "").trim();
@@ -192,14 +184,15 @@ async function appendGamedevLiveChecks(checks, settings = {}) {
   if (settings.gamedevActiveEngine === "unreal") {
     try {
       const { probeUnrealBridge } = require("./gamedev-mcp-proxy");
-      const probe = await probeUnrealBridge();
+      const workspacePath = String(settings.workspacePath || "").trim();
+      const probe = await probeUnrealBridge({ workspacePath });
       checks.push({
         id: "gamedev-unreal-bridge-port",
         status: probe.connected ? "pass" : "warn",
         message: probe.connected
-          ? "Unreal bridge TCP 55557 bağlı"
-          : "Unreal bridge TCP 55557 bekleniyor",
-        fixHint: probe.connected ? "" : "Unreal Editor'ı açın ve MCP bridge eklentisini etkinleştirin.",
+          ? `Unreal bridge bagli (${probe.transport || "tcp"}:${probe.port || "8765"})`
+          : "Unreal bridge bekleniyor (HTTP 8765 / TCP 55557)",
+        fixHint: probe.connected ? "" : "Unreal Editor acin, Funplay MCP plugin etkinlestirin.",
         tier: "optional",
       });
     } catch {
@@ -208,13 +201,14 @@ async function appendGamedevLiveChecks(checks, settings = {}) {
   } else if (settings.gamedevActiveEngine === "unity" || !settings.gamedevActiveEngine) {
     try {
       const { probeUnityBridge } = require("./gamedev-mcp-proxy");
-      const probe = await probeUnityBridge();
+      const workspacePath = String(settings.workspacePath || "").trim();
+      const probe = await probeUnityBridge({ workspacePath });
       checks.push({
         id: "gamedev-unity-bridge-port",
         status: probe.connected ? "pass" : "warn",
         message: probe.connected
-          ? "Unity bridge TCP 7890 bağlı"
-          : "Unity bridge TCP 7890 bekleniyor",
+          ? `Unity bridge bagli (${probe.transport || "tcp"}:${probe.port || "8080"})`
+          : "Unity bridge bekleniyor (HTTP 8080 / TCP 6400)",
         fixHint: probe.connected ? "" : `Unity → Package Manager → Git URL: ${UNITY_BRIDGE_PACKAGE_URL}`,
         tier: "optional",
       });

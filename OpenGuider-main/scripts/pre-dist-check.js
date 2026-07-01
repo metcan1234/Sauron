@@ -99,8 +99,9 @@ function ensureBridgeVsixPresent() {
 function ensureGamedevMcpPresent() {
   const mcpPath = path.resolve(projectRoot, "extensions", "gamedev-all-in-one", "dist", "index.js");
   if (!fs.existsSync(mcpPath)) {
-    console.warn(`[WARN] GameDev MCP entry missing at ${mcpPath} — opsiyonel, atlanıyor.`);
-    return;
+    console.error(`GameDev MCP entry missing at ${mcpPath}`);
+    console.error("Run: cd extensions/gamedev-all-in-one && npm ci && npm run build");
+    process.exit(1);
   }
   console.log(`GameDev MCP found: ${mcpPath}`);
 }

@@ -1,6 +1,7 @@
 const net = require("net");
 const { randomUUID } = require("crypto");
-const { GAMEDEV_ENGINE_PORTS } = require("./gamedev-config");
+const { GAMEDEV_ENGINE_PORTS, getBridgeProbeProfile } = require("./gamedev-config");
+const { probeEngineBridge } = require("./gamedev-engine-discovery");
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_TIMEOUT_MS = 8000;
@@ -31,12 +32,42 @@ function probeBridge({ host = DEFAULT_HOST, port, timeoutMs = 2000 } = {}) {
   });
 }
 
-function probeUnityBridge({ host = DEFAULT_HOST, port = GAMEDEV_ENGINE_PORTS.unity, timeoutMs = 2000 } = {}) {
-  return probeBridge({ host, port, timeoutMs });
+async function probeUnityBridge(options = {}) {
+  const probe = await probeEngineBridge("unity", options);
+  return {
+    ok: probe.ok,
+    connected: probe.connected === true,
+    host: probe.host || DEFAULT_HOST,
+    port: probe.port || GAMEDEV_ENGINE_PORTS.unity,
+    transport: probe.transport || null,
+    endpoint: probe.endpoint || null,
+    error: probe.ok ? null : probe.summary || "Unity bridge unreachable",
+  };
 }
 
-function probeUnrealBridge({ host = DEFAULT_HOST, port = GAMEDEV_ENGINE_PORTS.unreal, timeoutMs = 2000 } = {}) {
-  return probeBridge({ host, port, timeoutMs });
+async function probeUnrealBridge(options = {}) {
+  const probe = await probeEngineBridge("unreal", options);
+  return {
+    ok: probe.ok,
+    connected: probe.connected === true,
+    host: probe.host || DEFAULT_HOST,
+    port: probe.port || GAMEDEV_ENGINE_PORTS.unreal,
+    transport: probe.transport || null,
+    endpoint: probe.endpoint || null,
+    error: probe.ok ? null : probe.summary || "Unreal bridge unreachable",
+  };
+}
+
+function resolveUnityTcpPort() {
+  const profile = getBridgeProbeProfile("unity");
+  const tcp = profile.find((entry) => entry.kind === "tcp");
+  return tcp?.port || GAMEDEV_ENGINE_PORTS.unity;
+}
+
+function resolveUnrealTcpPort() {
+  const profile = getBridgeProbeProfile("unreal");
+  const tcp = profile.find((entry) => entry.kind === "tcp");
+  return tcp?.port || GAMEDEV_ENGINE_PORTS.unreal;
 }
 
 function dispatchBridgeCommand(method, params = {}, { host = DEFAULT_HOST, port = GAMEDEV_ENGINE_PORTS.unity, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
@@ -60,7 +91,7 @@ function dispatchBridgeCommand(method, params = {}, { host = DEFAULT_HOST, port 
     };
 
     const timer = setTimeout(() => {
-      finish({ ok: false, skipped: false, error: "Unity MCP command timeout", method });
+      finish({ ok: false, skipped: false, error: "MCP command timeout", method });
     }, timeoutMs);
 
     socket.on("data", (chunk) => {
@@ -102,8 +133,8 @@ function dispatchBridgeCommand(method, params = {}, { host = DEFAULT_HOST, port 
   });
 }
 
-async function runUnityPlayModeVerification(action = "play") {
-  const probe = await probeUnityBridge();
+async function runUnityPlayModeVerification(action = "play", options = {}) {
+  const probe = await probeUnityBridge(options);
   if (!probe.connected) {
     return {
       ok: true,
@@ -112,7 +143,12 @@ async function runUnityPlayModeVerification(action = "play") {
     };
   }
 
-  const playResult = await dispatchBridgeCommand("play_mode", { action }, { port: GAMEDEV_ENGINE_PORTS.unity });
+  if (probe.transport === "http") {
+    return { ok: true, skipped: true, warn: "Unity HTTP MCP active — use Cline/unityMCP for play mode" };
+  }
+
+  const port = probe.port || resolveUnityTcpPort();
+  const playResult = await dispatchBridgeCommand("play_mode", { action }, { port, host: probe.host });
   if (!playResult.ok) {
     return {
       ok: false,
@@ -124,14 +160,14 @@ async function runUnityPlayModeVerification(action = "play") {
 
   if (action === "play") {
     await new Promise((r) => setTimeout(r, 1500));
-    await dispatchBridgeCommand("play_mode", { action: "stop" }, { port: GAMEDEV_ENGINE_PORTS.unity });
+    await dispatchBridgeCommand("play_mode", { action: "stop" }, { port, host: probe.host });
   }
 
   return { ok: true, skipped: false, result: playResult };
 }
 
-async function runUnrealPlayModeVerification(action = "play") {
-  const probe = await probeUnrealBridge();
+async function runUnrealPlayModeVerification(action = "play", options = {}) {
+  const probe = await probeUnrealBridge(options);
   if (!probe.connected) {
     return {
       ok: true,
@@ -140,7 +176,12 @@ async function runUnrealPlayModeVerification(action = "play") {
     };
   }
 
-  const playResult = await dispatchBridgeCommand("play_mode", { action }, { port: GAMEDEV_ENGINE_PORTS.unreal });
+  if (probe.transport === "http") {
+    return { ok: true, skipped: true, warn: "Unreal HTTP MCP active — use funplay-unreal play_in_editor tool" };
+  }
+
+  const port = probe.port || resolveUnrealTcpPort();
+  const playResult = await dispatchBridgeCommand("play_mode", { action }, { port, host: probe.host });
   if (!playResult.ok) {
     return {
       ok: false,
@@ -152,14 +193,20 @@ async function runUnrealPlayModeVerification(action = "play") {
 
   if (action === "play") {
     await new Promise((r) => setTimeout(r, 1500));
-    await dispatchBridgeCommand("play_mode", { action: "stop" }, { port: GAMEDEV_ENGINE_PORTS.unreal });
+    await dispatchBridgeCommand("play_mode", { action: "stop" }, { port, host: probe.host });
   }
 
   return { ok: true, skipped: false, result: playResult };
 }
 
 function dispatchUnityCommand(method, params = {}, options = {}) {
-  return dispatchBridgeCommand(method, params, { ...options, port: options.port || GAMEDEV_ENGINE_PORTS.unity });
+  const port = options.port || resolveUnityTcpPort();
+  return dispatchBridgeCommand(method, params, { ...options, port });
+}
+
+function dispatchUnrealCommand(method, params = {}, options = {}) {
+  const port = options.port || resolveUnrealTcpPort();
+  return dispatchBridgeCommand(method, params, { ...options, port });
 }
 
 module.exports = {
@@ -168,6 +215,7 @@ module.exports = {
   probeUnrealBridge,
   dispatchBridgeCommand,
   dispatchUnityCommand,
+  dispatchUnrealCommand,
   runUnityPlayModeVerification,
   runUnrealPlayModeVerification,
 };
