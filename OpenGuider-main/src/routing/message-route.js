@@ -91,9 +91,34 @@ function resolvePanelModeState({ assistantMode = "assistant", sessionSnapshot = 
   };
 }
 
+function suggestCodeExecutionPath({
+  codeAgentNativeEnabled = false,
+  workspacePath = "",
+  codeIntent = null,
+  prerequisites = {},
+} = {}) {
+  const hasWorkspace = Boolean(String(workspacePath || "").trim());
+  const codingIntent = codeIntent?.shouldSuggest === true;
+
+  if (!hasWorkspace || !codingIntent) {
+    return { path: "none", reason: "not_applicable" };
+  }
+
+  if (codeAgentNativeEnabled && prerequisites.codeAgentReady !== false) {
+    return { path: "native_agent", reason: "code_agent_enabled" };
+  }
+
+  if (prerequisites.handoffReady) {
+    return { path: "cline_handoff", reason: "handoff_ready" };
+  }
+
+  return { path: "setup_required", reason: "doctor_incomplete" };
+}
+
 module.exports = {
   MESSAGE_ROUTES,
   isGuideAssistantMode,
   resolveMessageRoute,
   resolvePanelModeState,
+  suggestCodeExecutionPath,
 };

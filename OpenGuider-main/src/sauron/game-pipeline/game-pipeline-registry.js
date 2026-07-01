@@ -29,6 +29,7 @@ const GAME_PIPELINE_REGISTRY = {
         phase: 1,
         goal: "Verify URP scene and enter play mode via unity_play_mode MCP",
         complexityHint: "low",
+        executionMode: "mcp-only",
         verification: { mcp: "unity_play_mode" },
       },
       {

@@ -47,7 +47,7 @@ function registerBuildPipelineIpc({
       return { ok: false, error: "Workspace path is not configured." };
     }
     try {
-      const settings = await getRuntimeSettings();
+      const settings = await getRuntimeSettings({ includePersona: false });
       const clineProbe = probeClineCapabilities();
       const autoChainEnabled = settings.pipelineAutoChain !== false;
       const forkLimitations = autoChainEnabled && requiresForkForAutoChain(clineProbe)
@@ -110,7 +110,7 @@ function registerBuildPipelineIpc({
       return { ok: false, error: "Workspace path is not configured." };
     }
     try {
-      const settings = await getRuntimeSettings();
+      const settings = await getRuntimeSettings({ includePersona: false });
       const result = await advancePipelineAfterComplete(resolved, settings, {
         streamAIResponse,
         appLogger,

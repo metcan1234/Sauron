@@ -1,41 +1,17 @@
 const { captureUsageFromStreamEvent } = require("../sauron/finops/token-counter");
 const { recordLlmUsage, prepareLlmCall, BudgetExceededError } = require("../sauron/finops/llm-tracker");
 const { streamDeepSeek } = require("./deepseek");
+const { DEFAULT_SYSTEM_PROMPT } = require("./default-prompt");
 
-const DEFAULT_SYSTEM_PROMPT = `You are Sauron, a helpful AI companion that lives in the Windows system tray.
-You can see the user's screen when they share it. Keep replies concise unless asked to elaborate.
-Be direct and conversational. When the user asks about something on screen, reference what you see.
-
-PANEL MODE — CHAT & GUIDANCE ONLY:
-This chat panel is for conversation, advice, explanations, and screen guidance.
-Do NOT create step-by-step plans, numbered task lists, or "create a file / write this code" instructions here.
-Do NOT produce code blocks or ask the user to edit files in this panel — even for simple greetings.
-
-CODING WORKSPACE RULE:
-You do NOT write or edit code, run terminal commands, or perform file changes yourself in this panel.
-When the user asks for code changes, refactoring, file edits, git operations, or terminal work, do NOT produce code blocks.
-Instead, explain briefly what should happen and direct them to click the "Çalışma Kısmı" (Workspace) button.
-Sauron Workspace (VS Code + Cline) handles all coding tasks in the shared workspace.
-
-CRITICAL INSTRUCTION FOR ELEMENT POINTING:
-If the user asks you to show, point to, or find a specific UI element on the screen, YOU MUST append a special tag to your answer.
-Format: [POINT:x,y:label]
-IMPORTANT COORDINATE RULES:
-1. You MUST provide coordinates on a normalized 0 to 1000 scale.
-2. X=0, Y=0 is the TOP-LEFT corner.
-3. X=1000, Y=1000 is the BOTTOM-RIGHT corner.
-4. Do NOT output absolute pixels. ONLY output numbers between 0 and 1000.
-Example: "Here is the submit button. [POINT:850,450:Submit Button]" (meaning 85% right, 45% down from top)
-If no pointing is needed, DO NOT invent coordinates, just reply normally or append [POINT:none].
-NEVER provide coordinates in regular text like "(x, y)". ONLY use the [POINT:x,y:label] tag format.
-
-MULTI-SCREEN RULE:
-When you receive screenshots from multiple screens (e.g. [Screen 1 (primary)], [Screen 2]), you MUST append the screen number to the POINT tag.
-Format: [POINT:x,y:label:screenN]  — where N matches the number in the [Screen N] label of the image that contains the target element.
-Example (element is on Screen 2): [POINT:750,300:Settings Button:screen2]
-If there is only one screen, you may omit :screenN.
-Coordinates are always on the 0-1000 scale relative to that specific screen's image.
-`;
+function resolveSystemPrompt(settings) {
+  if (settings?.resolvedSystemPrompt) {
+    return settings.resolvedSystemPrompt;
+  }
+  if (settings?.systemPromptOverride) {
+    return settings.systemPromptOverride;
+  }
+  return DEFAULT_SYSTEM_PROMPT;
+}
 
 function mergeProviderUsage(current, next) {
   if (!next) return current;
@@ -66,7 +42,7 @@ async function streamClaude({ text, images, history, settings, onChunk, signal }
   const baseUrl = (settings.claudeBaseUrl || "https://api.anthropic.com").replace(/\/$/, "");
   const url = `${baseUrl}/v1/messages`;
   const messages = buildClaudeMessages(text, images, history);
-  const systemPrompt = settings.systemPromptOverride || DEFAULT_SYSTEM_PROMPT;
+  const systemPrompt = resolveSystemPrompt(settings);
 
   const resp = await fetch(url, {
     method: "POST",
@@ -129,7 +105,7 @@ async function streamOpenAI({ text, images, history, settings, onChunk, signal }
   const baseUrl = (settings.openaiBaseUrl || "https://api.openai.com/v1").replace(/\/$/, "");
   const url = `${baseUrl}/chat/completions`;
 
-  const systemPrompt = settings.systemPromptOverride || DEFAULT_SYSTEM_PROMPT;
+  const systemPrompt = resolveSystemPrompt(settings);
   const messages = [{ role: "system", content: systemPrompt }];
   for (const h of (history || [])) messages.push({ role: h.role, content: h.content });
 
@@ -176,7 +152,7 @@ async function streamOpenRouter({ text, images, history, settings, onChunk, sign
   const baseUrl = (settings.openrouterBaseUrl || "https://openrouter.ai/api/v1").replace(/\/$/, "");
   const url = `${baseUrl}/chat/completions`;
 
-  const systemPrompt = settings.systemPromptOverride || DEFAULT_SYSTEM_PROMPT;
+  const systemPrompt = resolveSystemPrompt(settings);
   const messages = [{ role: "system", content: systemPrompt }];
   for (const h of (history || [])) messages.push({ role: h.role, content: h.content });
 
@@ -272,7 +248,7 @@ async function streamGemini({ text, images, history, settings, onChunk, signal }
   const baseUrl = (settings.geminiBaseUrl || "https://generativelanguage.googleapis.com/v1beta").replace(/\/$/, "");
   const url = `${baseUrl}/models/${model}:streamGenerateContent?alt=sse&key=${settings.geminiApiKey}`;
 
-  const systemPrompt = settings.systemPromptOverride || DEFAULT_SYSTEM_PROMPT;
+  const systemPrompt = resolveSystemPrompt(settings);
   const contents = [];
   for (const h of (history || [])) {
     contents.push({ role: h.role === "assistant" ? "model" : "user", parts: [{ text: h.content }] });
@@ -319,7 +295,7 @@ async function streamGemini({ text, images, history, settings, onChunk, signal }
 async function streamGroq({ text, images, history, settings, onChunk, signal }) {
   const baseUrl = (settings.groqBaseUrl || "https://api.groq.com/openai/v1").replace(/\/$/, "");
   const url = `${baseUrl}/chat/completions`;
-  const systemPrompt = settings.systemPromptOverride || DEFAULT_SYSTEM_PROMPT;
+  const systemPrompt = resolveSystemPrompt(settings);
 
   const messages = [{ role: "system", content: systemPrompt }];
   for (const h of (history || [])) messages.push({ role: h.role, content: h.content });
@@ -376,7 +352,7 @@ async function streamGroq({ text, images, history, settings, onChunk, signal }) 
 async function streamOllama({ text, images, history, settings, onChunk, signal }) {
   const baseUrl = settings.ollamaUrl || "http://localhost:11434";
   const model = settings.aiModel || "llama3.2";
-  const systemPrompt = settings.systemPromptOverride || DEFAULT_SYSTEM_PROMPT;
+  const systemPrompt = resolveSystemPrompt(settings);
 
   const messages = [{ role: "system", content: systemPrompt }];
   for (const h of (history || [])) messages.push({ role: h.role, content: h.content });
@@ -483,7 +459,7 @@ function parsePointTag(fullText) {
 }
 
 async function runProviderStream({ text, images, history, settings, onChunk, signal }) {
-  const systemPrompt = settings.systemPromptOverride || DEFAULT_SYSTEM_PROMPT;
+  const systemPrompt = resolveSystemPrompt(settings);
   switch (settings.aiProvider) {
     case "openai":     return streamOpenAI({ text, images, history, settings, onChunk, signal });
     case "openrouter": return streamOpenRouter({ text, images, history, settings, onChunk, signal });
@@ -555,4 +531,4 @@ async function fetchOllamaModels(ollamaUrl) {
   }
 }
 
-module.exports = { streamAIResponse, parsePointTag, fetchOllamaModels };
+module.exports = { streamAIResponse, parsePointTag, fetchOllamaModels, DEFAULT_SYSTEM_PROMPT, resolveSystemPrompt };

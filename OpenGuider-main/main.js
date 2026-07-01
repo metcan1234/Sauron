@@ -47,6 +47,7 @@ const { checkWorkspacePrerequisites } = require("./src/sauron/workspace-setup");
 const { bootstrapWorkspace } = require("./src/sauron/workspace-bootstrap");
 const { installWorkspaceStack } = require("./src/sauron/workspace-stack-installer");
 const { runSauronDoctor } = require("./src/sauron/doctor");
+const { probeProviderKey } = require("./src/sauron/api-key-probe");
 const { setConfiguredVscodePath } = require("./src/sauron/vscode-launcher");
 const { SessionManager } = require("./src/session/session-manager");
 const {
@@ -122,9 +123,17 @@ const { registerCodeAgentIpc } = require("./src/ipc/code-agent-ipc");
 const { registerGooseIpc } = require("./src/ipc/goose-ipc");
 const { registerGamedevIpc } = require("./src/ipc/gamedev-ipc");
 const { registerGamePipelineIpc } = require("./src/ipc/game-pipeline-ipc");
+const { registerPluginProfileIpc } = require("./src/ipc/plugin-profile-ipc");
 const { createWindowManager } = require("./src/main/window-manager");
 const { createTrayMenu } = require("./src/main/tray-menu");
 const { raisePanelAboveOverlay, resetPanelAlwaysOnTop } = require("./src/main/panel-window-focus");
+const {
+  ASSISTANT_CHAT_PROMPT,
+  composeSystemPrompt,
+  composeSystemPromptPreview,
+  listPersonas,
+} = require("./src/ai/system-prompt");
+const { migrateLegacyPreset } = require("./src/ai/personas");
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const PANEL_WIDTH  = 520;
@@ -133,16 +142,6 @@ const WIDGET_WIDTH = 220;
 const WIDGET_COLLAPSED_HEIGHT = 68;
 const PANEL_WINDOW_MARGIN = 16;
 const WIDGET_EXPANDED_HEIGHT = 248;
-const ASSISTANT_CHAT_PROMPT = [
-  "ASSISTANT CHAT MODE:",
-  "This panel is for conversation, guidance, and questions only — not coding tasks.",
-  "Do NOT create step-by-step plans, task lists, or file-edit instructions.",
-  "Do NOT ask the user to create files, write code, or run terminal commands in this panel.",
-  "When the user wants coding, refactoring, git, or terminal work, briefly explain and direct them to the Çalışma Kısmı (Workspace) button.",
-  "For casual greetings or small talk, reply naturally and briefly.",
-  "Always append a [POINT:x,y:label] tag when a clickable target is likely on screen.",
-  "If uncertain, still provide your best click estimate with a concise label.",
-].join(" ");
 const TERMINAL_BROWSER_EXECUTION_STATUSES = new Set(["success", "failed", "aborted"]);
 
 // ── Global state ──────────────────────────────────────────────────────────────
@@ -430,26 +429,56 @@ function getFinOpsAlertWindows() {
   return [panelWindow, settingsWindow].filter((window) => window && !window.isDestroyed());
 }
 
-async function getRuntimeSettings() {
-  if (!secureStore) {
-    return mergeUserMemoryIntoSettings(applyPlatformSettingsGuards(store?.store || {}).normalizedSettings);
-  }
-  const hydrated = await secureStore.fillSecrets(store.store);
-  return mergeUserMemoryIntoSettings(applyPlatformSettingsGuards(hydrated).normalizedSettings);
+async function getRuntimeSettings(options = {}) {
+  const baseSettings = !secureStore
+    ? applyPlatformSettingsGuards(store?.store || {}).normalizedSettings
+    : applyPlatformSettingsGuards(await secureStore.fillSecrets(store.store)).normalizedSettings;
+  return enrichRuntimeSettings(baseSettings, options);
 }
 
-function mergeUserMemoryIntoSettings(settings = {}) {
-  const facts = Array.isArray(settings.userMemoryFacts)
-    ? settings.userMemoryFacts.map((entry) => String(entry || "").trim()).filter(Boolean)
-    : [];
-  if (facts.length === 0) {
-    return settings;
+function migratePersonaSettingsIfNeeded() {
+  if (!store) return;
+  const current = store.store || {};
+  const hasActivePersona = current.activePersonaId === "luna" || current.activePersonaId === "hiri";
+  if (!hasActivePersona) {
+    const migratedId = migrateLegacyPreset(current.personalityPreset || "sauron-default");
+    store.set("activePersonaId", migratedId);
+    if (!current.assistantName || current.assistantName === "Sauron") {
+      store.set("assistantName", migratedId === "hiri" ? "Hiri" : "Luna");
+    }
   }
-  const memoryBlock = `\n\nKullanıcı hafızası:\n${facts.map((entry) => `- ${entry}`).join("\n")}`;
-  const basePrompt = String(settings.systemPromptOverride || "").trim();
-  return {
+  if (!current.ownerName) {
+    store.set("ownerName", "Can");
+  }
+}
+
+function enrichRuntimeSettings(settings = {}, options = {}) {
+  const {
+    modeOverlay = null,
+    introDirective = false,
+    includePersona = true,
+  } = options;
+  const normalizedSettings = {
     ...settings,
-    systemPromptOverride: `${basePrompt}${memoryBlock}`.trim(),
+    activePersonaId: settings.activePersonaId || migrateLegacyPreset(settings.personalityPreset),
+  };
+  const { applyPluginProfileOverlay } = require("./src/routing/effective-settings");
+  const profileApplied = applyPluginProfileOverlay(
+    normalizedSettings,
+    normalizedSettings.activePluginProfile,
+    { smartPluginProfileEnabled: normalizedSettings.smartPluginProfileEnabled },
+  );
+  const effectiveSettings = profileApplied.settings;
+  return {
+    ...effectiveSettings,
+    _pluginProfileOverlay: profileApplied.overlay,
+    _activePluginProfile: profileApplied.profile,
+    resolvedSystemPrompt: composeSystemPrompt({
+      settings: effectiveSettings,
+      modeOverlay,
+      introDirective,
+      includePersona,
+    }),
   };
 }
 
@@ -1207,8 +1236,13 @@ async function speakAssistantResponse(text, settings, sender, { shouldAbort } = 
     return;
   }
 
+  const personaVoice = resolvePersonaTtsVoice(settings);
+  const ttsSettings = personaVoice
+    ? { ...settings, openaiTtsVoice: personaVoice, elevenlabsVoiceId: settings.elevenlabsVoiceId || personaVoice }
+    : settings;
+
   const { provider: effectiveTtsProvider, warning } = resolveEffectiveTtsProvider(
-    settings.ttsProvider,
+    ttsSettings.ttsProvider,
     getPlatformCapabilities(process.platform),
   );
   if (warning) {
@@ -1229,11 +1263,11 @@ async function speakAssistantResponse(text, settings, sender, { shouldAbort } = 
     if (typeof shouldAbort === "function" && shouldAbort()) {
       return;
     }
-    await speakWithElevenLabs(safeText, settings, ttsTargetSender, { shouldAbort });
+    await speakWithElevenLabs(safeText, ttsSettings, ttsTargetSender, { shouldAbort });
   } else if (effectiveTtsProvider === "openai") {
     const openaiTTS = require("./src/tts/openai-tts");
     try {
-      const base64Audio = await openaiTTS.speakText(safeText, settings);
+      const base64Audio = await openaiTTS.speakText(safeText, ttsSettings);
       if (
         base64Audio
         && !(typeof shouldAbort === "function" && shouldAbort())
@@ -1382,6 +1416,7 @@ function registerModularIpcHandlers() {
     showPointer,
     wrapUserFacingError,
     getActiveChatSessionRecord,
+    broadcastSettingsChanged: broadcastSettingsFromStore,
   });
 
   registerWorkspaceIpc({
@@ -1489,6 +1524,13 @@ function registerModularIpcHandlers() {
     currentAIControllerRef,
   });
 
+  registerPluginProfileIpc({
+    ipcMain,
+    store,
+    debugLog,
+    getRuntimeSettings,
+  });
+
   registerBrowserIpc({
     ipcMain,
     debugLog,
@@ -1503,6 +1545,32 @@ function registerModularIpcHandlers() {
 }
 
 // ── IPC handlers ──────────────────────────────────────────────────────────────
+async function broadcastSettingsFromStore() {
+  if (!store) {
+    return;
+  }
+  const nextSettings = await secureStore.fillSecrets(store.store);
+  const guarded = applyPlatformSettingsGuards(nextSettings);
+  const settingsToBroadcast = guarded.normalizedSettings;
+  if (panelWindow && !panelWindow.isDestroyed()) {
+    panelWindow.webContents.send("settings-changed", settingsToBroadcast);
+  }
+  if (widgetWindow && !widgetWindow.isDestroyed()) {
+    widgetWindow.webContents.send("settings-changed", settingsToBroadcast);
+  }
+}
+
+function resolvePersonaTtsVoice(settings = {}) {
+  if (settings.personaTtsVoiceEnabled === false) {
+    return null;
+  }
+  const personaId = settings.activePersonaId || "luna";
+  if (personaId === "hiri") {
+    return String(settings.hiriTtsVoice || "alloy").trim() || "alloy";
+  }
+  return String(settings.lunaTtsVoice || "nova").trim() || "nova";
+}
+
 // ── Channel Runtime IPC ──────────────────────────────────────────────────────
 function registerChannelRuntimeIpc() {
   ipcMain.handle("channel-runtime-get-state", (_event, channelId) => {
@@ -1537,6 +1605,57 @@ function setupIPC() {
     const nextSettings = await secureStore.fillSecrets(store.store);
     const guarded = applyPlatformSettingsGuards(nextSettings);
     return guarded.normalizedSettings;
+  });
+  ipcMain.handle("preview-system-prompt", async (_event, draftSettings = {}) => {
+    const runtime = await getRuntimeSettings({ includePersona: true });
+    const merged = { ...runtime, ...draftSettings };
+    const preview = composeSystemPromptPreview({
+      settings: merged,
+      modeOverlay: ASSISTANT_CHAT_PROMPT,
+      includePersona: true,
+    });
+    return {
+      prompt: preview.prompt,
+      sections: {
+        core: preview.core,
+        persona: preview.persona,
+        shared: preview.shared,
+        tail: preview.tail,
+      },
+      personas: listPersonas(),
+    };
+  });
+  ipcMain.handle("get-personas", async () => listPersonas());
+  ipcMain.handle("get-conversation-scenarios", async () => {
+    const { listConversationScenarios } = require("./src/ai/conversation-scenarios");
+    return listConversationScenarios();
+  });
+  ipcMain.handle("test-api-key", async (_event, { provider, draftSettings = {} } = {}) => {
+    const runtime = await getRuntimeSettings({ includePersona: false });
+    const merged = { ...runtime, ...draftSettings };
+    return probeProviderKey(provider, merged);
+  });
+  ipcMain.handle("get-readiness-summary", async () => {
+    if (!store) {
+      return { ok: false, status: "unknown" };
+    }
+    const runtime = await getRuntimeSettings({ includePersona: false });
+    const report = runSauronDoctor(store, { settings: runtime });
+    return {
+      ok: true,
+      status: report?.readiness?.status || "unknown",
+      headline: report?.readiness?.headline || "",
+    };
+  });
+  ipcMain.handle("append-assistant-message", async (_event, { content }) => {
+    const text = String(content || "").trim();
+    if (!text || !sessionManager) {
+      return { ok: false };
+    }
+    sessionManager.addMessage({ role: "assistant", content: text });
+    persistActiveSession(store, sessionManager.getSnapshot());
+    broadcastSessionSnapshot(sessionManager.getSnapshot());
+    return { ok: true, session: sessionManager.getSnapshot() };
   });
   ipcMain.handle("save-settings", async (_e, newSettings) => {
     debugLog("ipc:save-settings", Object.keys(newSettings || {}));
@@ -1820,6 +1939,7 @@ app.whenReady().then(async () => {
   registerCrashTracking();
   debugLog("app:ready start");
   store = createStore();
+  migratePersonaSettingsIfNeeded();
   setConfiguredVscodePath(store.get("vscodePath"));
   secureStore = new SecureStore({ safeStorage, serviceName: "Sauron" });
   configureFinOpsContext({

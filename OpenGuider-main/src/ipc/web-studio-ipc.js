@@ -2,6 +2,7 @@ const { saveBrief, loadBrief, defaultBrief, normalizeBrief } = require("../sauro
 const { scaffoldNextjs } = require("../sauron/web-studio/scaffold-nextjs");
 const { detectNextProject } = require("../sauron/web-studio/project-status");
 const { detectWebIntent } = require("../sauron/web-studio/web-intent");
+const { detectWebDeployTool, runWebDeployPreview } = require("../sauron/web-deploy");
 
 function registerWebStudioIpc({
   ipcMain,
@@ -84,6 +85,17 @@ function registerWebStudioIpc({
     const url = `http://localhost:${previewPort}`;
     await shell.openExternal(url);
     return { ok: true, url, hint: "Dev server çalışmıyorsa VS Code/Cline'da npm run dev çalıştırın." };
+  });
+
+  ipcMain.handle("prepare-web-deploy", async (_event, { workspacePath } = {}) => {
+    debugLog("ipc:prepare-web-deploy");
+    const resolvedPath = resolveWorkspacePath(workspacePath);
+    return runWebDeployPreview(resolvedPath);
+  });
+
+  ipcMain.handle("detect-web-deploy-tool", (_event, { workspacePath } = {}) => {
+    const resolvedPath = resolveWorkspacePath(workspacePath);
+    return detectWebDeployTool(resolvedPath);
   });
 }
 

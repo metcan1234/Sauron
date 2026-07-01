@@ -8,6 +8,11 @@ let recordingButton = null;
 const EXECUTION_MODE_HITL = "hitl";
 const EXECUTION_MODE_AUTO = "auto";
 
+const PERSONA_META = {
+  luna: { label: "Luna", displayName: "Luna" },
+  hiri: { label: "Hiri", displayName: "Hiri" },
+};
+
 const toast = document.getElementById("toast");
 let toastTimer;
 function showToast(msg, isError) {
@@ -84,6 +89,65 @@ async function init() {
     const facts = Array.isArray(settings.userMemoryFacts) ? settings.userMemoryFacts : [];
     userMemoryEl.value = facts.join("\n");
   }
+  const ownerNameEl = document.getElementById("ownerName");
+  if (ownerNameEl) ownerNameEl.value = settings.ownerName || "Can";
+  const activePersonaId = settings.activePersonaId || "luna";
+  document.querySelectorAll('input[name="activePersonaId"]').forEach((input) => {
+    input.checked = input.value === activePersonaId;
+  });
+  updatePersonaCardUi(activePersonaId);
+  const lunaMatureEl = document.getElementById("lunaMatureContentEnabled");
+  if (lunaMatureEl) lunaMatureEl.checked = settings.lunaMatureContentEnabled === true;
+  const lunaMatureLocalEl = document.getElementById("lunaMaturePreferLocal");
+  if (lunaMatureLocalEl) lunaMatureLocalEl.checked = settings.lunaMaturePreferLocal === true;
+  loadPersonalitySliders(settings.personalitySliders || {});
+  const altGreetingsEl = document.getElementById("altGreetings");
+  if (altGreetingsEl) {
+    const greetings = Array.isArray(settings.altGreetings) ? settings.altGreetings : [];
+    altGreetingsEl.value = greetings.join("\n");
+  }
+  const feedbackEl = document.getElementById("personalityFeedbackNotes");
+  if (feedbackEl) {
+    const notes = Array.isArray(settings.personalityFeedbackNotes) ? settings.personalityFeedbackNotes : [];
+    feedbackEl.value = notes.join("\n");
+  }
+  void loadScenarioOptions(settings.activeScenarioId || "");
+  const autoMemoryEl = document.getElementById("autoMemoryExtractionEnabled");
+  if (autoMemoryEl) autoMemoryEl.checked = settings.autoMemoryExtractionEnabled === true;
+  const lunaRelationshipEl = document.getElementById("lunaRelationshipEnabled");
+  if (lunaRelationshipEl) lunaRelationshipEl.checked = settings.lunaRelationshipEnabled !== false;
+  void refreshLunaRelationshipUi();
+  const atFileEl = document.getElementById("panelAtFileContextEnabled");
+  if (atFileEl) atFileEl.checked = settings.panelAtFileContextEnabled !== false;
+  const channelHintsEl = document.getElementById("channelHintChipsEnabled");
+  if (channelHintsEl) channelHintsEl.checked = settings.channelHintChipsEnabled !== false;
+  const personaAvatarEl = document.getElementById("personaAvatarEnabled");
+  if (personaAvatarEl) personaAvatarEl.checked = settings.personaAvatarEnabled !== false;
+  const voiceChatLoopEl = document.getElementById("voiceChatLoopEnabled");
+  if (voiceChatLoopEl) voiceChatLoopEl.checked = settings.voiceChatLoopEnabled === true;
+  const messageCostHintEl = document.getElementById("messageCostHintEnabled");
+  if (messageCostHintEl) messageCostHintEl.checked = settings.messageCostHintEnabled !== false;
+  const enhancedOnboardingEl = document.getElementById("enhancedOnboardingEnabled");
+  if (enhancedOnboardingEl) enhancedOnboardingEl.checked = settings.enhancedOnboardingEnabled !== false;
+  const exampleDialoguesEl = document.getElementById("exampleDialogues");
+  if (exampleDialoguesEl) {
+    const lines = Array.isArray(settings.exampleDialogues) ? settings.exampleDialogues : [];
+    exampleDialoguesEl.value = lines.join("\n");
+  }
+  const personaTtsEl = document.getElementById("personaTtsVoiceEnabled");
+  if (personaTtsEl) personaTtsEl.checked = settings.personaTtsVoiceEnabled !== false;
+  const lunaTtsVoiceEl = document.getElementById("lunaTtsVoice");
+  if (lunaTtsVoiceEl) lunaTtsVoiceEl.value = settings.lunaTtsVoice || "nova";
+  const hiriTtsVoiceEl = document.getElementById("hiriTtsVoice");
+  if (hiriTtsVoiceEl) hiriTtsVoiceEl.value = settings.hiriTtsVoice || "alloy";
+  const assistantNameEl = document.getElementById("assistantName");
+  if (assistantNameEl) {
+    assistantNameEl.value = settings.assistantName || PERSONA_META[activePersonaId]?.displayName || "Luna";
+  }
+  const introOnNewChatEl = document.getElementById("introOnNewChat");
+  if (introOnNewChatEl) introOnNewChatEl.checked = settings.introOnNewChat !== false;
+  const customIntroMessageEl = document.getElementById("customIntroMessage");
+  if (customIntroMessageEl) customIntroMessageEl.value = settings.customIntroMessage || "";
   document.getElementById("groqApiKey").value        = settings.groqApiKey            || "";
   document.getElementById("groqModel").value         = settings.groqModelCustom       || "";
   document.getElementById("groqBaseUrl").value       = settings.groqBaseUrl           || "https://api.groq.com/openai/v1";
@@ -130,6 +194,52 @@ async function init() {
   if (webStudioEnabledEl) webStudioEnabledEl.checked = settings.webStudioEnabled !== false;
   if (selfBuildEnabledEl) selfBuildEnabledEl.checked = settings.selfBuildEnabled !== false;
   if (codeAgentNativeEnabledEl) codeAgentNativeEnabledEl.checked = settings.codeAgentNativeEnabled === true;
+  const assistantAutoCodeRouteEl = document.getElementById("assistantAutoCodeRoute");
+  if (assistantAutoCodeRouteEl) assistantAutoCodeRouteEl.checked = settings.assistantAutoCodeRoute !== false;
+  const codeAgentOpenStudioEl = document.getElementById("codeAgentOpenStudioOnStart");
+  if (codeAgentOpenStudioEl) codeAgentOpenStudioEl.checked = settings.codeAgentOpenStudioOnStart !== false;
+  const codeSemanticEl = document.getElementById("codeSemanticSearchEnabled");
+  if (codeSemanticEl) codeSemanticEl.checked = settings.codeSemanticSearchEnabled !== false;
+  const codeStudioMonacoEl = document.getElementById("codeStudioMonacoEnabled");
+  if (codeStudioMonacoEl) codeStudioMonacoEl.checked = settings.codeStudioMonacoEnabled !== false;
+  const codeStudioV3El = document.getElementById("codeStudioV3Enabled");
+  if (codeStudioV3El) codeStudioV3El.checked = settings.codeStudioV3Enabled !== false;
+  const codeReadinessBadgeEl = document.getElementById("codeReadinessBadgeEnabled");
+  if (codeReadinessBadgeEl) codeReadinessBadgeEl.checked = settings.codeReadinessBadgeEnabled !== false;
+  const codeAgentCheckpointEl = document.getElementById("codeAgentCheckpointEnabled");
+  if (codeAgentCheckpointEl) codeAgentCheckpointEl.checked = settings.codeAgentCheckpointEnabled !== false;
+  const codeAgentBatchEl = document.getElementById("codeAgentBatchEnabled");
+  if (codeAgentBatchEl) codeAgentBatchEl.checked = settings.codeAgentBatchEnabled === true;
+  const codeAgentRepairLoopEl = document.getElementById("codeAgentRepairLoopEnabled");
+  if (codeAgentRepairLoopEl) codeAgentRepairLoopEl.checked = settings.codeAgentRepairLoopEnabled === true;
+  const codeAgentBackgroundEl = document.getElementById("codeAgentBackgroundEnabled");
+  if (codeAgentBackgroundEl) codeAgentBackgroundEl.checked = settings.codeAgentBackgroundEnabled === true;
+  const codeTabCompletionEl = document.getElementById("codeTabCompletionEnabled");
+  if (codeTabCompletionEl) codeTabCompletionEl.checked = settings.codeTabCompletionEnabled === true;
+  const codeLspEl = document.getElementById("codeLspEnabled");
+  if (codeLspEl) codeLspEl.checked = settings.codeLspEnabled === true;
+  const panelExtendedContextEl = document.getElementById("panelExtendedContextEnabled");
+  if (panelExtendedContextEl) panelExtendedContextEl.checked = settings.panelExtendedContextEnabled !== false;
+  const gamedevBridgeMonitorEl = document.getElementById("gamedevBridgeMonitorEnabled");
+  if (gamedevBridgeMonitorEl) gamedevBridgeMonitorEl.checked = settings.gamedevBridgeMonitorEnabled !== false;
+  const gamedevAutoScaffoldEl = document.getElementById("gamedevAutoScaffoldEnabled");
+  if (gamedevAutoScaffoldEl) gamedevAutoScaffoldEl.checked = settings.gamedevAutoScaffoldEnabled === true;
+  const gamedevPlayLoopEl = document.getElementById("gamedevPlayLoopEnabled");
+  if (gamedevPlayLoopEl) gamedevPlayLoopEl.checked = settings.gamedevPlayLoopEnabled === true;
+  const gamedevMcpDirectPhasesEl = document.getElementById("gamedevMcpDirectPhasesEnabled");
+  if (gamedevMcpDirectPhasesEl) gamedevMcpDirectPhasesEl.checked = settings.gamedevMcpDirectPhasesEnabled === true;
+  const gamedevUnityPackageEl = document.getElementById("gamedevUnityPackageEnabled");
+  if (gamedevUnityPackageEl) gamedevUnityPackageEl.checked = settings.gamedevUnityPackageEnabled === true;
+  const smartPluginProfileEl = document.getElementById("smartPluginProfileEnabled");
+  if (smartPluginProfileEl) smartPluginProfileEl.checked = settings.smartPluginProfileEnabled !== false;
+  const pluginProfileNotifyEl = document.getElementById("pluginProfileNotifyEnabled");
+  if (pluginProfileNotifyEl) pluginProfileNotifyEl.checked = settings.pluginProfileNotifyEnabled !== false;
+  const pluginProfileModeEl = document.getElementById("pluginProfileMode");
+  if (pluginProfileModeEl) pluginProfileModeEl.value = settings.pluginProfileMode === "manual" ? "manual" : "auto";
+  const activePluginProfileEl = document.getElementById("activePluginProfile");
+  if (activePluginProfileEl) activePluginProfileEl.value = settings.activePluginProfile || "general";
+  const webDeployHintEl = document.getElementById("webDeployHintEnabled");
+  if (webDeployHintEl) webDeployHintEl.checked = settings.webDeployHintEnabled !== false;
   document.getElementById("awareAssistanceEnabled").checked = settings.awareAssistanceEnabled === true;
 
   setSelectValue("sttProvider", normalizeSttProvider(settings.sttProvider));
@@ -378,6 +488,8 @@ async function init() {
   });
 
   bindSettingsTabs();
+  initPersonalitySettings();
+  initApiKeyTests();
   initAboutSection();
   bindPluginCards();
   bindShortcutRecordButtons();
@@ -620,6 +732,257 @@ function initAboutSection() {
     const publisher = info.publisher || "Mehmet Can Bayatlı";
     publisherEl.textContent = `Geliştirici: ${publisher}`;
   }
+}
+
+function getSelectedPersonaId() {
+  const selected = document.querySelector('input[name="activePersonaId"]:checked');
+  return selected?.value || "luna";
+}
+
+function updatePersonaCardUi(personaId = getSelectedPersonaId()) {
+  document.querySelectorAll(".persona-card").forEach((card) => {
+    card.classList.toggle("persona-card--active", card.dataset.personaId === personaId);
+  });
+  const hintEl = document.getElementById("activePersonaHint");
+  if (hintEl) {
+    hintEl.textContent = `Şu an: ${PERSONA_META[personaId]?.label || personaId}`;
+  }
+  const matureSection = document.getElementById("lunaMatureSection");
+  if (matureSection) {
+    matureSection.hidden = personaId !== "luna";
+  }
+  const flirtWrap = document.getElementById("sliderFlirtinessWrap");
+  if (flirtWrap) {
+    flirtWrap.hidden = personaId === "hiri";
+  }
+}
+
+function loadPersonalitySliders(sliders = {}) {
+  const map = {
+    sliderResponseLength: sliders.responseLength ?? 50,
+    sliderWarmth: sliders.warmth ?? 70,
+    sliderFlirtiness: sliders.flirtiness ?? 50,
+    sliderEmoji: sliders.emoji ?? 30,
+  };
+  for (const [id, value] of Object.entries(map)) {
+    const input = document.getElementById(id);
+    const output = document.getElementById(`${id}Val`);
+    if (input) input.value = String(value);
+    if (output) output.textContent = String(value);
+  }
+}
+
+function collectPersonalitySliders() {
+  return {
+    responseLength: Number(document.getElementById("sliderResponseLength")?.value) || 50,
+    warmth: Number(document.getElementById("sliderWarmth")?.value) || 70,
+    flirtiness: Number(document.getElementById("sliderFlirtiness")?.value) || 50,
+    emoji: Number(document.getElementById("sliderEmoji")?.value) || 30,
+  };
+}
+
+async function loadScenarioOptions(activeScenarioId = "") {
+  const selectEl = document.getElementById("activeScenarioId");
+  if (!selectEl) {
+    return;
+  }
+  try {
+    const scenarios = await window.sauron.invoke("get-conversation-scenarios");
+    selectEl.innerHTML = "";
+    for (const scenario of scenarios || []) {
+      const option = document.createElement("option");
+      option.value = scenario.id || "";
+      option.textContent = scenario.label || scenario.id || "Varsayılan";
+      option.title = scenario.description || "";
+      selectEl.appendChild(option);
+    }
+    selectEl.value = activeScenarioId || "";
+  } catch {
+    selectEl.innerHTML = '<option value="">Varsayılan</option>';
+  }
+}
+
+function collectPersonalityDraft() {
+  const activePersonaId = getSelectedPersonaId();
+  return {
+    ownerName: document.getElementById("ownerName")?.value.trim() || "Can",
+    activePersonaId,
+    lunaMatureContentEnabled: document.getElementById("lunaMatureContentEnabled")?.checked === true,
+    lunaMaturePreferLocal: document.getElementById("lunaMaturePreferLocal")?.checked === true,
+    personalitySliders: collectPersonalitySliders(),
+    altGreetings: String(document.getElementById("altGreetings")?.value || "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean),
+    personalityFeedbackNotes: String(document.getElementById("personalityFeedbackNotes")?.value || "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean),
+    activeScenarioId: document.getElementById("activeScenarioId")?.value || "",
+    autoMemoryExtractionEnabled: document.getElementById("autoMemoryExtractionEnabled")?.checked === true,
+    lunaRelationshipEnabled: document.getElementById("lunaRelationshipEnabled")?.checked !== false,
+    panelAtFileContextEnabled: document.getElementById("panelAtFileContextEnabled")?.checked !== false,
+    channelHintChipsEnabled: document.getElementById("channelHintChipsEnabled")?.checked !== false,
+    personaAvatarEnabled: document.getElementById("personaAvatarEnabled")?.checked !== false,
+    voiceChatLoopEnabled: document.getElementById("voiceChatLoopEnabled")?.checked === true,
+    messageCostHintEnabled: document.getElementById("messageCostHintEnabled")?.checked !== false,
+    enhancedOnboardingEnabled: document.getElementById("enhancedOnboardingEnabled")?.checked !== false,
+    exampleDialogues: String(document.getElementById("exampleDialogues")?.value || "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean),
+    personaTtsVoiceEnabled: document.getElementById("personaTtsVoiceEnabled")?.checked !== false,
+    lunaTtsVoice: document.getElementById("lunaTtsVoice")?.value.trim() || "nova",
+    hiriTtsVoice: document.getElementById("hiriTtsVoice")?.value.trim() || "alloy",
+    assistantName: document.getElementById("assistantName")?.value.trim() || PERSONA_META[activePersonaId]?.displayName || "Luna",
+    introOnNewChat: document.getElementById("introOnNewChat")?.checked !== false,
+    customIntroMessage: document.getElementById("customIntroMessage")?.value.trim() || "",
+    systemPromptOverride: document.getElementById("systemPromptOverride")?.value.trim() || "",
+    userMemoryFacts: String(document.getElementById("userMemoryFacts")?.value || "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean),
+  };
+}
+
+async function refreshLunaRelationshipUi() {
+  const stageEl = document.getElementById("lunaRelationshipStageDisplay");
+  const countEl = document.getElementById("lunaRelationshipMessageCountDisplay");
+  const settingsBlock = document.getElementById("luna-relationship-settings");
+  const enabledEl = document.getElementById("lunaRelationshipEnabled");
+  const isLuna = getSelectedPersonaId() === "luna";
+  if (settingsBlock) {
+    settingsBlock.style.display = isLuna ? "" : "none";
+  }
+  if (!stageEl && !countEl) {
+    return;
+  }
+  if (!isLuna) {
+    if (stageEl) stageEl.textContent = "—";
+    if (countEl) countEl.textContent = "0";
+    return;
+  }
+  try {
+    const state = await window.sauron.invoke("get-luna-relationship-state");
+    const enabled = enabledEl ? enabledEl.checked !== false : state?.enabled !== false;
+    if (stageEl) stageEl.textContent = enabled ? (state?.label || state?.stage || "—") : "Kapalı";
+    if (countEl) countEl.textContent = String(state?.messageCount ?? 0);
+  } catch (error) {
+    if (stageEl) stageEl.textContent = "—";
+    if (countEl) countEl.textContent = "0";
+  }
+}
+
+async function refreshPersonalityPromptPreview() {
+  const coreEl = document.getElementById("personalityPreviewCore");
+  const personaEl = document.getElementById("personalityPreviewPersona");
+  const sharedEl = document.getElementById("personalityPreviewShared");
+  if (!coreEl || !personaEl || !sharedEl) {
+    return;
+  }
+  coreEl.textContent = "Yükleniyor…";
+  personaEl.textContent = "";
+  sharedEl.textContent = "";
+  try {
+    const result = await window.sauron.invoke("preview-system-prompt", collectPersonalityDraft());
+    coreEl.textContent = result?.sections?.core || "";
+    personaEl.textContent = result?.sections?.persona || "";
+    sharedEl.textContent = result?.sections?.shared || "";
+  } catch (error) {
+    coreEl.textContent = error?.message || "Önizleme yüklenemedi.";
+  }
+}
+
+function initPersonalitySettings() {
+  document.querySelectorAll('input[name="activePersonaId"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      const personaId = getSelectedPersonaId();
+      updatePersonaCardUi(personaId);
+      const assistantNameEl = document.getElementById("assistantName");
+      if (assistantNameEl && PERSONA_META[personaId]) {
+        assistantNameEl.value = PERSONA_META[personaId].displayName;
+      }
+      void refreshLunaRelationshipUi();
+    });
+  });
+  document.getElementById("lunaRelationshipEnabled")?.addEventListener("change", () => {
+    void refreshLunaRelationshipUi();
+  });
+  document.getElementById("btn-reset-luna-relationship")?.addEventListener("click", async () => {
+    if (!window.confirm("Luna ilişki hafızasını sıfırlamak istediğine emin misin?")) {
+      return;
+    }
+    try {
+      await window.sauron.invoke("reset-luna-relationship");
+      showToast("Luna ilişki hafızası sıfırlandı");
+      await refreshLunaRelationshipUi();
+    } catch (error) {
+      showToast(error?.message || "Sıfırlama başarısız", true);
+    }
+  });
+  updatePersonaCardUi(getSelectedPersonaId());
+  void refreshLunaRelationshipUi();
+
+  for (const id of ["sliderResponseLength", "sliderWarmth", "sliderFlirtiness", "sliderEmoji"]) {
+    const input = document.getElementById(id);
+    const output = document.getElementById(`${id}Val`);
+    input?.addEventListener("input", () => {
+      if (output) output.textContent = input.value;
+    });
+  }
+
+  document.getElementById("btn-refresh-prompt-preview")?.addEventListener("click", () => {
+    void refreshPersonalityPromptPreview();
+  });
+  document.getElementById("personalityPromptPreview")?.addEventListener("toggle", (event) => {
+    if (event.target.open) {
+      void refreshPersonalityPromptPreview();
+    }
+  });
+}
+
+function collectApiKeyDraft() {
+  return {
+    geminiApiKey: document.getElementById("geminiApiKey")?.value.trim() || "",
+    deepseekApiKey: document.getElementById("deepseekApiKey")?.value.trim() || "",
+    openaiApiKey: document.getElementById("openaiApiKey")?.value.trim() || "",
+    ollamaUrl: document.getElementById("ollamaUrl")?.value.trim() || "",
+    deepseekBaseUrl: document.getElementById("deepseekBaseUrl")?.value.trim() || "https://api.deepseek.com",
+    deepseekModelCustom: document.getElementById("deepseekModel")?.value.trim() || "deepseek-chat",
+    openaiBaseUrl: document.getElementById("openaiBaseUrl")?.value.trim() || "https://api.openai.com/v1",
+    openaiModelCustom: document.getElementById("openaiModel")?.value.trim() || "gpt-4o-mini",
+    geminiBaseUrl: document.getElementById("geminiBaseUrl")?.value.trim() || "",
+    geminiModelCustom: document.getElementById("geminiModel")?.value.trim() || "",
+  };
+}
+
+async function testApiKey(provider) {
+  const resultEl = document.getElementById("api-key-test-result");
+  if (resultEl) resultEl.textContent = "Test ediliyor…";
+  try {
+    const result = await window.sauron.invoke("test-api-key", {
+      provider,
+      draftSettings: collectApiKeyDraft(),
+    });
+    if (resultEl) {
+      resultEl.textContent = result?.ok
+        ? (result.message || "OK")
+        : (result?.error || "Başarısız");
+      resultEl.style.color = result?.ok ? "#86efac" : "#fca5a5";
+    }
+  } catch (error) {
+    if (resultEl) {
+      resultEl.textContent = error?.message || "Test hatası";
+      resultEl.style.color = "#fca5a5";
+    }
+  }
+}
+
+function initApiKeyTests() {
+  document.getElementById("btn-test-gemini-key")?.addEventListener("click", () => void testApiKey("gemini"));
+  document.getElementById("btn-test-deepseek-key")?.addEventListener("click", () => void testApiKey("deepseek"));
+  document.getElementById("btn-test-openai-key")?.addEventListener("click", () => void testApiKey("openai"));
+  document.getElementById("btn-test-ollama-key")?.addEventListener("click", () => void testApiKey("ollama"));
 }
 
 function bindSettingsTabs() {
@@ -1441,6 +1804,29 @@ async function saveSettings() {
     webStudioEnabled:        document.getElementById("webStudioEnabled")?.checked !== false,
     selfBuildEnabled:        document.getElementById("selfBuildEnabled")?.checked !== false,
     codeAgentNativeEnabled:  document.getElementById("codeAgentNativeEnabled")?.checked === true,
+    assistantAutoCodeRoute: document.getElementById("assistantAutoCodeRoute")?.checked !== false,
+    codeAgentOpenStudioOnStart: document.getElementById("codeAgentOpenStudioOnStart")?.checked !== false,
+    codeSemanticSearchEnabled: document.getElementById("codeSemanticSearchEnabled")?.checked !== false,
+    codeStudioMonacoEnabled: document.getElementById("codeStudioMonacoEnabled")?.checked !== false,
+    codeStudioV3Enabled: document.getElementById("codeStudioV3Enabled")?.checked !== false,
+    codeReadinessBadgeEnabled: document.getElementById("codeReadinessBadgeEnabled")?.checked !== false,
+    codeAgentCheckpointEnabled: document.getElementById("codeAgentCheckpointEnabled")?.checked !== false,
+    codeAgentBatchEnabled: document.getElementById("codeAgentBatchEnabled")?.checked === true,
+    codeAgentRepairLoopEnabled: document.getElementById("codeAgentRepairLoopEnabled")?.checked === true,
+    codeAgentBackgroundEnabled: document.getElementById("codeAgentBackgroundEnabled")?.checked === true,
+    codeTabCompletionEnabled: document.getElementById("codeTabCompletionEnabled")?.checked === true,
+    codeLspEnabled: document.getElementById("codeLspEnabled")?.checked === true,
+    panelExtendedContextEnabled: document.getElementById("panelExtendedContextEnabled")?.checked !== false,
+    gamedevBridgeMonitorEnabled: document.getElementById("gamedevBridgeMonitorEnabled")?.checked !== false,
+    gamedevAutoScaffoldEnabled: document.getElementById("gamedevAutoScaffoldEnabled")?.checked === true,
+    gamedevPlayLoopEnabled: document.getElementById("gamedevPlayLoopEnabled")?.checked === true,
+    gamedevMcpDirectPhasesEnabled: document.getElementById("gamedevMcpDirectPhasesEnabled")?.checked === true,
+    gamedevUnityPackageEnabled: document.getElementById("gamedevUnityPackageEnabled")?.checked === true,
+    smartPluginProfileEnabled: document.getElementById("smartPluginProfileEnabled")?.checked !== false,
+    pluginProfileNotifyEnabled: document.getElementById("pluginProfileNotifyEnabled")?.checked !== false,
+    pluginProfileMode: document.getElementById("pluginProfileMode")?.value === "manual" ? "manual" : "auto",
+    activePluginProfile: document.getElementById("activePluginProfile")?.value || "general",
+    webDeployHintEnabled: document.getElementById("webDeployHintEnabled")?.checked !== false,
     awareAssistanceEnabled:  document.getElementById("awareAssistanceEnabled").checked,
     includeScreenshotByDefault: false,
     workspacePath:           document.getElementById("workspacePath").value.trim(),
@@ -1481,6 +1867,38 @@ async function saveSettings() {
       .split("\n")
       .map((line) => line.trim())
       .filter(Boolean),
+    ownerName: document.getElementById("ownerName")?.value.trim() || "Can",
+    activePersonaId: getSelectedPersonaId(),
+    lunaMatureContentEnabled: document.getElementById("lunaMatureContentEnabled")?.checked === true,
+    lunaMaturePreferLocal: document.getElementById("lunaMaturePreferLocal")?.checked === true,
+    personalitySliders: collectPersonalitySliders(),
+    altGreetings: String(document.getElementById("altGreetings")?.value || "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean),
+    personalityFeedbackNotes: String(document.getElementById("personalityFeedbackNotes")?.value || "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean),
+    activeScenarioId: document.getElementById("activeScenarioId")?.value || "",
+    autoMemoryExtractionEnabled: document.getElementById("autoMemoryExtractionEnabled")?.checked === true,
+    lunaRelationshipEnabled: document.getElementById("lunaRelationshipEnabled")?.checked !== false,
+    panelAtFileContextEnabled: document.getElementById("panelAtFileContextEnabled")?.checked !== false,
+    channelHintChipsEnabled: document.getElementById("channelHintChipsEnabled")?.checked !== false,
+    personaAvatarEnabled: document.getElementById("personaAvatarEnabled")?.checked !== false,
+    voiceChatLoopEnabled: document.getElementById("voiceChatLoopEnabled")?.checked === true,
+    messageCostHintEnabled: document.getElementById("messageCostHintEnabled")?.checked !== false,
+    enhancedOnboardingEnabled: document.getElementById("enhancedOnboardingEnabled")?.checked !== false,
+    exampleDialogues: String(document.getElementById("exampleDialogues")?.value || "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean),
+    personaTtsVoiceEnabled: document.getElementById("personaTtsVoiceEnabled")?.checked !== false,
+    lunaTtsVoice: document.getElementById("lunaTtsVoice")?.value.trim() || "nova",
+    hiriTtsVoice: document.getElementById("hiriTtsVoice")?.value.trim() || "alloy",
+    assistantName: document.getElementById("assistantName")?.value.trim() || PERSONA_META[getSelectedPersonaId()]?.displayName || "Luna",
+    introOnNewChat: document.getElementById("introOnNewChat")?.checked !== false,
+    customIntroMessage: document.getElementById("customIntroMessage")?.value.trim() || "",
     chatBackupEnabled: document.getElementById("chatBackupEnabled")?.checked === true,
     chatBackupPath: document.getElementById("chatBackupPath")?.value.trim() || "",
   };

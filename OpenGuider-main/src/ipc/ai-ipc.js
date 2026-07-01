@@ -26,9 +26,34 @@ function registerAiIpc({
   showPointer,
   wrapUserFacingError,
   getActiveChatSessionRecord,
+  broadcastSettingsChanged,
 }) {
   const { buildMemoryChatHistory } = require("../session/memory-chat-context");
   const { maybeCompressMemoryChat } = require("../session/memory-chat-compressor");
+  const { enrichTextWithAtFileContext } = require("../panel/at-file-context");
+  const { extractMemoryFactsFromTurn, mergeMemoryFacts } = require("../session/auto-memory-extract");
+  const { resolveActivePersonaId } = require("../ai/personas");
+  const {
+    recordLunaMessage,
+    normalizeProfile,
+    emptyProfile,
+    getLunaRelationshipState,
+  } = require("../session/luna-relationship");
+  const {
+    extractLunaRelationshipFromTurn,
+    mergeExtractionIntoProfile,
+    hasExtractionContent,
+  } = require("../session/luna-relationship-extract");
+  const TASK_RUNTIME = { includePersona: false };
+  const PANEL_RUNTIME = { includePersona: true };
+  const PERSONA_SWITCH_REPLY =
+    "Persona değiştirmek için Ayarlar → Kişilik sekmesine git. Oradan Luna veya Hiri'yi seçebilirsin.";
+
+  function isPersonaSwitchRequest(text) {
+    const normalized = String(text || "").trim();
+    if (!normalized) return false;
+    return /\b(persona\s*değiştir|kişilik\s*değiştir|luna(?:'|')?ya\s*geç|hiri(?:'|')?ye\s*geç|hiri\s*modu|luna\s*modu)\b/i.test(normalized);
+  }
   function getCurrentAIController() {
     return currentAIControllerRef.current;
   }
@@ -43,7 +68,7 @@ function registerAiIpc({
     if (getCurrentAIController()) getCurrentAIController().abort();
     const controller = new AbortController();
     setCurrentAIController(controller);
-    const runtimeSettings = await getRuntimeSettings();
+    const runtimeSettings = await getRuntimeSettings(TASK_RUNTIME);
 
     try {
       const result = await runner({
@@ -75,7 +100,7 @@ function registerAiIpc({
     if (getCurrentAIController()) getCurrentAIController().abort();
     const controller = new AbortController();
     setCurrentAIController(controller);
-    const runtimeSettings = await getRuntimeSettings();
+    const runtimeSettings = await getRuntimeSettings(TASK_RUNTIME);
     if (Array.isArray(images) && images.length > 0) {
       updatePointerCalibration(images);
     }
@@ -116,7 +141,7 @@ function registerAiIpc({
     if (getCurrentAIController()) getCurrentAIController().abort();
     const controller = new AbortController();
     setCurrentAIController(controller);
-    const runtimeSettings = await getRuntimeSettings();
+    const runtimeSettings = await getRuntimeSettings(TASK_RUNTIME);
     if (Array.isArray(images) && images.length > 0) {
       updatePointerCalibration(images);
     }
@@ -159,7 +184,7 @@ function registerAiIpc({
   ipcMain.handle("previous-step", (event, payload) => runOrchestratorHandler("previous-step", event, (opts) => taskOrchestrator.previousStep({ ...opts, images: payload?.images })));
   ipcMain.handle("regenerate-current-step", (event, payload) => runOrchestratorHandler("regenerate-current-step", event, (opts) => taskOrchestrator.regenerateCurrentStep({ ...opts, images: payload?.images })));
 
-  ipcMain.handle("send-message", async (event, { text, images, history, fastMode, skipUserPersist, regenerate }) => {
+  ipcMain.handle("send-message", async (event, { text, images, history, fastMode, skipUserPersist, regenerate, introRequest }) => {
     const requestContext = createRequestContext("send-message");
     const startedAt = Date.now();
     debugLog("ipc:send-message start", {
@@ -183,7 +208,28 @@ function registerAiIpc({
     let effectiveHistory;
     let chatOperation = "chat";
 
-    const settings = await getRuntimeSettings();
+    if (!skipUserPersist && text && isPersonaSwitchRequest(text)) {
+      sessionManager.addMessage({ role: "user", content: text });
+      sessionManager.addMessage({ role: "assistant", content: PERSONA_SWITCH_REPLY });
+      if (!isMemoryChat) {
+        sessionManager.trimMessages(MAX_STORED_MESSAGES);
+      }
+      persistActiveSession(store, sessionManager.getSnapshot());
+      broadcastSessionSnapshot(sessionManager.getSnapshot());
+      if (!event.sender.isDestroyed()) {
+        event.sender.send("ai-done", { spokenText: PERSONA_SWITCH_REPLY, coordinate: null, label: null, requestId: requestContext.requestId });
+      }
+      broadcastAgentState("idle");
+      updateWidgetState("idle");
+      setCurrentAIController(null);
+      return { spokenText: PERSONA_SWITCH_REPLY, requestId: requestContext.requestId };
+    }
+
+    const settings = await getRuntimeSettings({
+      ...PANEL_RUNTIME,
+      modeOverlay: fastMode !== false ? ASSISTANT_CHAT_PROMPT : null,
+      introDirective: introRequest === true,
+    });
     const panelContextLimit = (() => {
       const { resolvePanelContextMessages } = require("../sauron/finops/cost-optimizer-config");
       return resolvePanelContextMessages(settings);
@@ -213,20 +259,24 @@ function registerAiIpc({
       if (!isMemoryChat) {
         sessionManager.trimMessages(MAX_STORED_MESSAGES);
       }
+    } else if (introRequest === true && !skipUserPersist) {
+      sessionManager.addMessage({ role: "user", content: "Yeni sohbet başladı." });
     }
 
     broadcastAgentState("thinking");
     updateWidgetState("thinking");
     const requestSettings = { ...settings };
-    if (fastMode !== false) {
-      const userPrompt = settings.systemPromptOverride || "";
-      requestSettings.systemPromptOverride = `${userPrompt}\n\n${ASSISTANT_CHAT_PROMPT}`.trim();
-    }
     try {
       const layerManager = taskOrchestrator?.isAwareAssistanceEnabled?.()
         ? taskOrchestrator.interactionPipeline
         : null;
-      let enrichedText = text;
+      let enrichedText = introRequest === true && !String(text || "").trim()
+        ? "Merhaba."
+        : text;
+      if (settings.panelAtFileContextEnabled !== false && settings.workspacePath && enrichedText) {
+        const atFileResult = enrichTextWithAtFileContext(enrichedText, settings.workspacePath, true);
+        enrichedText = atFileResult.text;
+      }
       if (layerManager && Array.isArray(images) && images.length > 0) {
         try {
           const preContext = await layerManager.preprocess({
@@ -277,6 +327,91 @@ function registerAiIpc({
             getActiveChatSessionRecord,
             appLogger,
           });
+        });
+      }
+
+      if (
+        settings.autoMemoryExtractionEnabled === true
+        && !isMemoryChat
+        && text
+        && assistantContent
+        && !introRequest
+      ) {
+        setImmediate(() => {
+          void (async () => {
+            try {
+              const taskSettings = await getRuntimeSettings(TASK_RUNTIME);
+              const controller = new AbortController();
+              const timer = setTimeout(() => controller.abort(), 20000);
+              const newFacts = await extractMemoryFactsFromTurn({
+                userText: text,
+                assistantText: assistantContent,
+                streamAIResponse,
+                settings: taskSettings,
+                signal: controller.signal,
+              });
+              clearTimeout(timer);
+              if (!newFacts.length) {
+                return;
+              }
+              const merged = mergeMemoryFacts(store.get("userMemoryFacts") || [], newFacts);
+              store.set("userMemoryFacts", merged);
+              if (typeof broadcastSettingsChanged === "function") {
+                broadcastSettingsChanged();
+              }
+            } catch (memoryError) {
+              appLogger.warn("auto-memory-extract failed", { error: memoryError?.message || memoryError });
+            }
+          })();
+        });
+      }
+
+      const activePersonaId = resolveActivePersonaId(settings);
+      if (
+        activePersonaId === "luna"
+        && settings.lunaRelationshipEnabled !== false
+        && !isMemoryChat
+        && !introRequest
+        && text
+        && assistantContent
+      ) {
+        const recordedProfile = recordLunaMessage(store.get("lunaRelationshipProfile") || emptyProfile());
+        store.set("lunaRelationshipProfile", recordedProfile);
+        if (typeof broadcastSettingsChanged === "function") {
+          broadcastSettingsChanged();
+        }
+
+        setImmediate(() => {
+          void (async () => {
+            try {
+              const taskSettings = await getRuntimeSettings(TASK_RUNTIME);
+              const extractController = new AbortController();
+              const extractTimer = setTimeout(() => extractController.abort(), 20000);
+              const extraction = await extractLunaRelationshipFromTurn({
+                userText: text,
+                assistantText: assistantContent,
+                streamAIResponse,
+                settings: taskSettings,
+                signal: extractController.signal,
+              });
+              clearTimeout(extractTimer);
+              if (!hasExtractionContent(extraction)) {
+                return;
+              }
+              const mergedProfile = mergeExtractionIntoProfile(
+                store.get("lunaRelationshipProfile") || recordedProfile,
+                extraction,
+              );
+              store.set("lunaRelationshipProfile", mergedProfile);
+              if (typeof broadcastSettingsChanged === "function") {
+                broadcastSettingsChanged();
+              }
+            } catch (relationshipError) {
+              appLogger.warn("luna-relationship-extract failed", {
+                error: relationshipError?.message || relationshipError,
+              });
+            }
+          })();
         });
       }
 
@@ -393,6 +528,23 @@ function registerAiIpc({
   ipcMain.handle("cancel-active-plan", (_event, options) => {
     debugLog("ipc:cancel-active-plan");
     return taskOrchestrator.cancelActivePlan(options || {});
+  });
+
+  ipcMain.handle("get-luna-relationship-state", async () => {
+    debugLog("ipc:get-luna-relationship-state");
+    const settings = await getRuntimeSettings(PANEL_RUNTIME);
+    return getLunaRelationshipState(settings);
+  });
+
+  ipcMain.handle("reset-luna-relationship", async () => {
+    debugLog("ipc:reset-luna-relationship");
+    const freshProfile = emptyProfile();
+    store.set("lunaRelationshipProfile", freshProfile);
+    if (typeof broadcastSettingsChanged === "function") {
+      broadcastSettingsChanged();
+    }
+    const settings = await getRuntimeSettings(PANEL_RUNTIME);
+    return getLunaRelationshipState(settings);
   });
 }
 

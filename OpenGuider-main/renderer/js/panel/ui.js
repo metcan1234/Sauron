@@ -975,6 +975,86 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     });
   }
 
+  function confirmDiffDialog({ title, path, diff }) {
+    const diffText = String(diff || "").slice(0, 4000);
+    const messageHtml = [
+      `<div class="diff-dialog-path">${escapeHtml(path || "dosya")}</div>`,
+      `<pre class="diff-dialog-preview">${escapeHtml(diffText || "Diff önizlemesi yok.")}</pre>`,
+    ].join("");
+    if (!dom.confirmOverlay || !dom.confirmMessage) {
+      return confirmDialog({
+        title,
+        message: diffText || "Değişiklik onayı bekleniyor.",
+        confirmLabel: "Onayla",
+        cancelLabel: "Reddet",
+      });
+    }
+    return new Promise((resolve) => {
+      if (dom.confirmTitle) {
+        dom.confirmTitle.textContent = title || "Dosya değişikliği";
+      }
+      dom.confirmMessage.innerHTML = messageHtml;
+      dom.confirmCancel.textContent = "Reddet";
+      dom.confirmConfirm.textContent = "Onayla";
+      dom.confirmConfirm.classList.remove("danger");
+      dom.confirmOverlay.classList.remove("hidden");
+      dom.confirmConfirm.focus();
+
+      let settled = false;
+      function finish(result) {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        dom.confirmOverlay.classList.add("hidden");
+        dom.confirmMessage.textContent = "";
+        dom.confirmCancel.removeEventListener("click", onCancel);
+        dom.confirmConfirm.removeEventListener("click", onConfirm);
+        doc.removeEventListener("keydown", onKeydown);
+        dom.confirmOverlay.removeEventListener("click", onBackdrop);
+        resolve(result);
+      }
+      function onCancel() { finish(false); }
+      function onConfirm() { finish(true); }
+      function onBackdrop(event) {
+        if (event.target === dom.confirmOverlay) {
+          finish(false);
+        }
+      }
+      function onKeydown(event) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          finish(false);
+        } else if (event.key === "Enter") {
+          event.preventDefault();
+          finish(true);
+        }
+      }
+      dom.confirmCancel.addEventListener("click", onCancel);
+      dom.confirmConfirm.addEventListener("click", onConfirm);
+      dom.confirmOverlay.addEventListener("click", onBackdrop);
+      doc.addEventListener("keydown", onKeydown);
+    });
+  }
+
+  function renderWorkspaceBadge(workspacePath) {
+    const badgeEl = doc.getElementById("workspace-active-badge");
+    if (!badgeEl) {
+      return;
+    }
+    const trimmed = String(workspacePath || "").trim();
+    if (!trimmed) {
+      badgeEl.classList.add("hidden");
+      badgeEl.textContent = "";
+      return;
+    }
+    const parts = trimmed.replace(/\\/g, "/").split("/");
+    const label = parts[parts.length - 1] || trimmed;
+    badgeEl.textContent = `📁 ${label}`;
+    badgeEl.title = trimmed;
+    badgeEl.classList.remove("hidden");
+  }
+
   function promptDialog({
     title = "Giriş",
     message = "",
@@ -1251,6 +1331,55 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     }
   }
 
+  async function refreshCodeReadinessBadge() {
+    const badgeEl = doc.getElementById("code-readiness-badge");
+    if (!badgeEl) {
+      return;
+    }
+    const profile = state.getProfileMeta?.()?.profile || "general";
+    if (profile !== "general" && profile !== "code") {
+      badgeEl.classList.add("hidden");
+      return;
+    }
+    try {
+      const result = await api.invoke("get-coding-readiness-summary");
+      if (!result?.ok || result.disabled) {
+        badgeEl.classList.add("hidden");
+        return;
+      }
+      badgeEl.textContent = result.status === "ready" ? "Kod ✓" : "Kod ⚠";
+      badgeEl.title = result.headline || "Kod hazırlığı";
+      badgeEl.classList.toggle("is-ready", result.status === "ready");
+      badgeEl.classList.toggle("is-blocked", result.status !== "ready");
+      badgeEl.classList.remove("hidden");
+    } catch (error) {
+      log("get-coding-readiness-summary error", error);
+      badgeEl.classList.add("hidden");
+    }
+  }
+
+  async function refreshReadinessBadge() {
+    const badgeEl = doc.getElementById("readiness-badge");
+    if (!badgeEl) {
+      return;
+    }
+    try {
+      const result = await api.invoke("get-readiness-summary");
+      if (!result?.ok || !result.headline) {
+        badgeEl.classList.add("hidden");
+        return;
+      }
+      badgeEl.textContent = result.status === "ready" ? "✓ Hazır" : "⚠ Eksik";
+      badgeEl.title = result.headline;
+      badgeEl.classList.toggle("is-ready", result.status === "ready");
+      badgeEl.classList.toggle("is-blocked", result.status !== "ready");
+      badgeEl.classList.remove("hidden");
+    } catch (error) {
+      log("get-readiness-summary error", error);
+      badgeEl.classList.add("hidden");
+    }
+  }
+
   function startWaveformAnimation() {
     const bars = doc.querySelectorAll(".waveform-bar");
     const interval = window.setInterval(() => {
@@ -1376,10 +1505,14 @@ export function createPanelUI({ api, doc = document, dom, log, state }) {
     closeArtifactPanel,
     confirmClearConversation,
     confirmDialog,
+    confirmDiffDialog,
     getActiveArtifact,
     openArtifactPanel,
     promptDialog,
     refreshFinOpsBadge,
+    refreshReadinessBadge,
+    refreshCodeReadinessBadge,
+    renderWorkspaceBadge,
     renderAttachmentPreviewStrip,
     renderScreenshotPreviewStrip,
     updateScreenPendingBadge,

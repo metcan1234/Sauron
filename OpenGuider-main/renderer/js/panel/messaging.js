@@ -1,5 +1,10 @@
 import { MAX_AI_CONTEXT_MESSAGES, MAX_STORED_MESSAGES } from "./constants.js";
 import { isWebStudioEnabled } from "./feature-visibility.js";
+import {
+  getPersonaCodeCompleteMessage,
+  getPersonaCodeErrorMessage,
+  getPersonaCodeStartMessage,
+} from "./persona-messages.js";
 
 export function createMessagingController({
   api,
@@ -9,10 +14,42 @@ export function createMessagingController({
   state,
   ui,
   webStudio,
+  resolvePluginProfile,
 }) {
   let syncQueue = Promise.resolve();
   let currentAbortController = null;
   let requestTimeoutId = null;
+  let lastSessionSpentTl = 0;
+
+  async function updateMessageCostHint() {
+    const hintEl = doc.getElementById("message-cost-hint");
+    if (!hintEl || state.getSettings()?.messageCostHintEnabled === false) {
+      hintEl?.classList.add("hidden");
+      return;
+    }
+    try {
+      const summary = await api.invoke("get-finops-summary");
+      const sessionSpent = Number(summary?.sessionSpentTl) || 0;
+      const delta = sessionSpent - lastSessionSpentTl;
+      lastSessionSpentTl = sessionSpent;
+      if (delta > 0.001) {
+        hintEl.textContent = `~${delta.toFixed(2)} ₺`;
+        hintEl.classList.remove("hidden");
+        window.setTimeout(() => hintEl.classList.add("hidden"), 8000);
+      }
+    } catch (error) {
+      log("message-cost-hint error", error);
+    }
+  }
+
+  async function primeMessageCostBaseline() {
+    try {
+      const summary = await api.invoke("get-finops-summary");
+      lastSessionSpentTl = Number(summary?.sessionSpentTl) || 0;
+    } catch {
+      lastSessionSpentTl = 0;
+    }
+  }
 
   function cancelMessage() {
     if (!state.isStreaming()) return;
@@ -280,28 +317,73 @@ export function createMessagingController({
     await runMicroGuideIpc("start-micro-guide-session", { goal: trimmedGoal, images: screens }, trimmedGoal);
   }
 
+  async function persistAssistantLine(content) {
+    const text = String(content || "").trim();
+    if (!text) {
+      return;
+    }
+    ui.appendAssistantMessage(text);
+    try {
+      const result = await api.invoke("append-assistant-message", { content: text });
+      if (result?.session) {
+        state.setSessionSnapshot(result.session);
+      }
+    } catch (error) {
+      log("append-assistant-message error", error);
+    }
+  }
+
   async function startCodeAgentSession(goal) {
     const trimmedGoal = String(goal || "").trim();
     if (!trimmedGoal) {
       ui.showToast("Görev metni gerekli.", true);
       return;
     }
+    const settings = state.getSettings() || {};
     dom.textInput.value = "";
     dom.textInput.style.height = "auto";
     ui.hideErrorBanner();
+    ui.appendUserMessage(trimmedGoal);
+    await persistAssistantLine(getPersonaCodeStartMessage(settings));
+    ui.scrollToBottom();
+
+    if (settings.codeAgentOpenStudioOnStart !== false) {
+      void api.invoke("open-code-studio");
+    }
+
     ui.renderAgentState("working");
-    doc.getElementById("code-agent-badge")?.classList.remove("hidden");
+    const badgeEl = doc.getElementById("code-agent-badge");
+    const cancelBtn = doc.getElementById("btn-code-agent-cancel");
+    badgeEl?.classList.remove("hidden");
+    cancelBtn?.classList.remove("hidden");
 
     const result = await api.invoke("start-code-agent-session", { goal: trimmedGoal });
-    doc.getElementById("code-agent-badge")?.classList.add("hidden");
+    badgeEl?.classList.add("hidden");
+    cancelBtn?.classList.add("hidden");
     ui.renderAgentState("idle");
 
     if (!result?.ok) {
+      const errorText = getPersonaCodeErrorMessage(settings, result?.error || "Kod agent başarısız");
+      await persistAssistantLine(errorText);
       ui.showToast(result?.error || "Kod agent başarısız", true);
+      ui.scrollToBottom();
       return;
     }
-    ui.appendAssistantMessage(result.session?.summary || "Kod agent görevi tamamlandı.");
+    const summary = result.session?.summary || result.summary || "";
+    await persistAssistantLine(getPersonaCodeCompleteMessage(settings, summary));
     ui.scrollToBottom();
+  }
+
+  async function cancelCodeAgent() {
+    try {
+      await api.invoke("code-agent-cancel", {});
+    } catch (error) {
+      log("code-agent-cancel error", error);
+    }
+    doc.getElementById("code-agent-badge")?.classList.add("hidden");
+    doc.getElementById("btn-code-agent-cancel")?.classList.add("hidden");
+    ui.renderAgentState("idle");
+    ui.showToast("Kod agent durduruldu", false);
   }
 
   async function ackMicroGuide() {
@@ -327,6 +409,13 @@ export function createMessagingController({
   }
 
   async function routeOutgoingMessage(rawText, text, options) {
+    if (typeof resolvePluginProfile === "function" && String(rawText || "").trim()) {
+      await resolvePluginProfile({
+        text: rawText,
+        source: "message",
+        workspacePath: state.getSetting("workspacePath") || "",
+      }, { notify: true });
+    }
     const intent = await api.invoke("detect-micro-guide-intent", { text: rawText });
     const codeIntent = await api.invoke("detect-code-intent", { text: rawText });
     const settings = state.getSettings() || {};
@@ -354,20 +443,23 @@ export function createMessagingController({
     }
 
     if (routeResult?.route === "code_agent_busy") {
-      ui.showToast("Kod agent aktif — tamamlanmasını bekleyin veya iptal edin.", false);
+      ui.showToast("Kod agent aktif — Durdur ile iptal edebilirsin.", false);
       return true;
     }
 
     if (routeResult?.route === "code_agent") {
-      const confirmed = await ui.confirmDialog({
-        title: "Yerel Kod Agent",
-        message: "Bu görev yerel kod agent ile workspace'te çalıştırılsın mı? (Cline gerekmez)",
-        confirmLabel: "Başlat",
-        cancelLabel: "Sohbete devam",
-      });
-      if (!confirmed) {
-        await sendAssistantMessage(text, options);
-        return true;
+      const autoRoute = settings.assistantAutoCodeRoute !== false;
+      if (!autoRoute) {
+        const confirmed = await ui.confirmDialog({
+          title: "Yerel Kod Agent",
+          message: "Bu görev yerel kod agent ile workspace'te çalıştırılsın mı? (Cline gerekmez)",
+          confirmLabel: "Başlat",
+          cancelLabel: "Sohbete devam",
+        });
+        if (!confirmed) {
+          await sendAssistantMessage(text, options);
+          return true;
+        }
       }
       await startCodeAgentSession(rawText);
       return true;
@@ -395,6 +487,27 @@ export function createMessagingController({
     if (routeResult?.route === "plan_guide") {
       await sendGuideMessage(text, options);
       return true;
+    }
+
+    if (codeIntent?.shouldSuggest && routeResult?.route === "assistant_chat") {
+      try {
+        const suggestion = await api.invoke("suggest-code-execution-path", {
+          codeAgentNativeEnabled: settings.codeAgentNativeEnabled === true,
+          workspacePath: settings.workspacePath || "",
+          codeIntent,
+        });
+        if (suggestion?.path === "cline_handoff") {
+          ui.showToast("Bu görev için Cline handoff önerilir (⌘ Çalışma Kısmı).", false);
+        } else if (suggestion?.path === "setup_required") {
+          ui.showToast("Bu görev için Yerel Agent veya Cline — önce workspace kurulumunu tamamlayın.", false);
+        } else if (suggestion?.path !== "native_agent" && suggestion?.path !== "none") {
+          ui.showToast("Bu görev için Yerel Agent (ayarlar) veya Cline önerilir.", false);
+        } else if (suggestion?.path === "none" && settings.codeAgentNativeEnabled !== true) {
+          ui.showToast("Bu görev için Yerel Agent veya Cline önerilir.", false);
+        }
+      } catch (error) {
+        log("suggest-code-execution-path error", error);
+      }
     }
 
     return false;
@@ -460,7 +573,7 @@ export function createMessagingController({
     });
 
     try {
-      if (!skipUserPersist) {
+      if (!skipUserPersist && !options.introRequest) {
         ui.appendUserMessage(text);
         state.addConversationMessage({ role: "user", content: text });
       }
@@ -477,6 +590,7 @@ export function createMessagingController({
         fastMode: true,
         skipUserPersist,
         regenerate,
+        introRequest: options.introRequest === true,
       });
     } catch (error) {
       onAIError(error.message);
@@ -710,6 +824,8 @@ export function createMessagingController({
     }
 
     ui.scrollToBottom();
+    void updateMessageCostHint();
+    void ui.refreshFinOpsBadge?.();
     log("ipc:ai-done received", {
       requestId: result.requestId || null,
       hasCoordinate: Boolean(result.coordinate),
@@ -755,6 +871,13 @@ export function createMessagingController({
     log("ipc:ai-error received", payload);
   }
 
+  async function sendIntroRequest() {
+    if (state.isStreaming()) {
+      return;
+    }
+    await sendAssistantMessage("Merhaba.", { introRequest: true, skipUserPersist: true });
+  }
+
   return {
     appendStreamChunk,
     captureScreenshot,
@@ -763,13 +886,16 @@ export function createMessagingController({
     syncSession,
     onAIDone,
     onAIError,
+    primeMessageCostBaseline,
     cancelMessage,
     deleteMessage,
     editMessage,
     regenerateLastResponse,
     sendMessage,
+    sendIntroRequest,
     startMicroGuideSession,
     startCodeAgentSession,
+    cancelCodeAgent,
     ackMicroGuide,
   };
 }

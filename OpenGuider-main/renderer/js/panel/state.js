@@ -1,6 +1,16 @@
 export function createPanelState() {
   const state = {
     settings: {},
+    rawSettings: {},
+    profileMeta: {
+      profile: "general",
+      label: "Genel",
+      mode: "auto",
+      smartEnabled: true,
+      notifyEnabled: true,
+      activated: [],
+      deactivated: [],
+    },
     conversationHistory: [],
     sessionSnapshot: null,
     activePlan: null,
@@ -25,6 +35,22 @@ export function createPanelState() {
 
   function getSettings() {
     return state.settings;
+  }
+
+  function getRawSettings() {
+    return state.rawSettings;
+  }
+
+  function setRawSettings(nextSettings) {
+    state.rawSettings = nextSettings || {};
+  }
+
+  function getProfileMeta() {
+    return state.profileMeta;
+  }
+
+  function setProfileMeta(nextMeta) {
+    state.profileMeta = { ...state.profileMeta, ...(nextMeta || {}) };
   }
 
   function setSettings(nextSettings) {
@@ -263,6 +289,8 @@ export function createPanelState() {
     getPendingAttachments,
     getPendingScreenshots,
     getPointer,
+    getProfileMeta,
+    getRawSettings,
     getRecognition,
     getSessionSnapshot,
     getSetting,
@@ -287,6 +315,8 @@ export function createPanelState() {
     setPendingScreenshots,
     setPointer,
     setPttCleanup,
+    setProfileMeta,
+    setRawSettings,
     setRecognition,
     setRecording,
     setSessionSnapshot,

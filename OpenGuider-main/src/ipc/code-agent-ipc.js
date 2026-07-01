@@ -9,6 +9,9 @@ const {
 const { buildCodeIndex, getIndexStatus } = require("../code-agent/codebase-indexer");
 const { detectCodeIntent } = require("../code-agent/detect-code-intent");
 const { listFilesRecursive, resolveSafePath } = require("../code-agent/workspace-sandbox");
+const { applyWrite } = require("../code-agent/code-tools/write-file");
+const { getWorkspaceGitSummary } = require("../code-agent/code-tools/git-branch");
+const { getCodingReadiness } = require("../sauron/coding-readiness");
 
 function registerCodeAgentIpc({
   ipcMain,
@@ -46,7 +49,7 @@ function registerCodeAgentIpc({
       currentAIControllerRef.current = controller;
     }
     try {
-      const settings = await getRuntimeSettings();
+      const settings = await getRuntimeSettings({ includePersona: false });
       const result = await runCodeAgentSession({
         workspacePath: resolved,
         goal: String(goal || "").trim(),
@@ -139,6 +142,76 @@ function registerCodeAgentIpc({
     } catch (error) {
       return { ok: false, error: error?.message || "Read failed." };
     }
+  });
+
+  ipcMain.handle("write-workspace-file", async (_event, { workspacePath, filePath, content } = {}) => {
+    const resolved = resolveWorkspacePath(workspacePath);
+    if (!resolved || !filePath) {
+      return { ok: false, error: "Workspace path and file path required." };
+    }
+    try {
+      return applyWrite(resolved, {
+        path: filePath,
+        after: String(content ?? ""),
+      });
+    } catch (error) {
+      return { ok: false, error: error?.message || "Write failed." };
+    }
+  });
+
+  ipcMain.handle("get-workspace-git-summary", async (_event, { workspacePath } = {}) => {
+    debugLog("ipc:get-workspace-git-summary");
+    const resolved = resolveWorkspacePath(workspacePath);
+    if (!resolved) {
+      return { ok: false, error: "Workspace path is not configured." };
+    }
+    return getWorkspaceGitSummary(resolved);
+  });
+
+  ipcMain.handle("get-coding-readiness-summary", async () => {
+    debugLog("ipc:get-coding-readiness-summary");
+    const settings = await getRuntimeSettings({ includePersona: false });
+    if (settings.codeReadinessBadgeEnabled === false) {
+      return { ok: false, disabled: true };
+    }
+    return getCodingReadiness(store, settings);
+  });
+
+  ipcMain.handle("list-code-checkpoints", (_event, { workspacePath } = {}) => {
+    const { listCheckpoints } = require("../code-agent/code-checkpoint");
+    const resolved = resolveWorkspacePath(workspacePath);
+    if (!resolved) {
+      return { ok: false, error: "Workspace path is not configured." };
+    }
+    return { ok: true, checkpoints: listCheckpoints(resolved) };
+  });
+
+  ipcMain.handle("rollback-code-checkpoint", (_event, { workspacePath, checkpointId } = {}) => {
+    const { rollbackCheckpoint } = require("../code-agent/code-checkpoint");
+    const resolved = resolveWorkspacePath(workspacePath);
+    if (!resolved || !checkpointId) {
+      return { ok: false, error: "Workspace and checkpoint id required." };
+    }
+    return rollbackCheckpoint(resolved, checkpointId);
+  });
+
+  ipcMain.handle("enqueue-background-code-agent", async (_event, { goal, workspacePath } = {}) => {
+    const { enqueueBackgroundSession } = require("../code-agent/background-queue");
+    const resolved = resolveWorkspacePath(workspacePath);
+    if (!resolved) {
+      return { ok: false, error: "Workspace path is not configured." };
+    }
+    const settings = await getRuntimeSettings({ includePersona: false });
+    return enqueueBackgroundSession(resolved, goal, settings, { panelWindow });
+  });
+
+  ipcMain.handle("get-background-code-agent-status", async (_event, { workspacePath } = {}) => {
+    const { getBackgroundSessionStatus } = require("../code-agent/background-queue");
+    const resolved = resolveWorkspacePath(workspacePath);
+    if (!resolved) {
+      return { ok: false, error: "Workspace path is not configured." };
+    }
+    return getBackgroundSessionStatus(resolved);
   });
 }
 

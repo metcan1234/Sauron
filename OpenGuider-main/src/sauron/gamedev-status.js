@@ -8,6 +8,7 @@ const { probeGamedevMcpEntry } = require("./gamedev-path-resolver");
 const { readGameDesignBrief } = require("./gamedev-prompt-compiler");
 const { readGamePipelineState } = require("./game-pipeline/game-pipeline-state");
 const { summarizeGamedevLedger } = require("./gamedev-finops-ledger");
+const { readGamedevSceneCache } = require("./gamedev-scene-cache");
 
 function fetchDashboardStatus(port = GAMEDEV_DASHBOARD_PORT, timeoutMs = 2500) {
   return new Promise((resolve) => {
@@ -70,6 +71,7 @@ async function getGamedevStatus(settings = {}, engine = "unity", workspacePath =
   const finops = resolvedWorkspace ? summarizeGamedevLedger(resolvedWorkspace) : null;
   const brief = resolvedWorkspace ? readGameDesignBrief(resolvedWorkspace) : null;
   const pipelineState = resolvedWorkspace ? readGamePipelineState(resolvedWorkspace) : null;
+  const sceneCache = resolvedWorkspace ? readGamedevSceneCache(resolvedWorkspace) : null;
   const phaseTokensEst = pipelineState?.totalEstimatedTokens || pipelineState?.phases?.reduce(
     (sum, p) => sum + (p.estimatedTokens || 0),
     0,
@@ -95,6 +97,7 @@ async function getGamedevStatus(settings = {}, engine = "unity", workspacePath =
       phaseTokensEst,
       briefCompiledBy: brief?.compiledBy || null,
     } : { phaseTokensEst, briefCompiledBy: brief?.compiledBy || null },
+    sceneCache: sceneCache || null,
     tokenPolicy: {
       mcpTools: "full",
       llmHandoff: "economy",

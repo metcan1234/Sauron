@@ -17,6 +17,22 @@
     </div>
     <div class="header-meta">
       <span class="finops-badge hidden" id="finops-badge" data-i18n="finopsTitle" data-i18n-attr="title" title="FinOps"></span>
+      <span class="readiness-badge hidden" id="readiness-badge" title="Sistem hazırlığı"></span>
+      <span class="plugin-profile-badge hidden" id="plugin-profile-badge" title="Calisma profili">Genel</span>
+      <span class="luna-relationship-badge hidden" id="luna-relationship-badge" title="Luna tanışıklık evresi">Tanışıyoruz</span>
+      <div class="plugin-profile-menu hidden" id="plugin-profile-menu" role="menu">
+        <button type="button" data-profile-choice="general">Genel</button>
+        <button type="button" data-profile-choice="web">Web</button>
+        <button type="button" data-profile-choice="game">Oyun</button>
+        <button type="button" data-profile-choice="code">Kod</button>
+        <button type="button" data-profile-choice="browser">Tarayıcı</button>
+        <div class="plugin-profile-menu-divider"></div>
+        <button type="button" id="plugin-profile-mode-auto">Otomatik mod</button>
+        <button type="button" id="plugin-profile-mode-manual">Manuel mod</button>
+      </div>
+      <span class="code-readiness-badge hidden" id="code-readiness-badge" title="Kod hazırlığı"></span>
+      <span class="gamedev-bridge-badge hidden" id="gamedev-bridge-badge" title="Unity MCP bridge"></span>
+      <span class="workspace-active-badge hidden" id="workspace-active-badge" title="Aktif proje"></span>
       <span class="agent-status" id="agent-status" data-i18n="agentIdle">boşta</span>
     </div>
     <div class="header-actions">
@@ -54,6 +70,13 @@
   </div>
 
   <div class="chat-area" id="chat-area">
+    <div id="persona-avatar-wrap" class="persona-avatar-wrap hidden" aria-hidden="true">
+      <div class="persona-avatar-circle" id="persona-avatar-circle">L</div>
+      <div class="persona-avatar-meta">
+        <strong id="persona-avatar-name">Luna</strong>
+        <span id="persona-avatar-mood" class="persona-avatar-mood">Yanındayım ♥</span>
+      </div>
+    </div>
     <div class="chat-background" id="chat-background">
       <div class="empty-state" id="chat-background-content">
         <img src="assets/logo.png" alt="Sauron" class="empty-logo eye-blink-logo" id="chat-background-logo">
@@ -157,9 +180,12 @@
 
   <div class="input-area">
     <div class="attachment-preview-strip hidden" id="attachment-preview-strip"></div>
+    <div class="channel-hint-chips hidden" id="channel-hint-chips" aria-label="Kanal önerileri"></div>
+    <div class="context-picker-list hidden" id="context-picker-list" aria-label="@ dosya önerileri"></div>
     <div class="input-meta-row">
       <span class="mode-badge micro-guide-badge hidden" id="micro-guide-badge" title="Aktif mikro-tur rehber">Rehber · Mikro-tur</span>
       <span class="mode-badge code-agent-badge hidden" id="code-agent-badge" title="Aktif kod agent">Kod · Agent</span>
+      <button class="mode-badge code-agent-cancel hidden" id="btn-code-agent-cancel" type="button" title="Kod agent'ı durdur">Durdur</button>
       <span class="mode-badge goose-badge hidden" id="goose-badge" title="Aktif Goose oturumu">🦆 Goose</span>
       <button class="mode-badge goose-cancel hidden" id="btn-goose-cancel" type="button" title="Goose oturumunu durdur">Durdur</button>
       <span class="mode-badge gamedev-badge hidden" id="gamedev-badge" title="Aktif Game Dev modu">🎮 Game Dev</span>
@@ -177,10 +203,12 @@
         <label class="gamedev-studio-label" for="gamedev-master-prompt">Oyun planım</label>
         <textarea id="gamedev-master-prompt" class="gamedev-master-prompt" rows="2" placeholder="Uzun oyun planınız (brief olarak kaydedilir)…"></textarea>
         <span class="gamedev-pipeline-bar" id="gamedev-pipeline-bar" title="Aktif pipeline fazı"></span>
+        <pre class="gamedev-scene-view hidden" id="gamedev-scene-view" title="Sahne özeti"></pre>
         <a class="gamedev-dashboard-link" id="gamedev-dashboard-link" href="#" title="gamedev dashboard">Dashboard</a>
       </div>
       <span class="code-agent-log hidden" id="code-agent-log" title="Son kod agent adımları"></span>
       <span class="screen-pending-badge hidden" id="screen-pending-badge" title="Gönderimde ekran görüntüsü eklenecek"></span>
+      <span class="message-cost-hint hidden" id="message-cost-hint" title="Son mesaj maliyet tahmini"></span>
     </div>
     <div class="input-row">
       <span class="mode-badge is-clickable input-mode-badge" id="assistant-mode-badge" title="Mod değiştir: Asistan / Rehber">Asistan</span>
@@ -188,7 +216,8 @@
       <button class="attach-file-btn" id="btn-attach-file" type="button" title="Dosya / resim ekle">📎</button>
       <button class="capture-screen-btn" id="btn-capture-screen" type="button" data-i18n="captureScreen" data-i18n-attr="title" title="Ekran Al">📷</button>
       <button class="capture-screen-btn micro-guide-btn" id="btn-micro-guide" type="button" title="Mikro rehber — ekranda tek adım yönlendirme">🎯</button>
-      <textarea class="text-input" id="text-input" data-i18n-placeholder="askPlaceholder" placeholder="Bana bir şey sor…" rows="1"></textarea>
+      <button class="capture-screen-btn voice-loop-btn hidden" id="btn-voice-chat-loop" type="button" title="Sesli sohbet modu">🎙</button>
+      <textarea class="text-input" id="text-input" data-i18n-placeholder="askPlaceholder" placeholder="Bana bir şey sor… (@src/dosya.js ile dosya ekle)" rows="1"></textarea>
       <button class="ptt-btn" id="ptt-btn" data-i18n="holdToTalk" data-i18n-attr="title" title="Konuşmak için basılı tut">⏺
         <span class="waveform" id="waveform" style="display:none">
           <span class="waveform-bar" id="wb1"></span>
@@ -201,6 +230,14 @@
       <button class="send-btn" id="send-btn" data-i18n="send" data-i18n-attr="title" title="Gönder">➤</button>
       <button class="stop-btn hidden" id="stop-btn" data-i18n="stop" data-i18n-attr="title" title="Durdur">⏹</button>
     </div>
+  </div>
+</div>
+
+<div class="code-agent-summary-overlay hidden" id="code-agent-summary-overlay" role="dialog" aria-modal="true">
+  <div class="code-agent-summary-modal">
+    <h3 id="code-agent-summary-title">Kod agent özeti</h3>
+    <pre id="code-agent-summary-body"></pre>
+    <button class="confirm-btn" id="code-agent-summary-close" type="button">Kapat</button>
   </div>
 </div>
 
@@ -391,6 +428,7 @@
       <p>Unity Package Manager → Git URL: <strong>CoplayDev unity-mcp</strong> bridge kurun.</p>
       <p>Cline'da <strong>gamedev-all-in-one</strong> MCP sunucusunu başlatın (TCP 7890).</p>
       <p id="gamedev-setup-bridge-status" class="gamedev-setup-status"></p>
+      <button class="confirm-btn" id="gamedev-setup-fix" type="button">Tek tık fix (MCP build + config)</button>
     </div>
     <div class="gamedev-setup-step hidden" id="gamedev-setup-step-3">
       <label class="ws-label">Şablon

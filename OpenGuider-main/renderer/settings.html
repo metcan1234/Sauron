@@ -14,18 +14,21 @@
     <button class="icon-btn" id="btn-close" style="-webkit-app-region:no-drag" data-i18n="close" data-i18n-attr="title" title="Kapat">✕</button>
   </div>
 
-  <div class="settings-body">
+  <div class="settings-tabs-bar">
     <div class="settings-tabs">
       <button class="settings-tab-btn active" data-tab="agents" data-i18n="aiAgentsTab">AI Ajanları</button>
       <button class="settings-tab-btn" data-tab="workspace" data-i18n="workspaceTab">Çalışma Kısmı</button>
       <button class="settings-tab-btn" data-tab="finops" data-i18n="finopsTab">Bütçe / FinOps</button>
+      <button class="settings-tab-btn" data-tab="personality" data-i18n="personalityTab">Kişilik</button>
       <button class="settings-tab-btn" data-tab="voice" data-i18n="voiceTab">Ses</button>
       <button class="settings-tab-btn" data-tab="plugins" data-i18n="pluginsTab">Eklentiler</button>
       <button class="settings-tab-btn" data-tab="aware" data-i18n="awareTab">Farkındalık</button>
       <button class="settings-tab-btn" data-tab="shortcuts" data-i18n="shortcutsTab">Kısayollar</button>
       <button class="settings-tab-btn" data-tab="about" data-i18n="aboutTab">Hakkında</button>
     </div>
+  </div>
 
+  <div class="settings-body">
     <div class="settings-tab-section active" data-tab-content="agents">
       <div class="settings-section">
         <h3>AI Agents</h3>
@@ -33,9 +36,11 @@
 
         <div class="form-group">
           <label>Cline senkron durumu</label>
-          <div class="hint" id="clineSyncStatus">Workspace seçilmedi veya anahtar yok.</div>
-          <button class="btn btn-secondary" id="btn-sync-cline" type="button" style="margin-top:8px;">Cline'a senkronla</button>
-          <span class="hint" style="display:block;margin-top:6px;">VS Code açıkken Bridge bu isteği okuyup Cline SecretStorage'a yazar. Anahtarlar workspace JSON'una yazılmaz.</span>
+          <div class="settings-action-row">
+            <div class="hint settings-action-status" id="clineSyncStatus">Workspace seçilmedi veya anahtar yok.</div>
+            <button class="btn btn-secondary" id="btn-sync-cline" type="button">Cline'a senkronla</button>
+          </div>
+          <span class="hint">VS Code açıkken Bridge bu isteği okuyup Cline SecretStorage'a yazar. Anahtarlar workspace JSON'una yazılmaz.</span>
         </div>
 
         <div class="form-group">
@@ -60,6 +65,17 @@
           <label>Ollama URL <span class="hint-inline">(isteğe bağlı)</span></label>
           <input class="form-input" id="ollamaUrl" type="url" placeholder="http://localhost:11434"/>
           <span class="hint">Yerel fallback — GPU yoksa boş bırakılabilir. Varsayılan: <code>http://localhost:11434</code></span>
+        </div>
+
+        <div class="form-group settings-action-row">
+          <span class="hint">API key'leri kaydetmeden önce test edin (Cline 401 hatalarını önler).</span>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;">
+            <button class="btn btn-secondary" type="button" id="btn-test-gemini-key">Gemini test</button>
+            <button class="btn btn-secondary" type="button" id="btn-test-deepseek-key">DeepSeek test</button>
+            <button class="btn btn-secondary" type="button" id="btn-test-openai-key">OpenAI test</button>
+            <button class="btn btn-secondary" type="button" id="btn-test-ollama-key">Ollama test</button>
+          </div>
+          <span class="hint" id="api-key-test-result"></span>
         </div>
 
         <div class="settings-section" id="agent-control-section" style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.08);">
@@ -158,7 +174,7 @@
         <div class="form-group">
           <details id="clineSetupDetails">
             <summary style="cursor:pointer;font-weight:600;">Cline kurulumu (otomatik senkron)</summary>
-            <p class="hint" style="margin-top:8px;">Kaydettiğiniz anahtarlar workspace handoff veya "Cline'a senkronla" ile Bridge üzerinden Cline'a aktarılır. Detay: <code>docs/agent-setup-cline.md</code></p>
+            <p class="hint" style="margin-top:8px;">Asistan kişiliği ve kullanıcı hafızası için <strong>Kişilik</strong> sekmesine bakın.</p>
             <ul class="hint" style="margin:8px 0 0 16px;">
               <li>DeepSeek → Cline DeepSeek provider veya OpenAI-compatible</li>
               <li>Gemini → Cline Gemini provider</li>
@@ -171,16 +187,6 @@
         <details id="advancedProviderDetails" style="margin-top:16px;">
           <summary style="cursor:pointer;font-weight:600;">Gelişmiş (legacy provider)</summary>
           <div style="margin-top:12px;">
-            <div class="form-group">
-              <label>Asistan kişiliği (system prompt)</label>
-              <textarea class="form-input" id="systemPromptOverride" rows="4" placeholder="Opsiyonel — asistanın tonu ve davranışı"></textarea>
-              <span class="hint">Boş bırakılırsa varsayılan sistem promptu kullanılır.</span>
-            </div>
-            <div class="form-group">
-              <label>Kullanıcı hafızası (satır başına bir gerçek)</label>
-              <textarea class="form-input" id="userMemoryFacts" rows="4" placeholder="Örn: Adım Can&#10;Tercih ettiğim dil Türkçe"></textarea>
-              <span class="hint">Her satır ayrı bir hatıra olarak modele eklenir.</span>
-            </div>
             <div class="form-group">
               <label>Provider (legacy)</label>
               <select class="form-select" id="providerSelect">
@@ -564,6 +570,219 @@
       </div>
     </div>
 
+    <div class="settings-tab-section" data-tab-content="personality">
+      <div class="settings-section">
+        <h3 data-i18n="personalitySectionTitle">Kişilik &amp; Kimlik</h3>
+        <p class="settings-lead" data-i18n="personalitySectionLead">Asistanın adını, konuşma tarzını ve yeni sohbette kendini tanıtma davranışını buradan ayarlayın. Temel Sauron kuralları (ekran işaretleme, Çalışma Kısmı yönlendirmesi) korunur.</p>
+
+        <div class="form-group">
+          <label for="ownerName" data-i18n="ownerNameLabel">Sahip adı</label>
+          <input class="form-input" id="ownerName" type="text" placeholder="Can"/>
+          <span class="hint" data-i18n="ownerNameHint">Asistanın seni nasıl tanıyacağı (çekirdek kimlik).</span>
+        </div>
+
+        <div class="form-group">
+          <label data-i18n="personaSelectLabel">Aktif persona</label>
+          <div class="persona-card-grid" id="personaCardGrid">
+            <label class="persona-card" data-persona-id="luna">
+              <input type="radio" name="activePersonaId" value="luna" checked/>
+              <span class="persona-card-title">Luna</span>
+              <span class="persona-card-tagline">Tatlı, flörtöz, sevgi dolu</span>
+              <span class="persona-card-sample">"Ah yakışıklım, kıyamam sana..."</span>
+            </label>
+            <label class="persona-card" data-persona-id="hiri">
+              <input type="radio" name="activePersonaId" value="hiri"/>
+              <span class="persona-card-title">Hiri</span>
+              <span class="persona-card-tagline">Dobra abla, dürüst mentor</span>
+              <span class="persona-card-sample">"Can, konu neyse söyle, lafı dolandırmayalım."</span>
+            </label>
+          </div>
+          <span class="hint" id="activePersonaHint">Şu an: Luna</span>
+        </div>
+
+        <div class="form-group toggle-card" id="lunaMatureSection" hidden>
+          <label class="toggle-row">
+            <input type="checkbox" id="lunaMatureContentEnabled"/>
+            <span data-i18n="lunaMatureLabel">Samimi / yetişkin konuşma (Luna)</span>
+          </label>
+          <label class="toggle-row" style="margin-top:8px;">
+            <input type="checkbox" id="lunaMaturePreferLocal"/>
+            <span data-i18n="lunaMatureLocalLabel">Yerel model tercih et (Ollama)</span>
+          </label>
+          <span class="hint" data-i18n="lunaMatureHint">Yalnızca senin seçiminle. Bazı model sağlayıcıları içeriği reddedebilir.</span>
+        </div>
+
+        <div class="form-group">
+          <label>Konuşma ayarları (slider)</label>
+          <div class="personality-slider-grid">
+            <label>Yanıt uzunluğu <output id="sliderResponseLengthVal">50</output>
+              <input type="range" id="sliderResponseLength" min="0" max="100" value="50"/>
+            </label>
+            <label>Sıcaklık <output id="sliderWarmthVal">70</output>
+              <input type="range" id="sliderWarmth" min="0" max="100" value="70"/>
+            </label>
+            <label id="sliderFlirtinessWrap">Flört <output id="sliderFlirtinessVal">50</output>
+              <input type="range" id="sliderFlirtiness" min="0" max="100" value="50"/>
+            </label>
+            <label>Emoji <output id="sliderEmojiVal">30</output>
+              <input type="range" id="sliderEmoji" min="0" max="100" value="30"/>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="altGreetings">Alternatif karşılama (satır başına bir)</label>
+          <textarea class="form-input" id="altGreetings" rows="3" placeholder="Boş sohbette rastgele seçilir (özel tanıtım yoksa)."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="personalityFeedbackNotes">Geri bildirim tercihleri (satır başına bir)</label>
+          <textarea class="form-input" id="personalityFeedbackNotes" rows="2" placeholder="Örn: Çok uzun yazma&#10;Emoji kullanma"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="activeScenarioId">Sohbet senaryosu</label>
+          <select class="form-input" id="activeScenarioId"></select>
+          <span class="hint">Gece sohbeti, kahve molası, kod eşliği gibi panel tonu (Luna/Hiri).</span>
+        </div>
+
+        <div class="form-group toggle-card">
+          <label class="toggle-row">
+            <input type="checkbox" id="autoMemoryExtractionEnabled"/>
+            <span>Otomatik hafıza çıkarımı</span>
+          </label>
+          <span class="hint">Sohbetten kalıcı tercihleri userMemoryFacts listesine ekler (ekonomi LLM).</span>
+        </div>
+
+        <div class="form-group toggle-card" id="luna-relationship-settings">
+          <label class="toggle-row">
+            <input type="checkbox" id="lunaRelationshipEnabled" checked/>
+            <span>Luna ilişki hafızası (konuştukça tanıma)</span>
+          </label>
+          <span class="hint">Yalnızca panel Luna sohbetinde — evre, mesaj sayısı ve kişisel notlar birikir.</span>
+          <div class="luna-relationship-stats" style="margin-top:10px;display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
+            <span class="hint">Evre: <strong id="lunaRelationshipStageDisplay">—</strong></span>
+            <span class="hint">Mesaj: <strong id="lunaRelationshipMessageCountDisplay">0</strong></span>
+            <button class="btn btn-secondary" id="btn-reset-luna-relationship" type="button">Luna hafızasını sıfırla</button>
+          </div>
+        </div>
+
+        <div class="form-group toggle-card">
+          <label class="toggle-row">
+            <input type="checkbox" id="panelAtFileContextEnabled" checked/>
+            <span>@dosya bağlamı (panel)</span>
+          </label>
+          <span class="hint">Mesajda @src/app.js yazınca dosya içeriği modele eklenir.</span>
+        </div>
+
+        <div class="form-group toggle-card">
+          <label class="toggle-row">
+            <input type="checkbox" id="channelHintChipsEnabled" checked/>
+            <span>Kanal öneri chip'leri</span>
+          </label>
+        </div>
+
+        <div class="form-group toggle-card">
+          <label class="toggle-row">
+            <input type="checkbox" id="personaAvatarEnabled" checked/>
+            <span>Persona avatar (panel)</span>
+          </label>
+          <span class="hint">Sohbet alanında Luna/Hiri avatarı — yalnızca panel asistan.</span>
+        </div>
+
+        <div class="form-group toggle-card">
+          <label class="toggle-row">
+            <input type="checkbox" id="voiceChatLoopEnabled"/>
+            <span>Sesli sohbet modu düğmesi</span>
+          </label>
+          <span class="hint">Panelde 🎙 ile sürekli dinle/konuş döngüsü (PTT ile birlikte).</span>
+        </div>
+
+        <div class="form-group toggle-card">
+          <label class="toggle-row">
+            <input type="checkbox" id="messageCostHintEnabled" checked/>
+            <span>Mesaj maliyet ipucu</span>
+          </label>
+          <span class="hint">Her panel yanıtından sonra tahmini ₺ maliyet gösterir.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="exampleDialogues">Örnek diyaloglar (satır başına bir)</label>
+          <textarea class="form-input" id="exampleDialogues" rows="3" placeholder="Kullanıcı: Merhaba&#10;Asistan: Selam Can, nasılsın?"></textarea>
+          <span class="hint">Luna/Hiri tonunu güçlendirmek için few-shot örnekler (panel prompt).</span>
+        </div>
+
+        <div class="form-group toggle-card">
+          <label class="toggle-row">
+            <input type="checkbox" id="enhancedOnboardingEnabled" checked/>
+            <span>Gelişmiş ilk kurulum (doctor listesi)</span>
+          </label>
+        </div>
+
+        <div class="form-group toggle-card">
+          <label class="toggle-row">
+            <input type="checkbox" id="personaTtsVoiceEnabled" checked/>
+            <span>Persona ses profili (TTS)</span>
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="lunaTtsVoice">Luna TTS sesi (OpenAI)</label>
+          <input class="form-input" id="lunaTtsVoice" type="text" placeholder="nova"/>
+        </div>
+
+        <div class="form-group">
+          <label for="hiriTtsVoice">Hiri TTS sesi (OpenAI)</label>
+          <input class="form-input" id="hiriTtsVoice" type="text" placeholder="alloy"/>
+        </div>
+
+        <div class="form-group">
+          <label for="assistantName" data-i18n="assistantNameLabel">Asistan adı</label>
+          <input class="form-input" id="assistantName" type="text" placeholder="Luna"/>
+          <span class="hint" data-i18n="assistantNameHint">Kendini tanıtırken kullanılacak isim.</span>
+        </div>
+
+        <div class="form-group toggle-card">
+          <label class="toggle-row">
+            <input type="checkbox" id="introOnNewChat" checked/>
+            <span data-i18n="introOnNewChatLabel">Yeni sohbette kendini tanıtsın</span>
+          </label>
+          <span class="hint" data-i18n="introOnNewChatHint">Boş sohbet açıldığında kısa bir karşılama mesajı gösterilir.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="customIntroMessage" data-i18n="customIntroMessageLabel">Özel tanıtım metni (isteğe bağlı)</label>
+          <textarea class="form-input" id="customIntroMessage" rows="3" placeholder="Merhaba, ben Sauron — ekranında rehberlik edebilirim."></textarea>
+          <span class="hint" data-i18n="customIntroMessageHint">Doluysa model çağrılmadan bu metin gösterilir.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="systemPromptOverride" data-i18n="systemPromptLabel">Ek talimatlar (system prompt)</label>
+          <textarea class="form-input" id="systemPromptOverride" rows="4" placeholder="Opsiyonel — ek davranış kuralları"></textarea>
+          <span class="hint" data-i18n="systemPromptHint">Varsayılan kimliğin üzerine eklenir; tamamen değiştirmez.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="userMemoryFacts" data-i18n="userMemoryLabel">Kullanıcı hafızası (satır başına bir gerçek)</label>
+          <textarea class="form-input" id="userMemoryFacts" rows="4" placeholder="Örn: Adım Can&#10;Tercih ettiğim dil Türkçe"></textarea>
+          <span class="hint" data-i18n="userMemoryHint">Her satır ayrı bir hatıra olarak modele eklenir.</span>
+        </div>
+
+        <details id="personalityPromptPreview" style="margin-top:12px;">
+          <summary style="cursor:pointer;font-weight:600;" data-i18n="personalityPreviewSummary">Birleşik promptu göster</summary>
+          <div class="personality-preview-sections">
+            <h4>Çekirdek kimlik</h4>
+            <pre class="settings-prompt-preview" id="personalityPreviewCore"></pre>
+            <h4>Persona</h4>
+            <pre class="settings-prompt-preview" id="personalityPreviewPersona"></pre>
+            <h4>Paylaşılan kurallar</h4>
+            <pre class="settings-prompt-preview" id="personalityPreviewShared"></pre>
+          </div>
+          <button class="btn btn-secondary" id="btn-refresh-prompt-preview" type="button" style="margin-top:8px;" data-i18n="personalityPreviewRefresh">Önizlemeyi yenile</button>
+        </details>
+      </div>
+    </div>
+
     <div class="settings-tab-section" data-tab-content="voice">
       <div class="settings-section">
         <h3>Voice (Speech-to-Text)</h3>
@@ -710,6 +929,213 @@
               <span class="toggle-copy">
                 <strong>Yerel Kod Agent (Cline'sız)</strong>
                 <span>Workspace içinde dosya düzenleme, terminal ve test döngüsü.</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="assistantAutoCodeRoute" checked/>
+              <span class="toggle-copy">
+                <strong>Kod niyetinde otomatik agent</strong>
+                <span>Kod isteği algılanınca onay sormadan Yerel Kod Agent başlat (agent açıkken).</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="codeAgentOpenStudioOnStart" checked/>
+              <span class="toggle-copy">
+                <strong>Agent başlayınca Code Studio aç</strong>
+                <span>Dosya değişikliklerini yan pencerede izle.</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="codeSemanticSearchEnabled" checked/>
+              <span class="toggle-copy">
+                <strong>Semantik kod arama (agent)</strong>
+                <span>Embedding ile ilgili dosyaları bulur; kapalıyken yalnızca anahtar kelime.</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="codeStudioMonacoEnabled" checked/>
+              <span class="toggle-copy">
+                <strong>Code Studio Monaco editör</strong>
+                <span>Açıksa syntax highlight; kapalıyken düz metin alanı.</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="codeStudioV3Enabled" checked/>
+              <span class="toggle-copy">
+                <strong>Code Studio v3 (çoklu sekme + git paneli)</strong>
+                <span>Açık dosya sekmeleri ve git özeti Code Studio'da görünür.</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="codeReadinessBadgeEnabled" checked/>
+              <span class="toggle-copy">
+                <strong>Kod hazırlık rozeti (panel)</strong>
+                <span>Workspace + Bridge + Cline durumunu üst barda gösterir.</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="codeAgentCheckpointEnabled" checked/>
+              <span class="toggle-copy">
+                <strong>Agent checkpoint (otomatik snapshot)</strong>
+                <span>Kod agent oturumu bitince geri alınabilir snapshot oluşturur.</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="codeAgentBatchEnabled"/>
+              <span class="toggle-copy">
+                <strong>Çok dosyalı batch patch</strong>
+                <span>Plan sonrası sıralı çoklu dosya düzenleme (onaylı).</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="codeAgentRepairLoopEnabled"/>
+              <span class="toggle-copy">
+                <strong>Onarım döngüsü (test/lint)</strong>
+                <span>npm test/lint fail olursa en fazla 3 onarım adımı.</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="codeAgentBackgroundEnabled"/>
+              <span class="toggle-copy">
+                <strong>Arka plan kod agent kuyruğu</strong>
+                <span>Panel kapalıyken oturum devam edebilir (deneysel).</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="codeTabCompletionEnabled"/>
+              <span class="toggle-copy">
+                <strong>Tab completion (Code Studio)</strong>
+                <span>Ghost text tamamlama — deneysel, varsayılan kapalı.</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="codeLspEnabled"/>
+              <span class="toggle-copy">
+                <strong>LSP köprüsü (Code Studio)</strong>
+                <span>tsserver/gopls — deneysel, varsayılan kapalı.</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="panelExtendedContextEnabled" checked/>
+              <span class="toggle-copy">
+                <strong>Genişletilmiş @context</strong>
+                <span>@folder ve @git-diff bağlam seçenekleri.</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="gamedevBridgeMonitorEnabled" checked/>
+              <span class="toggle-copy">
+                <strong>Game Dev bridge rozeti</strong>
+                <span>Unity MCP TCP (7890) durumunu panelde gösterir.</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="gamedevAutoScaffoldEnabled"/>
+              <span class="toggle-copy">
+                <strong>Otomatik Unity scaffold</strong>
+                <span>Boş workspace'te ilk Game Dev'de şablon oluştur (varsayılan kapalı).</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="gamedevPlayLoopEnabled"/>
+              <span class="toggle-copy">
+                <strong>Play Mode agent döngüsü</strong>
+                <span>Unity play → doğrulama → onarım (varsayılan kapalı).</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="gamedevMcpDirectPhasesEnabled"/>
+              <span class="toggle-copy">
+                <strong>MCP-direct pipeline fazları</strong>
+                <span>Handoff yerine doğrudan MCP faz yürütme (varsayılan kapalı).</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="smartPluginProfileEnabled" checked/>
+              <span class="toggle-copy">
+                <strong>Akıllı eklenti profili</strong>
+                <span>Web / Oyun / Kod niyetine göre eklenti yüzeylerini otomatik aç-kapa (geçici overlay).</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="pluginProfileNotifyEnabled" checked/>
+              <span class="toggle-copy">
+                <strong>Profil bildirimleri</strong>
+                <span>Profil değişince panelde toast göster.</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label>Profil modu</label>
+            <select class="form-select" id="pluginProfileMode">
+              <option value="auto">Otomatik (niyet + kanal)</option>
+              <option value="manual">Manuel (yalnızca seçim)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Manuel profil</label>
+            <select class="form-select" id="activePluginProfile">
+              <option value="general">Genel</option>
+              <option value="web">Web</option>
+              <option value="game">Oyun</option>
+              <option value="code">Kod</option>
+              <option value="browser">Tarayıcı</option>
+            </select>
+            <span class="hint">Kalıcı eklenti ayarlarını değiştirmez; yalnızca aktif oturum overlay'i.</span>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="gamedevUnityPackageEnabled"/>
+              <span class="toggle-copy">
+                <strong>Sauron Unity Editor paketi</strong>
+                <span>Editor penceresi + play log iletimi (opsiyonel kurulum).</span>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="toggle-card">
+              <input type="checkbox" id="webDeployHintEnabled" checked/>
+              <span class="toggle-copy">
+                <strong>Web Studio deploy hazırlığı</strong>
+                <span>Scaffold sonrası npm install önerisi.</span>
               </span>
             </label>
           </div>

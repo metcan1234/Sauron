@@ -181,11 +181,13 @@ function createWindowManager({
     }
 
     const settingsWindow = new BrowserWindow({
-      width: 600,
-      height: 700,
+      width: 640,
+      height: 760,
+      minWidth: 600,
+      minHeight: 640,
       frame: false,
       transparent: true,
-      resizable: false,
+      resizable: true,
       skipTaskbar: false,
       alwaysOnTop: false,
       parent: refs.panelWindow,

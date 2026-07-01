@@ -11,6 +11,8 @@ export function createChannelControls({
   openWorkspaceHandoff,
   setVsCodeLaunchBusy,
   isVsCodeLaunchBusy,
+  gamedevQuickSetup,
+  resolvePluginProfile,
 }) {
   let activeChannel = "core";
   let gamedevModeActive = false;
@@ -83,6 +85,9 @@ export function createChannelControls({
       ui.showToast("Goose için görev metni gerekli.", true);
       return { ok: false };
     }
+    if (typeof resolvePluginProfile === "function") {
+      await resolvePluginProfile({ text: goal, channel: "goose", source: "channel" }, { notify: true });
+    }
     try {
       const result = await api.invoke("start-goose-session", { taskText: goal });
       if (result?.ok) {
@@ -105,6 +110,15 @@ export function createChannelControls({
     if (!goal) {
       ui.showToast("Game Dev için oyun fikri veya görev gerekli.", true);
       return { ok: false };
+    }
+    if (typeof resolvePluginProfile === "function") {
+      await resolvePluginProfile({ text: goal, channel: "gamedev", source: "channel" }, { notify: true });
+    }
+    if (typeof gamedevQuickSetup?.maybeShow === "function") {
+      const proceed = await gamedevQuickSetup.maybeShow();
+      if (!proceed) {
+        return { ok: false, skipped: true, reason: "setup_dismissed" };
+      }
     }
     if (typeof isVsCodeLaunchBusy === "function" && isVsCodeLaunchBusy()) {
       return { ok: false, skipped: true, reason: "launch_busy" };
@@ -152,6 +166,15 @@ export function createChannelControls({
     }
     try {
       const wasActive = gamedevModeActive;
+      if (!wasActive && typeof gamedevQuickSetup?.maybeShow === "function") {
+        const proceed = await gamedevQuickSetup.maybeShow();
+        if (!proceed) {
+          return { ok: false, skipped: true, reason: "setup_dismissed" };
+        }
+      }
+      if (!wasActive && typeof resolvePluginProfile === "function") {
+        await resolvePluginProfile({ channel: "gamedev", source: "channel" }, { notify: true });
+      }
       const result = await api.invoke("toggle-gamedev-mode");
       if (result?.ok) {
         gamedevModeActive = !wasActive;
@@ -195,6 +218,9 @@ export function createChannelControls({
   function selectWorkspaceChannel() {
     activeChannel = "workspace";
     syncChannelVisuals();
+    if (typeof resolvePluginProfile === "function") {
+      void resolvePluginProfile({ channel: "workspace", source: "channel" }, { notify: false });
+    }
   }
 
   function wrapMessagingSend(messaging) {
@@ -291,5 +317,7 @@ export function createChannelControls({
     wrapMessagingSend,
     onWorkspaceClick,
     selectWorkspaceChannel,
+    startGooseSession,
+    startGamedevSession,
   };
 }

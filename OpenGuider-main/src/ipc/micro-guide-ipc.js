@@ -32,7 +32,7 @@ function registerMicroGuideIpc({
     }
     const controller = new AbortController();
     setCurrentAIController(controller);
-    const runtimeSettings = await getRuntimeSettings();
+    const runtimeSettings = await getRuntimeSettings({ includePersona: false });
 
     try {
       const result = await runner({
@@ -67,6 +67,41 @@ function registerMicroGuideIpc({
   ipcMain.handle("resolve-message-route", (_event, params = {}) => {
     debugLog("ipc:resolve-message-route");
     return resolveMessageRoute(params);
+  });
+
+  ipcMain.handle("suggest-code-execution-path", async (_event, params = {}) => {
+    debugLog("ipc:suggest-code-execution-path");
+    const { suggestCodeExecutionPath } = require("../routing/message-route");
+    const { checkWorkspacePrerequisites } = require("../sauron/workspace-setup");
+    const prereqs = checkWorkspacePrerequisites();
+    return suggestCodeExecutionPath({
+      ...params,
+      prerequisites: {
+        handoffReady: Boolean(prereqs.vscodeCli && prereqs.clineExtension),
+        codeAgentReady: params.codeAgentNativeEnabled === true,
+      },
+    });
+  });
+
+  ipcMain.handle("resolve-channel-hints", async (_event, params = {}) => {
+    debugLog("ipc:resolve-channel-hints");
+    const { resolveChannelHints } = require("../routing/channel-hints");
+    const runtime = await getRuntimeSettings({ includePersona: false });
+    return resolveChannelHints({
+      ...params,
+      settings: { ...runtime, ...(params.settings || {}) },
+    });
+  });
+
+  ipcMain.handle("resolve-at-file-context", (_event, { text, workspacePath } = {}) => {
+    debugLog("ipc:resolve-at-file-context");
+    const { buildAtFileContextBlock } = require("../panel/at-file-context");
+    const resolvedPath = String(workspacePath || "").trim();
+    if (!resolvedPath) {
+      return { ok: false, error: "Workspace path is not configured." };
+    }
+    const result = buildAtFileContextBlock(resolvedPath, text);
+    return { ok: true, ...result };
   });
 
   ipcMain.handle("resolve-panel-mode-state", (_event, params = {}) => {
@@ -133,7 +168,7 @@ function registerMicroGuideIpc({
 
   ipcMain.handle("micro-guide-cancel", async (event) => {
     debugLog("ipc:micro-guide-cancel");
-    const runtimeSettings = await getRuntimeSettings();
+    const runtimeSettings = await getRuntimeSettings({ includePersona: false });
     const result = taskOrchestrator.cancelMicroGuide({ reason: "user" });
     const handled = await handleOrchestratorResult(result, runtimeSettings, event.sender, {
       channel: "micro-guide-cancel",

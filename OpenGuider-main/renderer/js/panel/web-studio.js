@@ -152,6 +152,32 @@ export function createWebStudioController({ api, ui, win, doc }) {
     overlay.setAttribute("aria-hidden", "true");
   }
 
+  async function maybeOfferWebDeploy() {
+    try {
+      const settings = await api.invoke("get-settings");
+      if (settings?.webDeployHintEnabled === false) {
+        return;
+      }
+      const proceed = await ui.confirmDialog({
+        title: "Web deploy hazırlığı",
+        message: "npm install çalıştırılsın ve localhost önizleme için hazırlık yapılsın mı?",
+        confirmLabel: "Kur ve hazırla",
+        cancelLabel: "Sonra",
+      });
+      if (!proceed) {
+        return;
+      }
+      const result = await api.invoke("prepare-web-deploy", {});
+      if (result?.ok) {
+        ui.showToast(result.message || "Bağımlılıklar kuruldu — Önizleme (👁) ile deneyin.");
+      } else {
+        ui.showToast(result?.error || "Deploy hazırlığı başarısız", true);
+      }
+    } catch (error) {
+      ui.showToast(error?.message || "Deploy hazırlığı başarısız", true);
+    }
+  }
+
   async function finishWizard() {
     readForm();
     const finishBtn = doc.getElementById("ws-btn-finish");
@@ -184,6 +210,7 @@ export function createWebStudioController({ api, ui, win, doc }) {
       ui.showToast(t("webStudioDone") || "Proje oluşturuldu — Cline görevi başlatıldı");
       closeWizard();
       await refreshPreviewButton();
+      await maybeOfferWebDeploy();
     } finally {
       if (finishBtn) {
         finishBtn.disabled = false;

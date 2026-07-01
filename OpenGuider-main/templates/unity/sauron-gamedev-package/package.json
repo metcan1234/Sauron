@@ -1,0 +1,8 @@
+{
+  "name": "com.sauron.gamedev",
+  "displayName": "Sauron Game Dev Bridge",
+  "version": "0.1.0",
+  "unity": "2021.3",
+  "description": "Optional Sauron Unity Editor window, TCP echo, and play log forwarding.",
+  "author": { "name": "Sauron" }
+}

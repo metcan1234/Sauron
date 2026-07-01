@@ -69,6 +69,8 @@ const ECONOMY_VISION_OPERATIONS = new Set([
   "code-read-summarize",
   "code-agent-summarize",
   "code-agent-plan",
+  "auto-memory-extract",
+  "luna-relationship-extract",
 ]);
 
 function normalizeHint(hint) {

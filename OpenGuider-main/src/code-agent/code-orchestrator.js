@@ -6,11 +6,15 @@ const { CodeAgentPlanSchema, CodeAgentActSchema } = require("./code-schemas");
 const { CODE_AGENT_SYSTEM_RULES } = require("./code-agent-rules");
 const { createEmptySession, readSession, writeSession, clearSession } = require("./code-session-state");
 const { executeCodeTool, applyPendingChange } = require("./code-tools");
-const { retrieveContext } = require("./codebase-retriever");
+const { retrieveContextAsync } = require("./codebase-retriever");
 const { buildCodeIndex } = require("./codebase-indexer");
 const { countChangedLines } = require("./patch-engine");
 const { BudgetExceededError } = require("../sauron/finops/llm-tracker");
 const { streamAIResponse } = require("../ai/index");
+const { createCheckpoint } = require("./code-checkpoint");
+const { runRepairVerification } = require("./repair-loop");
+const { buildSymbolIndex, formatSymbolContext, mergeRepoMapContext } = require("./symbol-index");
+const { listFilesRecursive } = require("./workspace-sandbox");
 
 const PLAN_TEMPLATE = `
 Goal:
@@ -39,7 +43,7 @@ Recent tool results:
 
 Iteration: {{iteration}} / {{maxIterations}}
 
-Available tools: read_file, write_file, search_replace, list_directory, grep_workspace, run_terminal, git_status, git_diff
+Available tools: read_file, write_file, search_replace, list_directory, grep_workspace, run_terminal, git_status, git_diff, git_branch, git_create_branch, git_commit, run_lint, run_typecheck
 
 Return JSON:
 {
@@ -129,7 +133,17 @@ async function runCodeAgentSession({
 
   try {
     await buildCodeIndex(resolvedPath).catch(() => {});
-    const { contextText } = retrieveContext(resolvedPath, goal, settings);
+    let { contextText } = await retrieveContextAsync(resolvedPath, goal, settings);
+    try {
+      const files = listFilesRecursive(resolvedPath, { maxDepth: 4, maxFiles: 120 });
+      const symbols = buildSymbolIndex(resolvedPath, files);
+      const symbolBlock = formatSymbolContext(symbols, goal);
+      if (symbolBlock) {
+        contextText = mergeRepoMapContext(contextText, symbolBlock);
+      }
+    } catch {
+      // symbol index optional
+    }
 
     const planResult = await invokeStructuredChain({
       settings,
@@ -172,11 +186,41 @@ async function runCodeAgentSession({
 
       const act = actResult?.value || actResult;
       if (act?.action === "finish") {
+        if (settings.codeAgentRepairLoopEnabled === true) {
+          const verify = await runRepairVerification(resolvedPath);
+          if (!verify.ok && session.repairAttempts < 3) {
+            session.repairAttempts = (session.repairAttempts || 0) + 1;
+            session.toolLog.push({
+              tool: "repair-loop",
+              result: verify,
+              at: new Date().toISOString(),
+            });
+            writeSession(resolvedPath, session);
+            emit(deps, "code-agent-step-updated", {
+              sessionId,
+              phase: "repair",
+              message: verify.output || verify.error || "Verification failed",
+            });
+            continue;
+          }
+        }
         session.status = "complete";
         session.active = false;
         session.summary = act.finishSummary || act.message || "Done.";
+        if (settings.codeAgentCheckpointEnabled !== false && session.touchedFiles?.length) {
+          const checkpoint = createCheckpoint(resolvedPath, {
+            label: "post-session",
+            files: session.touchedFiles,
+          });
+          session.lastCheckpointId = checkpoint?.checkpoint?.id || null;
+        }
         writeSession(resolvedPath, session);
-        emit(deps, "code-agent-complete", { sessionId, summary: session.summary });
+        emit(deps, "code-agent-complete", {
+          sessionId,
+          summary: session.summary,
+          filesChanged: (session.touchedFiles || []).join(", "),
+          checkpointId: session.lastCheckpointId || null,
+        });
         return { ok: true, session };
       }
 

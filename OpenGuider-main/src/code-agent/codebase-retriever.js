@@ -1,5 +1,7 @@
 const { readCodeIndex } = require("./codebase-indexer");
 const { grepWorkspaceTool } = require("./code-tools/grep-workspace");
+const { extractAtMentions, readMentionFile } = require("../panel/at-file-context");
+const { buildSemanticContext } = require("./semantic-retriever");
 
 function scoreEntry(entry, tokens) {
   const text = `${entry.path} ${entry.text}`.toLowerCase();
@@ -25,6 +27,17 @@ function retrieveContext(workspacePath, goal, settings = {}) {
 
   const index = readCodeIndex(workspacePath);
   const snippets = [];
+
+  for (const mention of extractAtMentions(goal)) {
+    const file = readMentionFile(workspacePath, mention);
+    if (file.ok) {
+      snippets.unshift({
+        path: file.path,
+        text: file.content.slice(0, perSnippet),
+        source: "at-mention",
+      });
+    }
+  }
 
   if (index?.entries?.length) {
     const scored = index.entries
@@ -58,8 +71,14 @@ function retrieveContext(workspacePath, goal, settings = {}) {
 
   let total = 0;
   const lines = [];
+  const seenPaths = new Set();
   for (const s of snippets) {
-    const block = `### ${s.path}\n${s.text}\n`;
+    const key = String(s.path || "").toLowerCase();
+    if (seenPaths.has(key)) {
+      continue;
+    }
+    seenPaths.add(key);
+    const block = `### ${s.path} (${s.source})\n${s.text}\n`;
     if (total + block.length > maxChars) {
       break;
     }
@@ -73,4 +92,18 @@ function retrieveContext(workspacePath, goal, settings = {}) {
   };
 }
 
-module.exports = { retrieveContext };
+async function retrieveContextAsync(workspacePath, goal, settings = {}) {
+  if (settings.codeSemanticSearchEnabled !== false) {
+    try {
+      const semantic = await buildSemanticContext(workspacePath, goal, settings);
+      if (semantic.snippetCount > 0) {
+        return semantic;
+      }
+    } catch {
+      // fall back to keyword retrieval
+    }
+  }
+  return retrieveContext(workspacePath, goal, settings);
+}
+
+module.exports = { retrieveContext, retrieveContextAsync };

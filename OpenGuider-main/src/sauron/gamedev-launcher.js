@@ -184,9 +184,46 @@ async function launchGamedevSession({
     }
   }
 
+  if (
+    settings.gamedevAutoScaffoldEnabled === true
+    && phaseInfo?.phase === 1
+    && engine === "unity"
+    && genre.templateId
+    && !fs.existsSync(path.join(resolvedWorkspace, "Packages", "manifest.json"))
+  ) {
+    const autoScaffold = scaffoldUnityTemplate(resolvedWorkspace, genre.templateId);
+    if (autoScaffold.ok) {
+      notices.push(`Auto scaffold: ${autoScaffold.label}`);
+    }
+  }
+
+  const phaseDef = phaseInfo ? getCurrentPhaseGoal(resolvedWorkspace) : null;
+  const currentPhaseDef = phaseDef?.pipeline?.phases?.find((p) => p.phase === phaseInfo?.phase)
+    || null;
+  const wireRecipePointer = phaseInfo
+    ? resolveWireRecipePointer(phaseInfo.genre || genre.genre, phaseInfo.phase)
+    : null;
+
+  if (
+    settings.gamedevMcpDirectPhasesEnabled === true
+    && currentPhaseDef?.executionMode === "mcp-only"
+    && wireRecipePointer
+  ) {
+    const directWire = await tryExecuteWireRecipe(wireRecipePointer, { skipIfNoBridge: false });
+    if (directWire.ok && !directWire.skipped) {
+      return {
+        ok: true,
+        engine,
+        workspacePath: resolvedWorkspace,
+        mcpDirect: true,
+        wireRecipe: wireRecipePointer,
+        notices,
+      };
+    }
+  }
+
   const effectiveTask = phaseInfo?.goal || rawTask;
   const brief = readGameDesignBrief(resolvedWorkspace);
-  const wireRecipePointer = phaseInfo ? resolveWireRecipePointer(phaseInfo.genre || genre.genre, phaseInfo.phase) : null;
   if (wireRecipePointer) {
     const wireRun = await tryExecuteWireRecipe(wireRecipePointer);
     if (wireRun.ok && !wireRun.skipped) {

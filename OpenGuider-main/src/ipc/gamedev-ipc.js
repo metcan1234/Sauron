@@ -12,6 +12,9 @@ const { getGamedevStatus } = require("../sauron/gamedev-status");
 const { probeGamedevMcpEntry } = require("../sauron/gamedev-path-resolver");
 const { summarizeGamedevLedger } = require("../sauron/gamedev-finops-ledger");
 const { getGamePipelineStatus } = require("../sauron/game-pipeline");
+const { probeGamedevBridgePorts } = require("../sauron/gamedev-bridge-probe");
+const { fixGamedevSetup } = require("../sauron/gamedev-fix-setup");
+const { runGamedevPlayLoop } = require("../sauron/gamedev-play-loop");
 
 function registerGamedevIpc({
   ipcMain,
@@ -42,7 +45,7 @@ function registerGamedevIpc({
   async function handleActivateGamedevMode() {
     debugLog("ipc:activate-gamedev-mode");
     try {
-      const settings = await getRuntimeSettings();
+      const settings = await getRuntimeSettings({ includePersona: false });
 
       // Preflight: Game Dev bloker kontrolü
       const blockers = getBlockersForChannel('gamedev', store, { settings });
@@ -68,7 +71,7 @@ function registerGamedevIpc({
   async function handleToggleGamedevMode() {
     debugLog("ipc:toggle-gamedev-mode");
     try {
-      const settings = await getRuntimeSettings();
+      const settings = await getRuntimeSettings({ includePersona: false });
       const sessionInfo = getGamedevSessionInfo();
       if (sessionInfo.modeActive) {
         const result = deactivateGamedevMode();
@@ -88,7 +91,7 @@ function registerGamedevIpc({
   ipcMain.handle("start-gamedev-session", async (_event, { taskText, masterPrompt, workspacePath, engine } = {}) => {
     debugLog("ipc:start-gamedev-session");
     try {
-      const settings = await getRuntimeSettings();
+      const settings = await getRuntimeSettings({ includePersona: false });
 
       // Preflight: Game Dev bloker kontrolü
       const blockers = getBlockersForChannel('gamedev', store, { settings });
@@ -124,7 +127,7 @@ function registerGamedevIpc({
   });
 
   ipcMain.handle("get-gamedev-status", async () => {
-    const settings = await getRuntimeSettings();
+    const settings = await getRuntimeSettings({ includePersona: false });
     const probe = probeGamedevMcpEntry(settings);
     const sessionInfo = getGamedevSessionInfo();
     const workspacePath = resolveWorkspacePath(null);
@@ -151,8 +154,37 @@ function registerGamedevIpc({
   });
 
   ipcMain.handle("probe-gamedev-mcp", async () => {
-    const settings = await getRuntimeSettings();
+    const settings = await getRuntimeSettings({ includePersona: false });
     return probeGamedevMcpEntry(settings);
+  });
+
+  ipcMain.handle("get-gamedev-bridge-status", async () => {
+    const settings = await getRuntimeSettings({ includePersona: false });
+    if (settings.gamedevBridgeMonitorEnabled === false) {
+      return { ok: false, disabled: true };
+    }
+    return probeGamedevBridgePorts();
+  });
+
+  ipcMain.handle("fix-gamedev-setup", async (_event, { workspacePath } = {}) => {
+    debugLog("ipc:fix-gamedev-setup");
+    const settings = await getRuntimeSettings({ includePersona: false });
+    return fixGamedevSetup({
+      workspacePath: resolveWorkspacePath(workspacePath),
+      settings,
+      projectRoot: require("path").join(__dirname, "..", ".."),
+    });
+  });
+
+  ipcMain.handle("run-gamedev-play-loop", async (_event, { workspacePath, recipeId, maxAttempts } = {}) => {
+    debugLog("ipc:run-gamedev-play-loop");
+    const settings = await getRuntimeSettings({ includePersona: false });
+    return runGamedevPlayLoop({
+      workspacePath: resolveWorkspacePath(workspacePath),
+      settings,
+      recipeId,
+      maxAttempts: Number(maxAttempts) || 3,
+    });
   });
 }
 

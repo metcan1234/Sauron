@@ -1,9 +1,21 @@
 import { createChatHistoryController } from "./chat-history.js";
+import { createIntroHandler } from "./intro-handler.js";
 import { createWebStudioController } from "./web-studio.js";
 import { createSelfBuildStudioController } from "./self-build-studio.js";
 import { applyOptionalFeatureVisibility } from "./feature-visibility.js";
 import { applyI18nToDocument, t } from "../i18n/index.js";
 import { createChannelControls } from "./channel-controls.js";
+import { createChannelHintsController } from "./channel-hints.js";
+import { createContextPickerController } from "./context-picker.js";
+import { createCodeAgentSummaryController } from "./code-agent-summary.js";
+import { createPersonaAvatarController } from "./persona-avatar.js";
+import { createVoiceChatModeController } from "./voice-chat-mode.js";
+import { createGamedevQuickSetupController } from "./gamedev-quick-setup.js";
+import { createGamedevBridgeStatusController } from "./gamedev-bridge-status.js";
+import { createGamedevSceneViewController } from "./gamedev-scene-view.js";
+import { createPluginProfileController } from "./plugin-profile.js";
+import { createLunaRelationshipBadgeController } from "./luna-relationship-badge.js";
+import { runEnhancedOnboarding } from "./onboarding-enhanced.js";
 import { createMessagingController } from "./messaging.js";
 import { createPlanView } from "./plan-view.js";
 import { createPttController } from "./ptt.js";
@@ -143,16 +155,51 @@ export function createPanelController({
   const stepApproval = createStepApprovalController({ dom, log, win });
   const webStudio = createWebStudioController({ api, ui, win, doc });
   const selfBuildStudio = createSelfBuildStudioController({ api, ui, doc });
-  const messaging = createMessagingController({ api, doc, dom, log, state, ui, webStudio });
-  const chatHistory = createChatHistoryController({ api, doc, dom, log, ui, state, win });
+  const messaging = createMessagingController({
+    api,
+    doc,
+    dom,
+    log,
+    state,
+    ui,
+    webStudio,
+    resolvePluginProfile: (...args) => syncPluginProfile(...args),
+  });
+  const intro = createIntroHandler({ api, messaging, state, ui, log });
+  const chatHistory = createChatHistoryController({
+    api,
+    doc,
+    dom,
+    log,
+    ui,
+    state,
+    win,
+    onNewEmptyChat: (settings) => intro.maybeShowIntro(settings, []),
+  });
   const tts = createTtsPlaybackController({ api, log, state, win });
   const ptt = createPttController({ api, dom, log, messaging, state, ui, win });
+  const personaAvatar = createPersonaAvatarController({ doc });
+  const codeAgentSummary = createCodeAgentSummaryController({ doc, ui });
+  const contextPicker = createContextPickerController({ api, doc, dom, log, state });
+  const gamedevQuickSetup = createGamedevQuickSetupController({ api, doc, state, ui, log });
+  const gamedevBridgeStatus = createGamedevBridgeStatusController({ api, doc, state, log });
+  const gamedevSceneView = createGamedevSceneViewController({ api, doc, state, log });
+  const voiceChatMode = createVoiceChatModeController({ api, doc, dom, ptt, state, ui, log });
   let lastBrowserExecutionSnapshot = null;
   let modeBarHideTimer = null;
   let workspacePollTimer = null;
   let focusInProgress = false;
   let handoffInProgress = false;
   let lastHandoffLaunchVerified = false;
+  let syncPluginProfile = async () => null;
+
+  function handleProfileApplied(_meta, effectiveSettings = {}) {
+    applyOptionalFeatureVisibility(doc, effectiveSettings);
+    channelControls?.applyChannelFeatureVisibility?.(effectiveSettings);
+    void ui.refreshCodeReadinessBadge();
+    void gamedevBridgeStatus.refresh();
+    void gamedevSceneView.refresh();
+  }
 
   function setVsCodeLaunchBusy(busy) {
     handoffInProgress = Boolean(busy);
@@ -370,6 +417,11 @@ export function createPanelController({
     const draftTaskText = String(
       options?.draftTaskText ?? dom.textInput?.value ?? "",
     ).trim();
+    await syncPluginProfile({
+      text: draftTaskText,
+      source: "handoff",
+      workspacePath: state.getSetting("workspacePath") || "",
+    }, { notify: true });
     const handoffOptions = {
       ...(options?.force ? { force: true } : {}),
       ...(draftTaskText ? { draftTaskText } : {}),
@@ -847,6 +899,29 @@ export function createPanelController({
     openWorkspaceHandoff,
     setVsCodeLaunchBusy,
     isVsCodeLaunchBusy,
+    gamedevQuickSetup,
+    resolvePluginProfile: (...args) => syncPluginProfile(...args),
+  });
+  const pluginProfile = createPluginProfileController({
+    api,
+    doc,
+    state,
+    ui,
+    log,
+    onProfileApplied: handleProfileApplied,
+  });
+  syncPluginProfile = (params, options) => pluginProfile.resolveProfile(params, options);
+  const lunaRelationshipBadge = createLunaRelationshipBadgeController({ api, doc, log });
+  const channelHints = createChannelHintsController({
+    api,
+    doc,
+    log,
+    state,
+    messaging,
+    webStudio,
+    onOpenWorkspace: (text) => openWorkspaceHandoff({ draftTaskText: text }),
+    onOpenGamedev: (text) => channelControls.startGamedevSession(text),
+    onOpenGoose: (text) => channelControls.startGooseSession(text),
   });
   channelControls.wrapMessagingSend(messaging);
 
@@ -886,6 +961,15 @@ export function createPanelController({
       dom.textInput.style.height = Math.min(dom.textInput.scrollHeight, 120) + "px";
     });
 
+    channelHints.bindInput(dom.textInput);
+    contextPicker.bind(dom.textInput);
+
+    const voiceLoopBtn = doc.getElementById("btn-voice-chat-loop");
+    voiceLoopBtn?.classList.toggle(
+      "hidden",
+      state.getSettings()?.voiceChatLoopEnabled === false,
+    );
+
     dom.sendBtn.addEventListener("click", messaging.sendMessage);
 
     doc.getElementById("empty-cta-micro-guide")?.addEventListener("click", () => {
@@ -906,6 +990,9 @@ export function createPanelController({
     });
     doc.getElementById("btn-code-studio")?.addEventListener("click", () => {
       void api.invoke("open-code-studio");
+    });
+    doc.getElementById("btn-code-agent-cancel")?.addEventListener("click", () => {
+      void messaging.cancelCodeAgent();
     });
 
     const stopBtn = doc.getElementById("stop-btn");
@@ -1189,7 +1276,10 @@ export function createPanelController({
     });
 
     api.on("ai-chunk", (chunk) => messaging.appendStreamChunk(chunk));
-    api.on("ai-done", (parsed) => messaging.onAIDone(parsed));
+    api.on("ai-done", (parsed) => {
+      messaging.onAIDone(parsed);
+      void lunaRelationshipBadge.refresh();
+    });
     api.on("ai-error", (errorMessage) => messaging.onAIError(errorMessage));
     api.on("tts-start", (base64Audio) => tts.handleTtsStart(base64Audio));
     api.on("tts-webspeech", (data) => tts.handleWebSpeech(data));
@@ -1198,24 +1288,39 @@ export function createPanelController({
 
     api.on("settings-changed", (nextSettings) => {
       log("ipc:settings-changed received");
-      state.setSettings(nextSettings);
-      ui.buildProviderSelector();
-      ui.buildModelSelector();
-      ui.updateProviderDot();
-      applyShortcutTitles();
-      const assistantMode = normalizeAssistantMode(nextSettings?.assistantMode);
-      state.setSetting("assistantMode", assistantMode);
-      ui.renderPanelModeState({
-        assistantMode,
-        sessionSnapshot: state.getSessionSnapshot(),
+      state.setRawSettings(nextSettings);
+      void pluginProfile.refreshProfileState().then(() => {
+        const effectiveSettings = state.getSettings();
+        ui.buildProviderSelector();
+        ui.buildModelSelector();
+        ui.updateProviderDot();
+        applyShortcutTitles();
+        const assistantMode = normalizeAssistantMode(effectiveSettings?.assistantMode);
+        state.setSetting("assistantMode", assistantMode);
+        ui.renderPanelModeState({
+          assistantMode,
+          sessionSnapshot: state.getSessionSnapshot(),
+        });
+        updatePlanActionVisibility(assistantMode);
+        state.setIncludeScreen(effectiveSettings?.includeScreenshotByDefault === true);
+        syncIncludeScreenBadge();
+        void updateWorkspaceButtonState();
+        applyOptionalFeatureVisibility(doc, effectiveSettings);
+        channelControls.applyChannelFeatureVisibility(effectiveSettings);
+        ui.renderWorkspaceBadge(effectiveSettings?.workspacePath || "");
+        personaAvatar.render(effectiveSettings);
+        void lunaRelationshipBadge.refresh();
+        doc.getElementById("btn-voice-chat-loop")?.classList.toggle(
+          "hidden",
+          effectiveSettings?.voiceChatLoopEnabled === false,
+        );
+        void contextPicker.refreshFiles();
+        void channelControls.refreshChannelStatus();
+        void ui.refreshReadinessBadge();
+        void ui.refreshCodeReadinessBadge();
+        void gamedevBridgeStatus.refresh();
+        void gamedevSceneView.refresh();
       });
-      updatePlanActionVisibility(assistantMode);
-      state.setIncludeScreen(nextSettings?.includeScreenshotByDefault === true);
-      syncIncludeScreenBadge();
-      void updateWorkspaceButtonState();
-      applyOptionalFeatureVisibility(doc, nextSettings);
-      channelControls.applyChannelFeatureVisibility(nextSettings);
-      void channelControls.refreshChannelStatus();
     });
 
     api.on("finops-budget-alert", (payload) => {
@@ -1233,12 +1338,10 @@ export function createPanelController({
     });
 
     api.on("code-agent-diff-pending", async (payload) => {
-      const preview = String(payload?.diff || "").slice(0, 1200);
-      const confirmed = await ui.confirmDialog({
-        title: `Dosya değişikligi: ${payload?.path || ""}`,
-        message: preview || "Degisiklik onayini bekliyor.",
-        confirmLabel: "Onayla",
-        cancelLabel: "Reddet",
+      const confirmed = await ui.confirmDiffDialog({
+        title: `Dosya değişikliği: ${payload?.path || ""}`,
+        path: payload?.path || "",
+        diff: payload?.diff || "",
       });
       await api.invoke(confirmed ? "code-agent-approve-change" : "code-agent-reject-change", {
         sessionId: payload?.sessionId,
@@ -1256,12 +1359,20 @@ export function createPanelController({
 
     api.on("code-agent-complete", (payload) => {
       doc.getElementById("code-agent-badge")?.classList.add("hidden");
-      ui.showToast(payload?.summary || "Kod agent tamamlandi");
+      doc.getElementById("btn-code-agent-cancel")?.classList.add("hidden");
+      codeAgentSummary.show({ ...payload, ok: true });
+      if (payload?.summary) {
+        log("code-agent-complete", payload.summary);
+      }
     });
 
     api.on("code-agent-error", (payload) => {
       doc.getElementById("code-agent-badge")?.classList.add("hidden");
-      ui.showToast(payload?.error || "Kod agent hatasi", true);
+      doc.getElementById("btn-code-agent-cancel")?.classList.add("hidden");
+      codeAgentSummary.show({ ...payload, ok: false });
+      if (payload?.error) {
+        log("code-agent-error", payload.error);
+      }
     });
 
     api.on("browser-agent-status-changed", (status) => {
@@ -1345,6 +1456,7 @@ export function createPanelController({
       applyI18nToDocument(doc);
       const settings = await api.invoke("get-settings");
       const session = await api.invoke("get-active-session");
+      state.setRawSettings(settings);
       state.setSettings(settings);
       state.setSessionSnapshot(session);
       ui.buildProviderSelector();
@@ -1369,19 +1481,44 @@ export function createPanelController({
       state.setIncludeScreen(settings?.includeScreenshotByDefault === true);
       syncIncludeScreenBadge();
       bindEvents();
+      gamedevQuickSetup.bindEvents();
+      pluginProfile.bindEvents();
       chatHistory.bindEvents();
       setupIPCListeners();
+      personaAvatar.render(settings);
+      doc.getElementById("btn-voice-chat-loop")?.classList.toggle(
+        "hidden",
+        settings?.voiceChatLoopEnabled === false,
+      );
+      void messaging.primeMessageCostBaseline?.();
       if (!settings?.onboardingCompleted) {
         ui.showOnboarding();
+        void runEnhancedOnboarding({ api, doc, settings });
       }
       await ensureRuntimePermissions();
       await updateWorkspaceButtonState();
-      applyOptionalFeatureVisibility(doc, settings);
-      channelControls.applyChannelFeatureVisibility(settings);
+      await pluginProfile.resolveProfile({
+        source: "startup",
+        workspacePath: settings.workspacePath || "",
+      }, { notify: false });
+      await lunaRelationshipBadge.refresh();
+      const effectiveSettings = state.getSettings();
+      applyOptionalFeatureVisibility(doc, effectiveSettings);
+      channelControls.applyChannelFeatureVisibility(effectiveSettings);
+      ui.renderWorkspaceBadge(effectiveSettings.workspacePath || "");
       await channelControls.refreshChannelStatus();
       startHandoffHistoryRefresh();
       await ui.refreshFinOpsBadge();
+      await ui.refreshReadinessBadge();
+      await ui.refreshCodeReadinessBadge();
+      await gamedevBridgeStatus.refresh();
+      await gamedevSceneView.refresh();
       dom.textInput.focus();
+      if (!settings?.onboardingCompleted) {
+        // onboarding overlay handles first-run; skip auto intro
+      } else if (!(session?.messages || []).length) {
+        await intro.maybeShowIntro(settings, session?.messages || []);
+      }
       log("init:complete");
     } catch (error) {
       log("init:failed", error);

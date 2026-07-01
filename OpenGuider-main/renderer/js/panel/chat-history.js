@@ -1,4 +1,13 @@
-export function createChatHistoryController({ api, doc = document, dom, log, ui, state, win = window }) {
+export function createChatHistoryController({
+  api,
+  doc = document,
+  dom,
+  log,
+  ui,
+  state,
+  win = window,
+  onNewEmptyChat,
+}) {
   let searchDebounceTimer = null;
   let currentQuery = "";
   let drawerOpen = false;
@@ -516,6 +525,9 @@ export function createChatHistoryController({ api, doc = document, dom, log, ui,
       renderSessionList(result.sessions || []);
       closeDrawer();
       dom.textInput?.focus();
+      if (typeof onNewEmptyChat === "function") {
+        await onNewEmptyChat(state.getSettings?.() || {});
+      }
     } catch (error) {
       log("create-chat-session error", error);
       ui.showToast("Yeni sohbet açılamadı", true);

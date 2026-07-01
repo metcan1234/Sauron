@@ -8,25 +8,58 @@
 <style>
 body.code-studio-body { margin: 0; background: #0f1117; color: #e8eaed; font-family: system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; }
 .code-studio-layout { display: flex; flex: 1; min-height: 0; }
-.code-studio-sidebar { width: 240px; border-right: 1px solid rgba(255,255,255,0.08); overflow: auto; padding: 8px; font-size: 12px; }
+.code-studio-sidebar { width: 260px; border-right: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; min-height: 0; }
+.code-studio-sidebar-tools { padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.code-studio-sidebar-tools input { width: 100%; box-sizing: border-box; padding: 6px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); background: #171923; color: inherit; }
+.code-studio-git-panel { padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 11px; color: #94a3b8; }
+.code-studio-git-panel strong { color: #e2e8f0; }
+#file-tree { flex: 1; overflow: auto; padding: 8px; font-size: 12px; }
 .code-studio-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.code-studio-editor { flex: 1; overflow: auto; padding: 12px; }
-.code-studio-editor pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: Consolas, monospace; font-size: 13px; }
-.code-studio-log { height: 160px; border-top: 1px solid rgba(255,255,255,0.08); overflow: auto; padding: 8px; font-size: 12px; }
+.code-studio-tabs { display: flex; gap: 4px; padding: 6px 8px 0; overflow-x: auto; border-bottom: 1px solid rgba(255,255,255,0.08); min-height: 32px; }
+.code-studio-tab { border: none; background: rgba(255,255,255,0.06); color: #cbd5e1; padding: 4px 10px; border-radius: 6px 6px 0 0; cursor: pointer; font-size: 11px; white-space: nowrap; }
+.code-studio-tab.active { background: rgba(198,90,58,0.25); color: #fff; }
+.code-studio-tab.is-dirty::after { content: " •"; color: #fdba74; }
+.code-studio-editor { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 8px 12px; gap: 8px; }
+.code-studio-editor-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; color: #94a3b8; }
+#file-content { flex: 1; width: 100%; box-sizing: border-box; resize: none; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; background: #12151c; color: #e8eaed; padding: 10px; font-family: Consolas, monospace; font-size: 13px; line-height: 1.45; }
+.monaco-container { flex: 1; min-height: 0; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; overflow: hidden; }
+.monaco-container.hidden, #file-content.hidden { display: none; }
+.code-studio-log { height: 120px; border-top: 1px solid rgba(255,255,255,0.08); overflow: auto; padding: 8px; font-size: 12px; }
+.code-studio-diff { height: 140px; border-top: 1px solid rgba(255,255,255,0.08); overflow: auto; padding: 8px; font-size: 11px; font-family: Consolas, monospace; white-space: pre-wrap; color: #cbd5e1; }
 .file-item { cursor: pointer; padding: 2px 4px; border-radius: 4px; }
 .file-item:hover { background: rgba(255,255,255,0.06); }
 .file-item.active { background: rgba(198,90,58,0.25); }
 </style>
 </head>
 <body class="code-studio-body">
-  <header style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;justify-content:space-between;align-items:center;">
+  <header style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;justify-content:space-between;align-items:center;gap:8px;">
     <strong>Sauron Code Studio</strong>
-    <button id="btn-refresh-index" type="button">İndeksi yenile</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button id="btn-save-file" type="button" disabled>Kaydet</button>
+      <button id="btn-rollback-checkpoint" type="button" class="hidden">Checkpoint geri al</button>
+      <button id="btn-code-agent-cancel-studio" type="button">Agent'ı durdur</button>
+      <button id="btn-refresh-index" type="button">İndeksi yenile</button>
+      <button id="btn-refresh-git" type="button">Git yenile</button>
+    </div>
   </header>
   <div class="code-studio-layout">
-    <aside class="code-studio-sidebar" id="file-tree">Yükleniyor…</aside>
+    <aside class="code-studio-sidebar">
+      <div class="code-studio-sidebar-tools">
+        <input id="file-search" type="search" placeholder="Dosya ara…"/>
+      </div>
+      <div class="code-studio-git-panel" id="git-panel">Git yükleniyor…</div>
+      <div id="file-tree">Yükleniyor…</div>
+    </aside>
     <div class="code-studio-main">
-      <div class="code-studio-editor"><pre id="file-content">Dosya seçin.</pre></div>
+      <div class="code-studio-tabs" id="editor-tabs"></div>
+      <div class="code-studio-editor">
+        <div class="code-studio-editor-header">
+          <span id="editor-path-label">Dosya seçin.</span>
+        </div>
+        <textarea id="file-content" spellcheck="false" placeholder="Sol panelden dosya seçin veya agent değişikliklerini bekleyin."></textarea>
+        <div id="monaco-container" class="monaco-container hidden"></div>
+      </div>
+      <div class="code-studio-diff" id="pending-diff">Bekleyen diff burada görünür.</div>
       <div class="code-studio-log" id="agent-log">Kod agent logu burada görünür.</div>
     </div>
   </div>

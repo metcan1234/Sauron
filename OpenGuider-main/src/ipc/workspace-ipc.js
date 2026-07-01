@@ -107,7 +107,7 @@ function registerWorkspaceIpc({
   ipcMain.handle("run-sauron-doctor", async () => {
     debugLog("ipc:run-sauron-doctor");
     try {
-      const runtimeSettings = await getRuntimeSettings();
+      const runtimeSettings = await getRuntimeSettings({ includePersona: false });
       return { ok: true, ...runSauronDoctor(store, { settings: runtimeSettings }) };
     } catch (error) {
       return {
@@ -332,7 +332,7 @@ function registerWorkspaceIpc({
       }
 
       persistActiveSession(store, snapshot);
-      const runtimeSettings = await getRuntimeSettings();
+      const runtimeSettings = await getRuntimeSettings({ includePersona: false });
       let enrichedSnapshot = {
         ...snapshot,
         chatSessionTitle: getActiveChatSessionTitle(store),
@@ -464,7 +464,7 @@ function registerWorkspaceIpc({
 
   ipcMain.handle("get-cline-sync-status", async () => {
     try {
-      const runtimeSettings = await getRuntimeSettings();
+      const runtimeSettings = await getRuntimeSettings({ includePersona: false });
       const workspacePath = String(store.get("workspacePath") || "").trim();
       return {
         ok: true,
@@ -480,7 +480,7 @@ function registerWorkspaceIpc({
 
   ipcMain.handle("sync-cline-credentials", async () => {
     try {
-      const runtimeSettings = await getRuntimeSettings();
+      const runtimeSettings = await getRuntimeSettings({ includePersona: false });
       const workspacePath = String(store.get("workspacePath") || "").trim();
       if (!workspacePath) {
         return { ok: false, error: "Workspace path is not configured." };

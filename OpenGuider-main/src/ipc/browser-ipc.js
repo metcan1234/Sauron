@@ -14,7 +14,7 @@ function registerBrowserIpc({
   ipcMain.handle("restart-browser-agent", async () => {
     debugLog("ipc:restart-browser-agent");
     try {
-      const runtimeSettings = await getRuntimeSettings();
+      const runtimeSettings = await getRuntimeSettings({ includePersona: false });
 
       // Preflight: Browser bloker kontrolü
       const blockers = getBlockersForChannel('browser', null, { settings: runtimeSettings });
@@ -101,7 +101,7 @@ function registerBrowserIpc({
       child.on("close", async (code) => {
         if (code === 0) {
           try {
-            const runtimeSettings = await getRuntimeSettings();
+            const runtimeSettings = await getRuntimeSettings({ includePersona: false });
             await syncBrowserPluginWithRuntimeSettings(runtimeSettings, { forceRestart: true });
             resolve({ ok: true, targetDir });
           } catch (err) {

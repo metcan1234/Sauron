@@ -62,7 +62,7 @@ function registerGamePipelineIpc({
         scaffoldResult = scaffoldUnityTemplate(resolved, pipeline.templateId);
       }
 
-      const settings = await getRuntimeSettings();
+      const settings = await getRuntimeSettings({ includePersona: false });
       const result = await startGamePipeline({
         pipelineId,
         workspacePath: resolved,
@@ -85,7 +85,7 @@ function registerGamePipelineIpc({
   ipcMain.handle("advance-game-pipeline", async (_event, { workspacePath } = {}) => {
     debugLog("ipc:advance-game-pipeline");
     try {
-      const settings = await getRuntimeSettings();
+      const settings = await getRuntimeSettings({ includePersona: false });
       const resolved = resolveWorkspacePath(workspacePath);
       const result = await advanceGamePipelineAfterComplete(resolved, settings, {
         launchVSCode: false,

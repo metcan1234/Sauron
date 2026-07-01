@@ -30,7 +30,7 @@ function registerGooseIpc({
   ipcMain.handle("start-goose-session", async (_event, { taskText, workspacePath, mode } = {}) => {
     debugLog("ipc:start-goose-session");
     try {
-      const settings = await getRuntimeSettings();
+      const settings = await getRuntimeSettings({ includePersona: false });
       if (settings.gooseEnabled === false) {
         return { ok: false, error: "Goose Kısmı devre dışı. Ayarlar → AI Ajanları." };
       }
@@ -75,7 +75,7 @@ function registerGooseIpc({
   });
 
   ipcMain.handle("get-goose-status", async () => {
-    const settings = await getRuntimeSettings();
+    const settings = await getRuntimeSettings({ includePersona: false });
     const status = getGooseStatus();
     const probe = await probeGooseBinary(settings);
     return {
@@ -98,12 +98,12 @@ function registerGooseIpc({
   });
 
   ipcMain.handle("get-goose-daily-spend", async () => {
-    const settings = await getRuntimeSettings();
+    const settings = await getRuntimeSettings({ includePersona: false });
     return getGooseDailySpendSummary(settings);
   });
 
   ipcMain.handle("preview-goose-mode", async (_event, { taskText } = {}) => {
-    const settings = await getRuntimeSettings();
+    const settings = await getRuntimeSettings({ includePersona: false });
     const routing = await resolveGooseMode(String(taskText || ""), settings);
     return {
       ok: true,
@@ -115,7 +115,7 @@ function registerGooseIpc({
   });
 
   ipcMain.handle("probe-goose-binary", async (_event, options = {}) => {
-    const settings = await getRuntimeSettings();
+    const settings = await getRuntimeSettings({ includePersona: false });
     const gooseBinaryPath = String(
       options.gooseBinaryPath ?? settings.gooseBinaryPath ?? "",
     ).trim();
