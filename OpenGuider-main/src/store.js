@@ -125,6 +125,7 @@ const schema = {
   gamedevBridgeMonitorEnabled: { type:"boolean", default:true },
   gamedevAutoEditorLaunch: { type:"boolean", default:true },
   gamedevAutoPluginInstall: { type:"boolean", default:true },
+  gamedevAutoMcpStart: { type:"boolean", default:true },
   gamedevBridgeWaitMs: { type:"number", default:90000 },
   gamedevAutoScaffoldEnabled: { type:"boolean", default:false },
   gamedevPlayLoopEnabled: { type:"boolean", default:false },

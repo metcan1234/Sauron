@@ -1,0 +1,9 @@
+{
+  "id": "empty-phase3",
+  "genre": "empty",
+  "phase": 3,
+  "engine": "unreal",
+  "steps": [
+    { "name": "unreal_execute_python", "params": { "script": "print('sauron-phase3')" } }
+  ]
+}

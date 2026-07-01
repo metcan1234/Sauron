@@ -7,6 +7,8 @@ const { writeGamedevMcpConfig } = require("./gamedev-mcp-config");
 const { probeGamedevBridgeForEngine } = require("./gamedev-bridge-probe");
 const { installFunplayMcpPlugin, isFunplayPluginInstalled } = require("./gamedev-unreal-installer");
 const { ensureEditorBridgeReady } = require("./gamedev-editor-launcher");
+const { ensureUnityAutostartConfig, ensureFunplayAutostartConfig } = require("./gamedev-mcp-autostart");
+const { tryCaptureUnrealSceneSnapshot } = require("./gamedev-unreal-scene-cache");
 
 function readJson(filePath) {
   try {
@@ -86,16 +88,26 @@ async function ensureGamedevProjectReady(workspacePath, settings = {}, engineOve
   steps.push({ id: "engine-compat", ok: compat.ok, message: compat.ok ? compat.path : compat.error });
 
   if (engine === "unity") {
+    ensureUnityAutostartConfig(resolved);
     const unityPkg = ensureUnityMcpPackage(resolved);
     steps.push({ id: "unity-mcp-package", ok: unityPkg.ok, message: unityPkg.reason });
+    steps.push({ id: "mcp-autostart-config", ok: true, message: "unity-autostart-config" });
   }
 
   if (engine === "unreal") {
+    ensureFunplayAutostartConfig(resolved);
+    steps.push({ id: "mcp-autostart-config", ok: true, message: "funplay-autostart-config" });
     const unrealPlugin = await ensureUnrealFunplayPlugin(resolved, settings);
     steps.push({
       id: "unreal-funplay-install",
       ok: unrealPlugin.ok,
       message: unrealPlugin.reason || unrealPlugin.error || "unreal-plugin",
+    });
+    const sceneSnap = tryCaptureUnrealSceneSnapshot(resolved);
+    steps.push({
+      id: "unreal-scene-cache",
+      ok: sceneSnap.ok,
+      message: sceneSnap.ok ? `maps:${sceneSnap.snapshot?.mapCount || 0}` : sceneSnap.error,
     });
   }
 

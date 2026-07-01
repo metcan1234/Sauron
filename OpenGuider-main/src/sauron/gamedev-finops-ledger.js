@@ -92,9 +92,16 @@ function summarizeGamedevLedger(workspacePath) {
   let mcpToolCalls = 0;
   let llmTokensEst = 0;
   let sessions = 0;
+  const byEngine = { unity: 0, unreal: 0, other: 0 };
   for (const event of events) {
     if (event.type === "session-start") {
       sessions += 1;
+      const key = String(event.engine || "other").toLowerCase();
+      if (key === "unity" || key === "unreal") {
+        byEngine[key] += 1;
+      } else {
+        byEngine.other += 1;
+      }
     }
     if (event.type === "mcp-tool") {
       mcpToolCalls += Number(event.count) || 1;
@@ -103,7 +110,7 @@ function summarizeGamedevLedger(workspacePath) {
       llmTokensEst += Number(event.tokens) || 0;
     }
   }
-  return { sessions, mcpToolCalls, llmTokensEst, eventCount: events.length };
+  return { sessions, mcpToolCalls, llmTokensEst, eventCount: events.length, byEngine };
 }
 
 module.exports = {

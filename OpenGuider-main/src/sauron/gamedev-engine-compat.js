@@ -8,7 +8,7 @@ const {
 } = require("./gamedev-config");
 
 const COMPAT_FILENAME = "engine-compat.json";
-const COMPAT_VERSION = 1;
+const COMPAT_VERSION = 2;
 
 function getCompatPath(workspacePath) {
   return path.join(String(workspacePath || "").trim(), ".sauron", COMPAT_FILENAME);
@@ -18,8 +18,12 @@ function getDefaultCompatManifest(sauronVersion = "") {
   return {
     version: COMPAT_VERSION,
     updatedAt: new Date().toISOString(),
-    sauronMinVersion: String(sauronVersion || "2.5.2"),
+    sauronMinVersion: String(sauronVersion || "2.6.0"),
     gamedevInstructionsVersion: GAMEDEV_INSTRUCTIONS_VERSION,
+    pinned: {
+      funplayReleaseTag: null,
+      unityMcpPackageUrl: UNITY_MCP_PACKAGE_URL,
+    },
     engines: {
       unity: {
         mcpPackages: ["com.coplaydev.unity-mcp"],

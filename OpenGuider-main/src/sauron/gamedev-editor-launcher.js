@@ -4,6 +4,8 @@ const { spawn } = require("child_process");
 const { probeGamedevBridgeForEngine } = require("./gamedev-bridge-probe");
 const { normalizeGamedevEngine } = require("./gamedev-config");
 const { findUprojectFile } = require("./gamedev-unreal-installer");
+const { findUnityEditorExecutable, findUnrealEditorExecutable } = require("./gamedev-editor-paths");
+const { tryStartEngineMcp } = require("./gamedev-mcp-autostart");
 
 const DEFAULT_BRIDGE_WAIT_MS = 90000;
 const DEFAULT_POLL_MS = 2500;
@@ -16,47 +18,12 @@ function fileExists(candidate) {
   }
 }
 
-function findUnityEditorExecutable() {
-  if (process.platform !== "win32") {
-    return null;
-  }
-  const roots = [
-    path.join(process.env["ProgramFiles"] || "C:\\Program Files", "Unity", "Hub", "Editor"),
-    path.join(process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)", "Unity", "Hub", "Editor"),
-  ];
-  const candidates = [];
-  for (const root of roots) {
-    if (!fileExists(root)) {
-      continue;
-    }
-    for (const versionDir of fs.readdirSync(root, { withFileTypes: true })) {
-      if (!versionDir.isDirectory()) {
-        continue;
-      }
-      candidates.push(path.join(root, versionDir.name, "Editor", "Unity.exe"));
-    }
-  }
-  candidates.sort().reverse();
-  return candidates.find((entry) => fileExists(entry)) || null;
+function findUnityEditorExecutableLegacy(settings = {}) {
+  return findUnityEditorExecutable(settings);
 }
 
-function findUnrealEditorExecutable() {
-  if (process.platform !== "win32") {
-    return null;
-  }
-  const epicRoot = path.join(process.env["ProgramFiles"] || "C:\\Program Files", "Epic Games");
-  if (!fileExists(epicRoot)) {
-    return null;
-  }
-  const candidates = [];
-  for (const entry of fs.readdirSync(epicRoot, { withFileTypes: true })) {
-    if (!entry.isDirectory() || !/^UE_/i.test(entry.name)) {
-      continue;
-    }
-    candidates.push(path.join(epicRoot, entry.name, "Engine", "Binaries", "Win64", "UnrealEditor.exe"));
-  }
-  candidates.sort().reverse();
-  return candidates.find((entry) => fileExists(entry)) || null;
+function findUnrealEditorExecutableLegacy(settings = {}) {
+  return findUnrealEditorExecutable(settings);
 }
 
 function spawnDetached(command, args = [], options = {}) {
@@ -117,8 +84,10 @@ function sleep(ms) {
 async function waitForEngineBridge(engine, workspacePath, options = {}) {
   const timeoutMs = Number(options.timeoutMs) || DEFAULT_BRIDGE_WAIT_MS;
   const pollMs = Number(options.pollMs) || DEFAULT_POLL_MS;
+  const settings = options.settings || {};
   const started = Date.now();
   let lastProbe = null;
+  let nudgeCount = 0;
 
   while (Date.now() - started < timeoutMs) {
     lastProbe = await probeGamedevBridgeForEngine(engine, { workspacePath });
@@ -129,6 +98,10 @@ async function waitForEngineBridge(engine, workspacePath, options = {}) {
         waitedMs: Date.now() - started,
         probe: lastProbe,
       };
+    }
+    if (Date.now() - started > 10000 && nudgeCount < 4 && settings.gamedevAutoMcpStart !== false) {
+      await tryStartEngineMcp(engine, workspacePath, settings);
+      nudgeCount += 1;
     }
     await sleep(pollMs);
   }
@@ -167,7 +140,7 @@ async function ensureEditorBridgeReady(engine, workspacePath, settings = {}, opt
     return { ok: false, probe: initial, steps, launched: false, error: launch.error || "editor-launch-failed" };
   }
 
-  const wait = await waitForEngineBridge(normalized, resolved, options);
+  const wait = await waitForEngineBridge(normalized, resolved, { ...options, settings });
   steps.push({
     id: "bridge-wait",
     ok: wait.ok,
@@ -188,8 +161,8 @@ async function ensureEditorBridgeReady(engine, workspacePath, settings = {}, opt
 
 module.exports = {
   DEFAULT_BRIDGE_WAIT_MS,
-  findUnityEditorExecutable,
-  findUnrealEditorExecutable,
+  findUnityEditorExecutable: findUnityEditorExecutableLegacy,
+  findUnrealEditorExecutable: findUnrealEditorExecutableLegacy,
   launchUnityProject,
   launchUnrealProject,
   launchGameEditor,

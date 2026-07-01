@@ -1,0 +1,10 @@
+{
+  "id": "empty-phase2",
+  "genre": "empty",
+  "phase": 2,
+  "engine": "unreal",
+  "steps": [
+    { "name": "unreal_spawn_actor", "params": { "class": "StaticMeshActor" } },
+    { "name": "unreal_get_world_outliner", "params": {} }
+  ]
+}

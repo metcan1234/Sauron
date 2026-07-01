@@ -1,0 +1,10 @@
+{
+  "id": "co-op-climb-phase1",
+  "genre": "co-op-climb",
+  "phase": 1,
+  "engine": "unreal",
+  "steps": [
+    { "name": "unreal_get_world_outliner", "params": {} },
+    { "name": "unreal_spawn_actor", "params": { "class": "Character" } }
+  ]
+}

@@ -18,6 +18,7 @@ const { probeGamedevBridgePorts, probeGamedevBridgeForEngine } = require("../sau
 const { fixGamedevSetup } = require("../sauron/gamedev-fix-setup");
 const { runGamedevPlayLoop } = require("../sauron/gamedev-play-loop");
 const { ensureGamedevProjectReady } = require("../sauron/gamedev-project-bootstrap");
+const { runGamedevSetupOrchestrator } = require("../sauron/gamedev-setup-orchestrator");
 const { wrapGamedevStreamAIResponse } = require("../sauron/gamedev-agent-runner");
 const { normalizeGamedevEngine } = require("../sauron/gamedev-config");
 
@@ -53,7 +54,7 @@ function registerGamedevIpc({
       return { ok: false, error: "Workspace path ayarlanmamis." };
     }
     const engine = normalizeGamedevEngine(engineOverride || settings.gamedevActiveEngine || "unity");
-    return ensureGamedevProjectReady(resolved, settings, engine);
+    return runGamedevSetupOrchestrator(resolved, settings, engine);
   }
 
   async function handleActivateGamedevMode() {
@@ -240,6 +241,11 @@ function registerGamedevIpc({
       maxAttempts: Number(maxAttempts) || 3,
       engine: engine || settings.gamedevActiveEngine,
     });
+  });
+
+  ipcMain.handle("run-gamedev-setup-orchestrator", async (_event, { workspacePath, engine } = {}) => {
+    const settings = await getRuntimeSettings();
+    return runGamedevSetupOrchestrator(resolveWorkspacePath(workspacePath), settings, engine || null);
   });
 
   ipcMain.handle("ensure-gamedev-editor-ready", async (_event, { workspacePath, engine } = {}) => {

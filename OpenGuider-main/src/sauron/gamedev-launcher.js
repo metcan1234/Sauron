@@ -44,7 +44,7 @@ const {
 } = require("./gamedev-router");
 const { appendGamedevLedgerEvent } = require("./gamedev-finops-ledger");
 const { resolveGamedevGenre } = require("./gamedev-genre-router");
-const { resolveWireRecipePointer } = require("./unity-wire-recipes");
+const { resolveWireRecipePointer } = require("./gamedev-wire-recipes");
 const { buildBriefHandoffHint, BRIEF_POINTER, readGameDesignBrief, hashBriefText } = require("./gamedev-prompt-compiler");
 const { tryExecuteWireRecipe } = require("./gamedev-wire-executor");
 const {
@@ -201,7 +201,7 @@ async function launchGamedevSession({
   const currentPhaseDef = phaseDef?.pipeline?.phases?.find((p) => p.phase === phaseInfo?.phase)
     || null;
   const wireRecipePointer = phaseInfo
-    ? resolveWireRecipePointer(phaseInfo.genre || genre.genre, phaseInfo.phase)
+    ? resolveWireRecipePointer(phaseInfo.genre || genre.genre, phaseInfo.phase, engine)
     : null;
 
   if (
@@ -209,7 +209,11 @@ async function launchGamedevSession({
     && currentPhaseDef?.executionMode === "mcp-only"
     && wireRecipePointer
   ) {
-    const directWire = await tryExecuteWireRecipe(wireRecipePointer, { skipIfNoBridge: false });
+    const directWire = await tryExecuteWireRecipe(wireRecipePointer, {
+      skipIfNoBridge: false,
+      engine,
+      workspacePath: resolvedWorkspace,
+    });
     if (directWire.ok && !directWire.skipped) {
       return {
         ok: true,
@@ -225,7 +229,7 @@ async function launchGamedevSession({
   const effectiveTask = phaseInfo?.goal || rawTask;
   const brief = readGameDesignBrief(resolvedWorkspace);
   if (wireRecipePointer) {
-    const wireRun = await tryExecuteWireRecipe(wireRecipePointer);
+    const wireRun = await tryExecuteWireRecipe(wireRecipePointer, { engine, workspacePath: resolvedWorkspace });
     if (wireRun.ok && !wireRun.skipped) {
       notices.push(`Wire recipe executed: ${wireRecipePointer} (${wireRun.stepsRun || 0} steps)`);
       appendGamedevLedgerEvent(resolvedWorkspace, {
@@ -378,6 +382,9 @@ async function launchGamedevSession({
     status,
   });
   void require("./gamedev-scene-cache").tryCaptureHierarchySnapshot(resolvedWorkspace);
+  if (engine === "unreal") {
+    void require("./gamedev-unreal-scene-cache").tryCaptureUnrealSceneSnapshot(resolvedWorkspace);
+  }
   recordGamedevHandoffContext(
     resolvedWorkspace,
     handoffMeta.optimizedTask,

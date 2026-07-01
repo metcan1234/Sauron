@@ -1,0 +1,10 @@
+{
+  "id": "empty-phase4",
+  "genre": "empty",
+  "phase": 4,
+  "engine": "unreal",
+  "steps": [
+    { "name": "unreal_play_mode", "params": { "action": "play" } },
+    { "name": "unreal_play_mode", "params": { "action": "stop" } }
+  ]
+}

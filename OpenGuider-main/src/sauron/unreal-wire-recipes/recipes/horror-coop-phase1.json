@@ -1,0 +1,10 @@
+{
+  "id": "horror-coop-phase1",
+  "genre": "horror-coop",
+  "phase": 1,
+  "engine": "unreal",
+  "steps": [
+    { "name": "unreal_get_world_outliner", "params": {} },
+    { "name": "unreal_spawn_actor", "params": { "class": "PointLight" } }
+  ]
+}

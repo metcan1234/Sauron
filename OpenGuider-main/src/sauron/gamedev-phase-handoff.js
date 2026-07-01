@@ -20,7 +20,7 @@ const {
   resolveGamedevClineAgent,
 } = require("./gamedev-router");
 const { appendGamedevLedgerEvent } = require("./gamedev-finops-ledger");
-const { resolveWireRecipePointer } = require("./unity-wire-recipes");
+const { resolveWireRecipePointer } = require("./gamedev-wire-recipes");
 const { buildBriefHandoffHint, BRIEF_POINTER, readGameDesignBrief, hashBriefText } = require("./gamedev-prompt-compiler");
 const { getGamedevStatus } = require("./gamedev-status");
 const { scaffoldUnityTemplate } = require("./scaffold-unity-template");
@@ -87,7 +87,7 @@ async function writeGamedevPhaseHandoff({
     }
   }
 
-  const wireRecipePointer = resolveWireRecipePointer(pipelineState.genre, phaseDef.phase);
+  const wireRecipePointer = resolveWireRecipePointer(pipelineState.genre, phaseDef.phase, engine);
   const brief = readGameDesignBrief(resolvedWorkspace);
   const briefHint = buildBriefHandoffHint(brief?.masterPrompt?.slice(0, 120) || pipelineState.masterPrompt?.slice(0, 120));
   const overrides = buildGamePhaseHandoffOverrides({
