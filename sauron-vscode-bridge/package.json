@@ -19,7 +19,7 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "node --import tsx --test src/test/*.test.ts",
+    "test": "node --import tsx --test \"src/test/**/*.test.ts\"",
     "package:vsix": "npm run compile && vsce package --no-dependencies --out dist/sauron-vscode-bridge.vsix"
   },
   "devDependencies": {

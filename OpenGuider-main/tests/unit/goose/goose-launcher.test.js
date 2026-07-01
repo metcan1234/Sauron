@@ -88,14 +88,17 @@ test("buildGooseEnv applies provider env overrides", () => {
   assert.equal(env.GOOSE_PROVIDER__HOST, "https://openrouter.ai/api/v1");
 });
 
-test("findWindowsTerminalPathSync resolves wt via where.exe on windows", () => {
+test("findWindowsTerminalPathSync resolves wt via where.exe on windows", (t) => {
   const wtPath = findWindowsTerminalPathSync();
-  if (process.platform === "win32") {
-    assert.ok(wtPath);
-    assert.match(wtPath, /wt\.exe$/i);
-  } else {
+  if (process.platform !== "win32") {
     assert.equal(wtPath, null);
+    return;
   }
+  if (!wtPath) {
+    t.skip("Windows Terminal (wt.exe) not installed in this environment");
+    return;
+  }
+  assert.match(wtPath, /wt\.exe$/i);
 });
 
 test("splitGooseSystemArg extracts multiline --system payload", () => {

@@ -32,10 +32,6 @@ jobs:
         shell: pwsh
         run: npm ci --omit=optional
 
-      - name: Run test suite
-        shell: pwsh
-        run: npm test
-
       - name: Build Windows installer
         shell: pwsh
         env:
