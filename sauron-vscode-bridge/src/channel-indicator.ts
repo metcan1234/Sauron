@@ -1,6 +1,14 @@
 import * as fs from "fs"
 import * as path from "path"
 import * as vscode from "vscode"
+import type { ClineAPI } from "./cline"
+
+const CLINE_EXTENSION_ID = "saoudrizwan.claude-dev"
+
+function refreshClineWelcomeState(): void {
+	const cline = vscode.extensions.getExtension<ClineAPI>(CLINE_EXTENSION_ID)?.exports
+	void cline?.refreshWebviewState?.()
+}
 
 interface ActiveChannelMarker {
 	channel?: "workspace" | "gamedev" | string
@@ -67,7 +75,10 @@ export function registerChannelIndicator(context: vscode.ExtensionContext): void
 		for (const folder of vscode.workspace.workspaceFolders ?? []) {
 			const pattern = new vscode.RelativePattern(folder, ".sauron/active-channel.json")
 			const watcher = vscode.workspace.createFileSystemWatcher(pattern)
-			const refresh = () => update(folder.uri.fsPath)
+			const refresh = () => {
+				update(folder.uri.fsPath)
+				refreshClineWelcomeState()
+			}
 			watcher.onDidCreate(refresh)
 			watcher.onDidChange(refresh)
 			watcher.onDidDelete(refresh)

@@ -56,10 +56,34 @@ function registerWorkspaceIpc({
   getCredentialSyncStatus,
   emitBudgetAlert,
   getFinOpsAlertWindows,
+  handleRuntimeIncident,
 }) {
   setVsCodeLaunchLogger((detail) => {
     appLogger.info("vscode-launch-command", detail);
   });
+
+  async function emitWorkspaceIncident(errorMessage, operation, extra = {}) {
+    if (typeof handleRuntimeIncident !== "function" || !errorMessage) {
+      return null;
+    }
+    const workspacePath = String(store.get("workspacePath") || "").trim();
+    try {
+      return await handleRuntimeIncident(
+        { message: errorMessage, code: extra.errorCode || "" },
+        {
+          component: "workspace",
+          operation,
+          workspacePath,
+          ...extra,
+        },
+      );
+    } catch (incidentError) {
+      appLogger?.warn?.("workspace-incident-hook-failed", {
+        error: incidentError?.message || incidentError,
+      });
+      return null;
+    }
+  }
 
   ipcMain.handle("pick-workspace-folder", async () => {
     debugLog("ipc:pick-workspace-folder");
@@ -279,18 +303,22 @@ function registerWorkspaceIpc({
       // Preflight: ⌘ bloker kontrolü
       const blockers = getBlockersForChannel('workspace', store);
       if (blockers.length > 0) {
+        const error = `⌘ Çalışma Kısmı başlatılamadı:\n${blockers.join('\n')}`;
+        await emitWorkspaceIncident(error, "open-workspace-handoff", { errorCode: "CHANNEL_BLOCKER" });
         return {
           ok: false,
-          error: `⌘ Çalışma Kısmı başlatılamadı:\n${blockers.join('\n')}`,
+          error,
           blockers,
           prerequisites,
         };
       }
 
       if (!prerequisites.canOpenWorkspace) {
+        const error = "VS Code CLI (code) bulunamadı. Kurulum adımları için uyarıyı kontrol edin.";
+        await emitWorkspaceIncident(error, "open-workspace-handoff", { errorCode: "VSCODE_CLI_MISSING" });
         return {
           ok: false,
-          error: "VS Code CLI (code) bulunamadı. Kurulum adımları için uyarıyı kontrol edin.",
+          error,
           prerequisites,
         };
       }
@@ -298,9 +326,11 @@ function registerWorkspaceIpc({
       if (!prerequisites.bridgeExtension) {
         const installResult = await installWorkspaceStack();
         if (!installResult.ok) {
+          const error = installResult.error || "Sauron Bridge kurulamadı.";
+          await emitWorkspaceIncident(error, "open-workspace-handoff", { errorCode: "BRIDGE_MISSING" });
           return {
             ok: false,
-            error: installResult.error || "Sauron Bridge kurulamadı.",
+            error,
             prerequisites: checkWorkspacePrerequisites(),
           };
         }
@@ -455,9 +485,11 @@ function registerWorkspaceIpc({
       };
     } catch (error) {
       appLogger.error("open-workspace-handoff failed", { error: error?.message || error });
+      const message = error?.message || "Failed to open workspace.";
+      await emitWorkspaceIncident(message, "open-workspace-handoff");
       return {
         ok: false,
-        error: error?.message || "Failed to open workspace.",
+        error: message,
       };
     }
   });

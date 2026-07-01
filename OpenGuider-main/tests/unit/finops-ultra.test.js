@@ -67,7 +67,11 @@ test("shouldUseDeltaHandoff disabled when finopsDeltaHandoffEnabled is false", (
       treeHint: "Workspace snapshot:\nsrc/",
     });
     assert.equal(
-      shouldUseDeltaHandoff({ ...baseSettings, finopsDeltaHandoffEnabled: false }, workspace, "fix login bug"),
+      shouldUseDeltaHandoff({
+        ...baseSettings,
+        finopsDeltaHandoffEnabled: false,
+        tokenUltraUseDeltaHandoff: false,
+      }, workspace, "fix login bug"),
       false,
     );
   } finally {

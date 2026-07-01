@@ -43,6 +43,8 @@ Return ONLY bullet lines (Turkish), max 3 facts. If nothing worth remembering, r
 Examples: "Kahve sever", "React projelerinde çalışıyor", "Kısa cevapları tercih ediyor"
 Do NOT include transient task details or code snippets.`;
 
+const { streamExtractWithProviderPreference } = require("./extract-provider-preference");
+
 async function extractMemoryFactsFromTurn({
   userText,
   assistantText,
@@ -57,12 +59,13 @@ async function extractMemoryFactsFromTurn({
   }
 
   const transcript = `Kullanıcı: ${user.slice(0, 1200)}\nAsistan: ${assistant.slice(0, 1200)}`;
-  const response = await streamAIResponse({
+  const response = await streamExtractWithProviderPreference({
+    streamAIResponse,
+    settings,
+    signal,
     text: `${EXTRACTION_PROMPT}\n\n${transcript}`,
     images: [],
     history: [],
-    settings,
-    signal,
     sessionId: "auto-memory",
     operation: "auto-memory-extract",
   });

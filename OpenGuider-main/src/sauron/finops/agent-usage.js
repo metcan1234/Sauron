@@ -292,6 +292,38 @@ function buildLowAgentWalletAlerts(agentWallets = {}, settings = {}) {
   return alerts.map((alert) => ({ ...alert, markAlertDate: today }));
 }
 
+function buildSoftEconomySuggestionAlert(agentWallets = {}, settings = {}) {
+  const { isAutoEconomyEnabled } = require("../token-ultra/token-ultra-v3-config");
+  const lowWallet = AGENT_IDS.some((agentId) => {
+    const wallet = agentWallets[agentId];
+    return wallet && !wallet.unlimited && wallet.remainingPct != null && wallet.remainingPct <= 20;
+  });
+  if (!lowWallet) {
+    return null;
+  }
+  return {
+    level: "info",
+    message: "Bütçe azalıyor — Economy modu önerilir",
+    softEconomySuggestion: true,
+    autoEconomyEnabled: isAutoEconomyEnabled(settings),
+  };
+}
+
+function applySoftAutoEconomy(settings = {}) {
+  const { isAutoEconomyEnabled } = require("../token-ultra/token-ultra-v3-config");
+  if (!isAutoEconomyEnabled(settings)) {
+    return settings;
+  }
+  if (String(settings.finopsCostOptimizerMode || "").toLowerCase() === "economy") {
+    return settings;
+  }
+  return {
+    ...settings,
+    finopsCostOptimizerMode: "economy",
+    _tokenUltraAutoEconomyApplied: true,
+  };
+}
+
 module.exports = {
   AGENT_IDS,
   CLOUD_AGENT_IDS,
@@ -308,5 +340,7 @@ module.exports = {
   areAllCloudAgentsWalletExhausted,
   buildWalletFallbackAlert,
   buildLowAgentWalletAlerts,
+  buildSoftEconomySuggestionAlert,
+  applySoftAutoEconomy,
   convertUsdToTl,
 };

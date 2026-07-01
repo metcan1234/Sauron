@@ -7,6 +7,25 @@ const AT_MENTION_PATTERN = /@([^\s@]+)/g;
 const MAX_FILES = 6;
 const MAX_CHARS_PER_FILE = 8000;
 const MAX_TOTAL_CHARS = 24000;
+const SMART_TRIM_HEAD_LINES = 120;
+const SMART_TRIM_TAIL_LINES = 120;
+
+function smartTrimFileContent(content = "", enabled = true) {
+  const text = String(content || "");
+  const lines = text.split(/\r?\n/);
+  const omitted = lines.length - SMART_TRIM_HEAD_LINES - SMART_TRIM_TAIL_LINES;
+  if (enabled && omitted > 0) {
+    const head = lines.slice(0, SMART_TRIM_HEAD_LINES).join("\n");
+    const tail = lines.slice(-SMART_TRIM_TAIL_LINES).join("\n");
+    const body = `${head}\n…[${omitted} satır özetlendi]…\n${tail}`;
+    return {
+      content: body.slice(0, MAX_CHARS_PER_FILE),
+      truncated: body.length > MAX_CHARS_PER_FILE,
+      smartTrimmed: true,
+    };
+  }
+  return { content: text.slice(0, MAX_CHARS_PER_FILE), truncated: text.length > MAX_CHARS_PER_FILE };
+}
 
 function extractAtMentions(text = "") {
   const mentions = [];
@@ -41,7 +60,7 @@ function resolveMentionPath(workspacePath, mention) {
   }
 }
 
-function readMentionFile(workspacePath, mention) {
+function readMentionFile(workspacePath, mention, options = {}) {
   const fullPath = resolveMentionPath(workspacePath, mention);
   if (!fullPath || !fs.existsSync(fullPath)) {
     return { ok: false, mention, error: "not_found" };
@@ -53,13 +72,16 @@ function readMentionFile(workspacePath, mention) {
   if (stat.size > 512 * 1024) {
     return { ok: false, mention, error: "file_too_large" };
   }
-  const content = fs.readFileSync(fullPath, "utf8");
+  const rawContent = fs.readFileSync(fullPath, "utf8");
+  const smartTrim = options.smartTrim !== false;
+  const trimmed = smartTrimFileContent(rawContent, smartTrim);
   return {
     ok: true,
     mention,
     path: mention.replace(/\\/g, "/"),
-    content: content.slice(0, MAX_CHARS_PER_FILE),
-    truncated: content.length > MAX_CHARS_PER_FILE,
+    content: trimmed.content,
+    truncated: trimmed.truncated,
+    smartTrimmed: trimmed.smartTrimmed === true,
   };
 }
 
@@ -133,7 +155,7 @@ function resolveMentionContext(workspacePath, mention) {
   return readMentionFile(workspacePath, mention);
 }
 
-function buildAtFileContextBlock(workspacePath, text = "") {
+function buildAtFileContextBlock(workspacePath, text = "", options = {}) {
   const mentions = extractAtMentions(text);
   if (mentions.length === 0) {
     return { block: "", files: [], mentions: [] };
@@ -142,9 +164,15 @@ function buildAtFileContextBlock(workspacePath, text = "") {
   const files = [];
   const blocks = [];
   let total = 0;
+  const fileOptions = { smartTrim: options.smartTrim !== false };
 
   for (const mention of mentions) {
-    const result = resolveMentionContext(workspacePath, mention);
+    let result = mention === "git-diff" || mention.startsWith("folder")
+      ? resolveMentionContext(workspacePath, mention)
+      : readMentionFile(workspacePath, mention, fileOptions);
+    if (!result?.ok && mention !== "git-diff" && !mention.startsWith("folder")) {
+      result = resolveMentionContext(workspacePath, mention);
+    }
     if (!result?.ok) {
       blocks.push(`### @${mention}\n(bağlam okunamadı: ${result?.error || "unknown"})\n`);
       continue;
@@ -174,7 +202,7 @@ function buildAtFileContextBlock(workspacePath, text = "") {
   };
 }
 
-function enrichTextWithAtFileContext(text, workspacePath, enabled = true) {
+function enrichTextWithAtFileContext(text, workspacePath, enabled = true, options = {}) {
   if (!enabled) {
     return { text: String(text || ""), context: null };
   }
@@ -182,7 +210,11 @@ function enrichTextWithAtFileContext(text, workspacePath, enabled = true) {
   if (!workspace) {
     return { text: String(text || ""), context: null };
   }
-  const { block, files, mentions } = buildAtFileContextBlock(workspace, text);
+  const { isSmartAtFileTrimEnabled } = require("../sauron/token-ultra/token-ultra-v3-config");
+  const smartTrim = options.smartTrim !== undefined
+    ? options.smartTrim
+    : isSmartAtFileTrimEnabled(options.settings || {});
+  const { block, files, mentions } = buildAtFileContextBlock(workspace, text, { smartTrim });
   if (!block) {
     return { text: String(text || ""), context: null };
   }
@@ -196,6 +228,7 @@ function enrichTextWithAtFileContext(text, workspacePath, enabled = true) {
 module.exports = {
   AT_MENTION_PATTERN,
   extractAtMentions,
+  smartTrimFileContent,
   buildAtFileContextBlock,
   enrichTextWithAtFileContext,
   readMentionFile,

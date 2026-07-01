@@ -71,6 +71,12 @@ const ECONOMY_VISION_OPERATIONS = new Set([
   "code-agent-plan",
   "auto-memory-extract",
   "luna-relationship-extract",
+  "luna-self-tuning-extract",
+  "hiri-self-tuning-extract",
+  "panel-context-summary",
+  "incident-diagnose",
+  "incident-plan-fix",
+  "incident-verify",
 ]);
 
 function normalizeHint(hint) {

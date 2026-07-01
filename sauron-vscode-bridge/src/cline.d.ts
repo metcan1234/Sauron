@@ -35,4 +35,5 @@ export interface ClineAPI {
 	getTaskState?(): { active: boolean; taskId?: string; startedAt?: string } | null
 	clearTask?(): Promise<{ cleared: boolean }>
 	getLastTaskSummary?(): string | null
+	refreshWebviewState?(): Promise<void>
 }

@@ -5,6 +5,7 @@ import { tryAcquireTaskLockWithRetry } from "@core/task/TaskLockUtils"
 import { detectWorkspaceRoots } from "@core/workspace/detection"
 import { setupWorkspaceManager } from "@core/workspace/setup"
 import type { WorkspaceRootManager } from "@core/workspace/WorkspaceRootManager"
+import { resolveSauronWelcomeState } from "@integrations/sauron/sauron-welcome-channel"
 import { cleanupLegacyCheckpoints } from "@integrations/checkpoints/CheckpointMigration"
 import { ClineAccountService } from "@services/account/ClineAccountService"
 import { McpHub } from "@services/mcp/McpHub"
@@ -919,6 +920,7 @@ export class Controller {
 		// Check OpenAI Codex authentication status
 		const { openAiCodexOAuthManager } = await import("@/integrations/openai-codex/oauth")
 		const openAiCodexIsAuthenticated = await openAiCodexOAuthManager.isAuthenticated()
+		const sauronWelcome = resolveSauronWelcomeState(this.workspaceManager?.getRoots() ?? [])
 
 		return {
 			version,
@@ -1004,6 +1006,8 @@ export class Controller {
 			banners,
 			welcomeBanners,
 			openAiCodexIsAuthenticated,
+			sauronWelcomeChannel: sauronWelcome.sauronWelcomeChannel,
+			sauronWelcomeLabel: sauronWelcome.sauronWelcomeLabel,
 		}
 	}
 

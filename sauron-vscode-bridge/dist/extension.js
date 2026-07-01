@@ -52,6 +52,7 @@ const apply_1 = require("./cost-optimizer/apply");
 const sync_1 = require("./credentials/sync");
 const config_1 = require("./usage/config");
 const monitor_1 = require("./usage/monitor");
+const channel_indicator_1 = require("./channel-indicator");
 const CLINE_EXTENSION_ID = "saoudrizwan.claude-dev";
 const CLINE_SIDEBAR_FOCUS = "claude-dev.SidebarProvider.focus";
 const DEBOUNCE_MS = 500;
@@ -225,6 +226,7 @@ async function scanAllWorkspaces(context) {
     }));
 }
 function activate(context) {
+    (0, channel_indicator_1.registerChannelIndicator)(context);
     void scanAllWorkspaces(context);
     (0, monitor_1.startCostMonitor)(context, getClineApi);
 }

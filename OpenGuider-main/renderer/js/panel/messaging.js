@@ -21,6 +21,28 @@ export function createMessagingController({
   let requestTimeoutId = null;
   let lastSessionSpentTl = 0;
 
+  async function showPreSendTokenHint(text, historyForRequest) {
+    const hintEl = doc.getElementById("message-cost-hint");
+    if (!hintEl || state.getSettings()?.messageCostHintEnabled === false) {
+      hintEl?.classList.add("hidden");
+      return;
+    }
+    try {
+      const result = await api.invoke("estimate-message-tokens", {
+        text,
+        history: historyForRequest,
+      });
+      const tokens = Number(result?.estimatedTokens) || 0;
+      if (tokens > 0) {
+        hintEl.textContent = `~${tokens.toLocaleString()} token tahmini`;
+        hintEl.classList.remove("hidden");
+        window.setTimeout(() => hintEl.classList.add("hidden"), 6000);
+      }
+    } catch (error) {
+      log("pre-send-token-hint error", error);
+    }
+  }
+
   async function updateMessageCostHint() {
     const hintEl = doc.getElementById("message-cost-hint");
     if (!hintEl || state.getSettings()?.messageCostHintEnabled === false) {
@@ -582,6 +604,8 @@ export function createMessagingController({
       const historyForRequest = skipUserPersist
         ? state.getConversationHistory().slice(-MAX_AI_CONTEXT_MESSAGES)
         : state.getConversationHistory().slice(-MAX_AI_CONTEXT_MESSAGES);
+
+      void showPreSendTokenHint(text, historyForRequest);
 
       await api.invoke("send-message", {
         text,

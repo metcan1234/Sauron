@@ -249,6 +249,10 @@ export function createClineAPI(sidebarController: Controller): ClineAPI {
 		},
 
 		getLastTaskSummary: () => lastTaskSummary,
+
+		refreshWebviewState: async () => {
+			await sidebarController.postStateToWebview()
+		},
 	}
 
 	return api

@@ -249,37 +249,6 @@ html, body {
   border-color: rgba(134, 239, 172, 0.45);
 }
 
-.luna-relationship-badge {
-  font-size: 9px;
-  letter-spacing: 0.2px;
-  color: #f9a8d4;
-  border: 1px solid rgba(249, 168, 212, 0.45);
-  padding: 4px 7px;
-  border-radius: 2px;
-  white-space: nowrap;
-  flex-shrink: 0;
-  line-height: 1.2;
-}
-
-.luna-relationship-badge.hidden {
-  display: none;
-}
-
-.luna-relationship-badge.is-warming {
-  color: #fda4af;
-  border-color: rgba(253, 164, 175, 0.45);
-}
-
-.luna-relationship-badge.is-close {
-  color: #f472b6;
-  border-color: rgba(244, 114, 182, 0.5);
-}
-
-.luna-relationship-badge.is-deep {
-  color: #e879f9;
-  border-color: rgba(232, 121, 249, 0.55);
-}
-
 .plugin-profile-menu {
   position: absolute;
   top: calc(100% + 6px);

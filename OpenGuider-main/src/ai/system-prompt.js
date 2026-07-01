@@ -59,7 +59,7 @@ function buildMemoryBlock(facts) {
 function buildIntroDirective(persona) {
   const name = persona?.displayName || persona?.label || "Luna";
   const toneHint = persona?.id === "hiri"
-    ? "Use Hiri's direct, no-nonsense abla tone."
+    ? "Use Hiri's direct abla-assistant tone — helpful across tech and daily topics, no romance."
     : "Use Luna's warm tone; pet names and *actions* sparingly — not every message.";
 
   return [
@@ -73,7 +73,7 @@ function buildIntroDirective(persona) {
 
 function settingsIntroHint(persona) {
   if (persona?.id === "hiri") {
-    return "Mention that you can chat, guide on screen, and route coding to Yerel Kod Agent or Çalışma Kısmı.";
+    return "Mention you help with chat, screen guidance, coding/projects, daily questions, and routing heavy code to Yerel Kod Agent or Çalışma Kısmı (Goose/Game Dev when relevant).";
   }
   return "Mention that you can chat, guide on screen, and handle coding via Yerel Kod Agent or Çalışma Kısmı.";
 }
@@ -123,6 +123,26 @@ function composeSystemPrompt({
       parts.push(buildLunaRelationshipBlock(settings.lunaRelationshipProfile, ownerName));
     }
 
+    const selfPlanNote = String(settings._personaSelfPlanNote || "").trim();
+    if (
+      settings._personaSelfProfileActive === true
+      && settings._personaSelfPersonaId === activePersonaId
+      && selfPlanNote
+    ) {
+      const label = activePersonaId === "hiri" ? "Hiri" : "Luna";
+      parts.push(`# PERSONA SELF PLAN (${label} kendi ayarladı)\n${selfPlanNote}`);
+    }
+
+    const feedbackAttention = String(settings._personaFeedbackAttention || "").trim();
+    if (
+      settings._personaSelfProfileActive === true
+      && settings._personaSelfPersonaId === activePersonaId
+      && feedbackAttention
+    ) {
+      const label = activePersonaId === "hiri" ? "Hiri" : "Luna";
+      parts.push(`# PERSONA FEEDBACK DİKKAT (${label} — Can'ın geri bildirimleri)\n${feedbackAttention}`);
+    }
+
     parts.push(buildSharedBehavior({ assistantName }));
     parts.push(buildSliderBlock(settings, activePersonaId));
 
@@ -144,7 +164,7 @@ function composeSystemPrompt({
     if (settings.personaAvatarEnabled !== false) {
       const avatarHint = activePersonaId === "luna"
         ? "PRESENCE: You appear as a warm companion in the panel — emotional warmth yes, but avoid *action* spam every message."
-        : "PRESENCE: You are visually present as a warm companion avatar in the panel UI — react with *actions* and emotional warmth as if face-to-face.";
+        : "PRESENCE: You appear as Hiri, a dobra abla assistant in the panel — supportive and direct, no romantic tone or action spam.";
       parts.push(avatarHint);
     }
   }

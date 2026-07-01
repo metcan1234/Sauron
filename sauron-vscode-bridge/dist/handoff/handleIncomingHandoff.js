@@ -41,6 +41,9 @@ function buildProjectTypeHints(handoff) {
     if (handoff.relevantFiles?.length) {
         hints.push(`Relevant files: ${handoff.relevantFiles.slice(0, 6).join(", ")}`);
     }
+    if (String(handoff.taskSummary || "").includes("Changed files:")) {
+        hints.push("Use changed-files list from handoff; read repo map pointer if needed.");
+    }
     if (handoff.cacheBreakpoint) {
         hints.push(`Cache breakpoint: ${handoff.cacheBreakpoint}`);
     }

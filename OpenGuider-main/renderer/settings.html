@@ -331,6 +331,28 @@
           <span class="hint">Node, VS Code CLI, Bridge, Cline, workspace, .sauron/ yazılabilirliği ve browser runtime durumunu kontrol eder.</span>
         </div>
         <div class="form-group">
+          <label>Incident hafızası (self-healing)</label>
+          <p class="hint" style="margin:0 0 8px">Bilinen hataları hatırlar; güvenli onarım adımlarını önerir. Agent dosya silmez veya core kodu değiştirmez.</p>
+          <label class="checkbox-row">
+            <input type="checkbox" id="incidentMemoryEnabled" checked/>
+            Incident hafızası etkin
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" id="incidentAgentDiagnoseEnabled" checked/>
+            Bilinmeyen hatalarda agent teşhisi (economy)
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" id="incidentAutoApplyLowRisk"/>
+            Düşük riskli otomatik onarım (varsayılan kapalı — en az 2 başarılı kayıt gerekir)
+          </label>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;">
+            <button class="btn btn-secondary" id="btn-refresh-incidents" type="button">Incident listesini yenile</button>
+            <button class="btn btn-secondary" id="btn-clear-incident-memory" type="button">Öğrenilmiş hafızayı temizle</button>
+          </div>
+          <ul class="doctor-results" id="incident-registry-list" style="margin-top:8px;"></ul>
+          <ul class="doctor-results" id="incident-applied-log" style="margin-top:8px;"></ul>
+        </div>
+        <div class="form-group">
           <label>Sohbet yedekleme</label>
           <label class="checkbox-row">
             <input type="checkbox" id="chatBackupEnabled"/>
@@ -363,6 +385,18 @@
             <input type="checkbox" id="finopsHardBudgetEnabled"/>
             Sert bütçe limiti (tükendiğinde LLM çağrılarını engelle)
           </label>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="agentFailoverEnabled" checked/>
+            Agent otomatik yedekleme (hata olunca başka modele geç)
+          </label>
+          <label class="checkbox-label" style="margin-top:8px;">
+            <input type="checkbox" id="agentFailoverNotifyEnabled" checked/>
+            Agent değişiminde bildirim göster
+          </label>
+          <span class="hint" id="agentFailoverSummary">Son failover: —</span>
         </div>
 
         <div class="form-group">
@@ -508,8 +542,8 @@
         </div>
 
         <div class="settings-section" style="margin-top:16px">
-          <h4>Token Ultra (v2.4)</h4>
-          <p class="settings-lead">Akıllı token tasarrufu — model veya tool kısıtlamaz. Delta handoff, repo map, sahne cache, read cache ve tool output compressor ile üç kanal daha az token tüketir.</p>
+          <h4>Token Ultra (v3)</h4>
+          <p class="settings-lead">Akıllı token tasarrufu — model veya tool kısıtlamaz. Delta handoff, changed-files, panel özet, @file trim, Ollama extract ve kalite fallback ile üç kanal daha az token tüketir.</p>
 
           <div class="form-group">
             <label class="checkbox-label">
@@ -564,6 +598,62 @@
             <label>Token Ultra handoff max karakter</label>
             <input class="form-input" id="tokenUltraMaxHandoffChars" type="number" min="500" step="100" placeholder="6000"/>
           </div>
+
+          <div class="form-group">
+            <label>Delta overlap eşiği (0.1–1)</label>
+            <input class="form-input" id="tokenUltraDeltaOverlapMin" type="number" min="0.1" max="1" step="0.05" placeholder="0.5"/>
+          </div>
+
+          <div class="form-group">
+            <label>Token Ultra agresyon</label>
+            <select class="form-input" id="tokenUltraAggressionLevel">
+              <option value="smart">Akıllı (varsayılan)</option>
+              <option value="balanced">Dengeli</option>
+              <option value="max">Maksimum tasarruf</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="tokenUltraUseChangedFilesOnly"/>
+              Changed-files handoff (tam tree yerine değişen dosyalar)
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="tokenUltraSmartAtFileTrim"/>
+              @file akıllı kesme (head/tail)
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="tokenUltraPreferOllamaForExtract"/>
+              Extract işlemlerinde Ollama tercih et
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="tokenUltraPanelContextSummary"/>
+              Panel uzun sohbet özeti (Luna/Hiri)
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="tokenUltraPromptCacheEnabled"/>
+              Provider prompt cache (desteklenen modeller)
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="tokenUltraAutoEconomyEnabled"/>
+              Otomatik Economy modu (bakiye %20 altı — varsayılan kapalı)
+            </label>
+          </div>
         </div>
 
         <input type="hidden" id="finopsLegacyHidden" value=""/>
@@ -593,8 +683,8 @@
             <label class="persona-card" data-persona-id="hiri">
               <input type="radio" name="activePersonaId" value="hiri"/>
               <span class="persona-card-title">Hiri</span>
-              <span class="persona-card-tagline">Dobra abla, dürüst mentor</span>
-              <span class="persona-card-sample">"Can, konu neyse söyle, lafı dolandırmayalım."</span>
+              <span class="persona-card-tagline">Dobra abla — her konuda yardım</span>
+              <span class="persona-card-sample">"Can, anlat bakalım ne takıldın; birlikte çözelim."</span>
             </label>
           </div>
           <span class="hint" id="activePersonaHint">Şu an: Luna</span>
@@ -667,6 +757,42 @@
           </div>
         </div>
 
+        <div class="form-group toggle-card" id="luna-self-tuning-settings">
+          <label class="toggle-row">
+            <input type="checkbox" id="lunaSelfTuningEnabled" checked/>
+            <span>Luna kendini geliştirsin (konuşmaya göre otomatik ayar)</span>
+          </label>
+          <span class="hint">Slider, senaryo, karşılama ve örnek diyalogları Luna sohbetten öğrenerek günceller. Manuel kilitleme ile alanları koruyabilirsin.</span>
+          <div id="lunaSelfProfileSummary" class="hint" style="margin-top:10px;white-space:pre-wrap;font-family:var(--mono,monospace);font-size:11px;">—</div>
+          <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:12px;">
+            <label class="toggle-row"><input type="checkbox" id="lunaLockSliders"/><span>Slider'ları kilitle (manuel)</span></label>
+            <label class="toggle-row"><input type="checkbox" id="lunaLockScenario"/><span>Senaryoyu kilitle</span></label>
+            <label class="toggle-row"><input type="checkbox" id="lunaLockGreetings"/><span>Karşılamayı kilitle</span></label>
+            <label class="toggle-row"><input type="checkbox" id="lunaLockDialogues"/><span>Örnek diyalogları kilitle</span></label>
+          </div>
+          <button class="btn btn-secondary" id="btn-reset-luna-self-profile" type="button" style="margin-top:8px;">Luna self profilini sıfırla</button>
+          <div id="lunaFeedbackLog" class="hint" style="margin-top:8px;white-space:pre-wrap;font-family:var(--mono,monospace);font-size:11px;">—</div>
+          <button class="btn btn-secondary" id="btn-reset-luna-feedback" type="button" style="margin-top:8px;">Luna geri bildirim hafızasını sıfırla</button>
+        </div>
+
+        <div class="form-group toggle-card" id="hiri-self-tuning-settings">
+          <label class="toggle-row">
+            <input type="checkbox" id="hiriSelfTuningEnabled" checked/>
+            <span>Hiri kendini geliştirsin (konuşmaya göre otomatik ayar)</span>
+          </label>
+          <span class="hint">Dobra abla tonu, senaryo ve diyalogları Hiri sohbetten öğrenerek günceller.</span>
+          <div id="hiriSelfProfileSummary" class="hint" style="margin-top:10px;white-space:pre-wrap;font-family:var(--mono,monospace);font-size:11px;">—</div>
+          <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:12px;">
+            <label class="toggle-row"><input type="checkbox" id="hiriLockSliders"/><span>Slider'ları kilitle (manuel)</span></label>
+            <label class="toggle-row"><input type="checkbox" id="hiriLockScenario"/><span>Senaryoyu kilitle</span></label>
+            <label class="toggle-row"><input type="checkbox" id="hiriLockGreetings"/><span>Karşılamayı kilitle</span></label>
+            <label class="toggle-row"><input type="checkbox" id="hiriLockDialogues"/><span>Örnek diyalogları kilitle</span></label>
+          </div>
+          <button class="btn btn-secondary" id="btn-reset-hiri-self-profile" type="button" style="margin-top:8px;">Hiri self profilini sıfırla</button>
+          <div id="hiriFeedbackLog" class="hint" style="margin-top:8px;white-space:pre-wrap;font-family:var(--mono,monospace);font-size:11px;">—</div>
+          <button class="btn btn-secondary" id="btn-reset-hiri-feedback" type="button" style="margin-top:8px;">Hiri geri bildirim hafızasını sıfırla</button>
+        </div>
+
         <div class="form-group toggle-card">
           <label class="toggle-row">
             <input type="checkbox" id="panelAtFileContextEnabled" checked/>
@@ -684,7 +810,7 @@
 
         <div class="form-group toggle-card">
           <label class="toggle-row">
-            <input type="checkbox" id="personaAvatarEnabled" checked/>
+            <input type="checkbox" id="personaAvatarEnabled"/>
             <span>Persona avatar (panel)</span>
           </label>
           <span class="hint">Sohbet alanında Luna/Hiri avatarı — yalnızca panel asistan.</span>

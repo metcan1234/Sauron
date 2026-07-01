@@ -117,6 +117,10 @@ async function init() {
   const lunaRelationshipEl = document.getElementById("lunaRelationshipEnabled");
   if (lunaRelationshipEl) lunaRelationshipEl.checked = settings.lunaRelationshipEnabled !== false;
   void refreshLunaRelationshipUi();
+  loadPersonaSelfTuningSettings(settings);
+  void refreshPersonaSelfProfileUi("luna");
+  void refreshPersonaSelfProfileUi("hiri");
+  updatePersonaSelfTuningVisibility(getSelectedPersonaId());
   const atFileEl = document.getElementById("panelAtFileContextEnabled");
   if (atFileEl) atFileEl.checked = settings.panelAtFileContextEnabled !== false;
   const channelHintsEl = document.getElementById("channelHintChipsEnabled");
@@ -498,6 +502,26 @@ async function init() {
     showToast(payload?.message || "AI bütçe uyarısı", true);
     void refreshFinOpsSummary();
   });
+  window.sauron.on("agent-failover-alert", (payload) => {
+    showToast(payload?.message || "Agent değiştirildi.", true);
+    renderAgentFailoverSummary(settings.lastAgentFailover || payload);
+  });
+  window.sauron.on("incident-alert", (payload) => {
+    const message = payload?.hint || payload?.message || "Incident uyarısı";
+    showToast(message, payload?.level === "warning" || payload?.requiresApproval === true);
+    void refreshIncidentRegistryUi();
+  });
+  document.getElementById("btn-refresh-incidents")?.addEventListener("click", () => {
+    void refreshIncidentRegistryUi();
+  });
+  document.getElementById("btn-clear-incident-memory")?.addEventListener("click", async () => {
+    if (!window.confirm("Öğrenilmiş incident kayıtları silinsin mi? (Varsayılan şablonlar kalır)")) {
+      return;
+    }
+    await window.sauron.invoke("clear-incident-memory");
+    showToast("Incident hafızası temizlendi.");
+    void refreshIncidentRegistryUi();
+  });
   await refreshMetrics();
   await refreshFinOpsSummary();
 }
@@ -821,6 +845,10 @@ function collectPersonalityDraft() {
     activeScenarioId: document.getElementById("activeScenarioId")?.value || "",
     autoMemoryExtractionEnabled: document.getElementById("autoMemoryExtractionEnabled")?.checked === true,
     lunaRelationshipEnabled: document.getElementById("lunaRelationshipEnabled")?.checked !== false,
+    lunaSelfTuningEnabled: document.getElementById("lunaSelfTuningEnabled")?.checked !== false,
+    lunaSelfProfileLocks: collectPersonaSelfProfileLocks("luna"),
+    hiriSelfTuningEnabled: document.getElementById("hiriSelfTuningEnabled")?.checked !== false,
+    hiriSelfProfileLocks: collectPersonaSelfProfileLocks("hiri"),
     panelAtFileContextEnabled: document.getElementById("panelAtFileContextEnabled")?.checked !== false,
     channelHintChipsEnabled: document.getElementById("channelHintChipsEnabled")?.checked !== false,
     personaAvatarEnabled: document.getElementById("personaAvatarEnabled")?.checked !== false,
@@ -843,6 +871,117 @@ function collectPersonalityDraft() {
       .map((line) => line.trim())
       .filter(Boolean),
   };
+}
+
+function loadPersonaSelfTuningSettings(settings = {}) {
+  const lunaEnabledEl = document.getElementById("lunaSelfTuningEnabled");
+  if (lunaEnabledEl) lunaEnabledEl.checked = settings.lunaSelfTuningEnabled !== false;
+  const hiriEnabledEl = document.getElementById("hiriSelfTuningEnabled");
+  if (hiriEnabledEl) hiriEnabledEl.checked = settings.hiriSelfTuningEnabled !== false;
+
+  const lunaLocks = settings.lunaSelfProfileLocks || {};
+  if (document.getElementById("lunaLockSliders")) {
+    document.getElementById("lunaLockSliders").checked = lunaLocks.personalitySliders === true;
+  }
+  if (document.getElementById("lunaLockScenario")) {
+    document.getElementById("lunaLockScenario").checked = lunaLocks.activeScenarioId === true;
+  }
+  if (document.getElementById("lunaLockGreetings")) {
+    document.getElementById("lunaLockGreetings").checked = lunaLocks.altGreetings === true;
+  }
+  if (document.getElementById("lunaLockDialogues")) {
+    document.getElementById("lunaLockDialogues").checked = lunaLocks.exampleDialogues === true;
+  }
+
+  const hiriLocks = settings.hiriSelfProfileLocks || {};
+  if (document.getElementById("hiriLockSliders")) {
+    document.getElementById("hiriLockSliders").checked = hiriLocks.personalitySliders === true;
+  }
+  if (document.getElementById("hiriLockScenario")) {
+    document.getElementById("hiriLockScenario").checked = hiriLocks.activeScenarioId === true;
+  }
+  if (document.getElementById("hiriLockGreetings")) {
+    document.getElementById("hiriLockGreetings").checked = hiriLocks.altGreetings === true;
+  }
+  if (document.getElementById("hiriLockDialogues")) {
+    document.getElementById("hiriLockDialogues").checked = hiriLocks.exampleDialogues === true;
+  }
+}
+
+function collectPersonaSelfProfileLocks(prefix) {
+  const p = prefix === "hiri" ? "hiri" : "luna";
+  return {
+    personalitySliders: document.getElementById(`${p}LockSliders`)?.checked === true,
+    activeScenarioId: document.getElementById(`${p}LockScenario`)?.checked === true,
+    altGreetings: document.getElementById(`${p}LockGreetings`)?.checked === true,
+    exampleDialogues: document.getElementById(`${p}LockDialogues`)?.checked === true,
+  };
+}
+
+function updatePersonaSelfTuningVisibility(activePersonaId = "luna") {
+  const lunaBlock = document.getElementById("luna-self-tuning-settings");
+  const hiriBlock = document.getElementById("hiri-self-tuning-settings");
+  if (lunaBlock) lunaBlock.style.display = activePersonaId === "luna" ? "" : "none";
+  if (hiriBlock) hiriBlock.style.display = activePersonaId === "hiri" ? "" : "none";
+}
+
+function formatSelfProfileSummary(state = {}) {
+  const profile = state.profile || {};
+  const sliders = profile.personalitySliders || {};
+  const sliderText = Object.entries(sliders)
+    .map(([key, value]) => `${key}:${value}`)
+    .join(" · ");
+  const lines = [
+    `Aktif: ${state.enabled ? "evet" : "hayır"}`,
+    `Mesaj: ${profile.messageCount ?? 0} · Ayarlama: ${profile.tuneCount ?? 0}`,
+    `Güncelleme: ${profile.updatedAt || "—"}`,
+    `Slider: ${sliderText || "—"}`,
+    `Senaryo: ${profile.activeScenarioId || "varsayılan"}`,
+    `Plan: ${profile.planNote || "—"}`,
+  ];
+  if (state.filePath) {
+    lines.push(`Dosya: ${state.filePath}`);
+  }
+  const log = Array.isArray(profile.changeLog) ? profile.changeLog.slice(-3) : [];
+  if (log.length) {
+    lines.push("Son değişiklikler:");
+    for (const entry of log) {
+      lines.push(`- ${entry.at || ""} ${entry.field}: ${entry.reason || JSON.stringify(entry.to)}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+function formatFeedbackLogSummary(profile = {}) {
+  const log = Array.isArray(profile.feedbackLog) ? profile.feedbackLog.slice(-5) : [];
+  if (!log.length) {
+    return "Son geri bildirimler: —";
+  }
+  return [
+    "Son geri bildirimler:",
+    ...log.map((entry) => `- ${entry.at || ""}: "${entry.userQuote || ""}" → ${entry.applied || entry.adjustment || ""}`),
+  ].join("\n");
+}
+
+async function refreshPersonaSelfProfileUi(personaId = "luna") {
+  const prefix = personaId === "hiri" ? "hiri" : "luna";
+  const summaryEl = document.getElementById(`${prefix}SelfProfileSummary`);
+  const feedbackEl = document.getElementById(`${prefix}FeedbackLog`);
+  if (!summaryEl && !feedbackEl) {
+    return;
+  }
+  try {
+    const state = await window.sauron.invoke(`get-${prefix}-self-profile-state`);
+    if (summaryEl) {
+      summaryEl.textContent = formatSelfProfileSummary(state || {});
+    }
+    if (feedbackEl) {
+      feedbackEl.textContent = formatFeedbackLogSummary(state?.profile || {});
+    }
+  } catch {
+    if (summaryEl) summaryEl.textContent = "—";
+    if (feedbackEl) feedbackEl.textContent = "—";
+  }
 }
 
 async function refreshLunaRelationshipUi() {
@@ -903,10 +1042,67 @@ function initPersonalitySettings() {
         assistantNameEl.value = PERSONA_META[personaId].displayName;
       }
       void refreshLunaRelationshipUi();
+      updatePersonaSelfTuningVisibility(personaId);
+      void refreshPersonaSelfProfileUi("luna");
+      void refreshPersonaSelfProfileUi("hiri");
     });
   });
   document.getElementById("lunaRelationshipEnabled")?.addEventListener("change", () => {
     void refreshLunaRelationshipUi();
+  });
+  document.getElementById("lunaSelfTuningEnabled")?.addEventListener("change", () => {
+    void refreshPersonaSelfProfileUi("luna");
+  });
+  document.getElementById("hiriSelfTuningEnabled")?.addEventListener("change", () => {
+    void refreshPersonaSelfProfileUi("hiri");
+  });
+  document.getElementById("btn-reset-luna-self-profile")?.addEventListener("click", async () => {
+    if (!window.confirm("Luna self profilini sıfırlamak istediğine emin misin?")) {
+      return;
+    }
+    try {
+      await window.sauron.invoke("reset-luna-self-profile");
+      showToast("Luna self profili sıfırlandı");
+      await refreshPersonaSelfProfileUi("luna");
+    } catch (error) {
+      showToast(error?.message || "Sıfırlama başarısız", true);
+    }
+  });
+  document.getElementById("btn-reset-hiri-self-profile")?.addEventListener("click", async () => {
+    if (!window.confirm("Hiri self profilini sıfırlamak istediğine emin misin?")) {
+      return;
+    }
+    try {
+      await window.sauron.invoke("reset-hiri-self-profile");
+      showToast("Hiri self profili sıfırlandı");
+      await refreshPersonaSelfProfileUi("hiri");
+    } catch (error) {
+      showToast(error?.message || "Sıfırlama başarısız", true);
+    }
+  });
+  document.getElementById("btn-reset-luna-feedback")?.addEventListener("click", async () => {
+    if (!window.confirm("Luna geri bildirim hafızasını sıfırlamak istediğine emin misin?")) {
+      return;
+    }
+    try {
+      await window.sauron.invoke("reset-luna-persona-feedback");
+      showToast("Luna geri bildirim hafızası sıfırlandı");
+      await refreshPersonaSelfProfileUi("luna");
+    } catch (error) {
+      showToast(error?.message || "Sıfırlama başarısız", true);
+    }
+  });
+  document.getElementById("btn-reset-hiri-feedback")?.addEventListener("click", async () => {
+    if (!window.confirm("Hiri geri bildirim hafızasını sıfırlamak istediğine emin misin?")) {
+      return;
+    }
+    try {
+      await window.sauron.invoke("reset-hiri-persona-feedback");
+      showToast("Hiri geri bildirim hafızası sıfırlandı");
+      await refreshPersonaSelfProfileUi("hiri");
+    } catch (error) {
+      showToast(error?.message || "Sıfırlama başarısız", true);
+    }
   });
   document.getElementById("btn-reset-luna-relationship")?.addEventListener("click", async () => {
     if (!window.confirm("Luna ilişki hafızasını sıfırlamak istediğine emin misin?")) {
@@ -922,6 +1118,9 @@ function initPersonalitySettings() {
   });
   updatePersonaCardUi(getSelectedPersonaId());
   void refreshLunaRelationshipUi();
+  updatePersonaSelfTuningVisibility(getSelectedPersonaId());
+  void refreshPersonaSelfProfileUi("luna");
+  void refreshPersonaSelfProfileUi("hiri");
 
   for (const id of ["sliderResponseLength", "sliderWarmth", "sliderFlirtiness", "sliderEmoji"]) {
     const input = document.getElementById(id);
@@ -1220,10 +1419,64 @@ function collectAgentControlSettings() {
   };
 }
 
+async function refreshIncidentRegistryUi() {
+  const listEl = document.getElementById("incident-registry-list");
+  const logEl = document.getElementById("incident-applied-log");
+  if (!listEl && !logEl) return;
+  try {
+    const state = await window.sauron.invoke("get-incident-registry-state");
+    if (listEl) {
+      const items = Array.isArray(state?.incidents) ? state.incidents : [];
+      listEl.innerHTML = items.slice(0, 12).map((entry) => {
+        const risk = entry.risk || "medium";
+        const verified = entry.verified ? "✓" : "?";
+        const successes = Number(entry.successCount) || 0;
+        return `<li class="doctor-check"><strong>${escapeHtml(entry.id)}</strong> [${risk}] ${verified} başarı:${successes}<br/><span class="hint">${escapeHtml(entry.hint || entry.fingerprint || "")}</span> <button type="button" class="doctor-action-link" data-incident-apply="${escapeHtml(entry.id)}">Onar</button></li>`;
+      }).join("") || "<li class=\"doctor-check\">Kayıtlı incident yok.</li>";
+      listEl.querySelectorAll("[data-incident-apply]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const incidentId = button.getAttribute("data-incident-apply");
+          const result = await window.sauron.invoke("apply-incident-fix", {
+            incidentId,
+            approved: true,
+          });
+          showToast(result?.ok ? "Onarım uygulandı." : (result?.error || "Onarım başarısız"), !result?.ok);
+          void refreshIncidentRegistryUi();
+        });
+      });
+    }
+    if (logEl) {
+      const applied = Array.isArray(state?.applied) ? state.applied : [];
+      logEl.innerHTML = applied.slice(0, 8).map((entry) => {
+        const ok = entry.ok ? "pass" : "warn";
+        return `<li class="doctor-check ${ok}"><strong>${escapeHtml(entry.incidentId || "—")}</strong> ${escapeHtml(entry.at || "")}</li>`;
+      }).join("") || "";
+    }
+  } catch (error) {
+    if (listEl) listEl.innerHTML = `<li class="doctor-check warn">${escapeHtml(error?.message || "Incident listesi okunamadı")}</li>`;
+  }
+}
+
+function renderAgentFailoverSummary(record = {}) {
+  const el = document.getElementById("agentFailoverSummary");
+  if (!el) return;
+  if (!record?.message && !record?.at) {
+    el.textContent = "Son failover: —";
+    return;
+  }
+  const when = record.at ? new Date(record.at).toLocaleString("tr-TR") : "—";
+  el.textContent = `Son failover: ${record.message || "—"} (${when})`;
+}
+
 function initFinOpsSettings() {
   document.getElementById("finopsTotalBudgetTl").value = String(settings.finopsTotalBudgetTl ?? 0);
   const hardBudgetEl = document.getElementById("finopsHardBudgetEnabled");
   if (hardBudgetEl) hardBudgetEl.checked = settings.finopsHardBudgetEnabled === true;
+  const agentFailoverEl = document.getElementById("agentFailoverEnabled");
+  if (agentFailoverEl) agentFailoverEl.checked = settings.agentFailoverEnabled !== false;
+  const agentFailoverNotifyEl = document.getElementById("agentFailoverNotifyEnabled");
+  if (agentFailoverNotifyEl) agentFailoverNotifyEl.checked = settings.agentFailoverNotifyEnabled !== false;
+  renderAgentFailoverSummary(settings.lastAgentFailover || {});
   document.getElementById("finopsUsdToTl").value = String(settings.finopsUsdToTl ?? 34.5);
   document.getElementById("finopsDefaultPricePerMillionTl").value = String(settings.finopsDefaultPricePerMillionTl ?? 50);
   renderOverrideRows("finopsProviderOverrides", settings.finopsProviderPriceOverrides || {}, "provider");
@@ -1265,12 +1518,35 @@ function initFinOpsSettings() {
   if (tokenUltraMaxEl) tokenUltraMaxEl.value = String(settings.tokenUltraMaxHandoffChars ?? 6000);
   const tokenUltraDashboardEl = document.getElementById("tokenUltraShowDashboard");
   if (tokenUltraDashboardEl) tokenUltraDashboardEl.checked = settings.tokenUltraShowDashboard !== false;
+  const tokenUltraOverlapEl = document.getElementById("tokenUltraDeltaOverlapMin");
+  if (tokenUltraOverlapEl) tokenUltraOverlapEl.value = String(settings.tokenUltraDeltaOverlapMin ?? 0.5);
+  const tokenUltraAggressionEl = document.getElementById("tokenUltraAggressionLevel");
+  if (tokenUltraAggressionEl) tokenUltraAggressionEl.value = settings.tokenUltraAggressionLevel || "smart";
+  const tokenUltraChangedFilesEl = document.getElementById("tokenUltraUseChangedFilesOnly");
+  if (tokenUltraChangedFilesEl) tokenUltraChangedFilesEl.checked = settings.tokenUltraUseChangedFilesOnly !== false;
+  const tokenUltraAtFileTrimEl = document.getElementById("tokenUltraSmartAtFileTrim");
+  if (tokenUltraAtFileTrimEl) tokenUltraAtFileTrimEl.checked = settings.tokenUltraSmartAtFileTrim !== false;
+  const tokenUltraOllamaExtractEl = document.getElementById("tokenUltraPreferOllamaForExtract");
+  if (tokenUltraOllamaExtractEl) tokenUltraOllamaExtractEl.checked = settings.tokenUltraPreferOllamaForExtract !== false;
+  const tokenUltraPanelSummaryEl = document.getElementById("tokenUltraPanelContextSummary");
+  if (tokenUltraPanelSummaryEl) tokenUltraPanelSummaryEl.checked = settings.tokenUltraPanelContextSummary !== false;
+  const tokenUltraPromptCacheEl = document.getElementById("tokenUltraPromptCacheEnabled");
+  if (tokenUltraPromptCacheEl) tokenUltraPromptCacheEl.checked = settings.tokenUltraPromptCacheEnabled !== false;
+  const tokenUltraAutoEconomyEl = document.getElementById("tokenUltraAutoEconomyEnabled");
+  if (tokenUltraAutoEconomyEl) tokenUltraAutoEconomyEl.checked = settings.tokenUltraAutoEconomyEnabled === true;
+  const incidentMemoryEl = document.getElementById("incidentMemoryEnabled");
+  if (incidentMemoryEl) incidentMemoryEl.checked = settings.incidentMemoryEnabled !== false;
+  const incidentDiagnoseEl = document.getElementById("incidentAgentDiagnoseEnabled");
+  if (incidentDiagnoseEl) incidentDiagnoseEl.checked = settings.incidentAgentDiagnoseEnabled !== false;
+  const incidentAutoApplyEl = document.getElementById("incidentAutoApplyLowRisk");
+  if (incidentAutoApplyEl) incidentAutoApplyEl.checked = settings.incidentAutoApplyLowRisk === true;
   if (!settings.finopsAgentWallets) {
     settings.finopsAgentWallets = defaultAgentWallets();
   }
   renderAgentWalletRows(settings.finopsAgentWallets, {});
   void refreshFinOpsSummary();
   void refreshFinOpsAnalytics();
+  void refreshIncidentRegistryUi();
 }
 
 function renderFinOpsAnalyticsChart(series = []) {
@@ -1522,6 +1798,9 @@ async function refreshFinOpsSummary() {
       const tokenUltra = summary?.tokenUltraStats;
       if (tokenUltra && (tokenUltra.estimatedCharsSaved > 0 || tokenUltra.handoffCount > 0)) {
         lines.push(`Token Ultra tasarruf: ~${Number(tokenUltra.estimatedCharsSaved).toLocaleString()} karakter (${tokenUltra.handoffCount} handoff)`);
+      }
+      if (tokenUltra?.fallbackCount > 0) {
+        lines.push(`Token Ultra kalite fallback: ${tokenUltra.fallbackCount} kez tam bağlama dönüldü`);
       }
       breakdownEl.textContent = lines.length ? lines.join("\n") : "Henüz kayıt yok.";
     }
@@ -1833,6 +2112,8 @@ async function saveSettings() {
     vscodePath:              document.getElementById("vscodePath")?.value.trim() || "",
     finopsTotalBudgetTl:     Number(document.getElementById("finopsTotalBudgetTl")?.value) || 0,
     finopsHardBudgetEnabled: document.getElementById("finopsHardBudgetEnabled")?.checked === true,
+    agentFailoverEnabled: document.getElementById("agentFailoverEnabled")?.checked !== false,
+    agentFailoverNotifyEnabled: document.getElementById("agentFailoverNotifyEnabled")?.checked !== false,
     finopsUsdToTl:           Number(document.getElementById("finopsUsdToTl")?.value) || 34.5,
     finopsDefaultPricePerMillionTl: Number(document.getElementById("finopsDefaultPricePerMillionTl")?.value) || 50,
     finopsProviderPriceOverrides: collectOverrideMap("finopsProviderOverrides"),
@@ -1861,6 +2142,17 @@ async function saveSettings() {
     tokenUltraSandboxToolOutput: document.getElementById("tokenUltraSandboxToolOutput")?.checked !== false,
     tokenUltraMaxHandoffChars: Number(document.getElementById("tokenUltraMaxHandoffChars")?.value) || 6000,
     tokenUltraShowDashboard: document.getElementById("tokenUltraShowDashboard")?.checked !== false,
+    tokenUltraDeltaOverlapMin: Number(document.getElementById("tokenUltraDeltaOverlapMin")?.value) || 0.5,
+    tokenUltraAggressionLevel: document.getElementById("tokenUltraAggressionLevel")?.value || "smart",
+    tokenUltraUseChangedFilesOnly: document.getElementById("tokenUltraUseChangedFilesOnly")?.checked !== false,
+    tokenUltraSmartAtFileTrim: document.getElementById("tokenUltraSmartAtFileTrim")?.checked !== false,
+    tokenUltraPreferOllamaForExtract: document.getElementById("tokenUltraPreferOllamaForExtract")?.checked !== false,
+    tokenUltraPanelContextSummary: document.getElementById("tokenUltraPanelContextSummary")?.checked !== false,
+    tokenUltraPromptCacheEnabled: document.getElementById("tokenUltraPromptCacheEnabled")?.checked !== false,
+    tokenUltraAutoEconomyEnabled: document.getElementById("tokenUltraAutoEconomyEnabled")?.checked === true,
+    incidentMemoryEnabled: document.getElementById("incidentMemoryEnabled")?.checked !== false,
+    incidentAgentDiagnoseEnabled: document.getElementById("incidentAgentDiagnoseEnabled")?.checked !== false,
+    incidentAutoApplyLowRisk: document.getElementById("incidentAutoApplyLowRisk")?.checked === true,
     finopsAgentWallets: collectAgentWallets(),
     systemPromptOverride: document.getElementById("systemPromptOverride")?.value.trim() || "",
     userMemoryFacts: String(document.getElementById("userMemoryFacts")?.value || "")
@@ -1883,6 +2175,10 @@ async function saveSettings() {
     activeScenarioId: document.getElementById("activeScenarioId")?.value || "",
     autoMemoryExtractionEnabled: document.getElementById("autoMemoryExtractionEnabled")?.checked === true,
     lunaRelationshipEnabled: document.getElementById("lunaRelationshipEnabled")?.checked !== false,
+    lunaSelfTuningEnabled: document.getElementById("lunaSelfTuningEnabled")?.checked !== false,
+    lunaSelfProfileLocks: collectPersonaSelfProfileLocks("luna"),
+    hiriSelfTuningEnabled: document.getElementById("hiriSelfTuningEnabled")?.checked !== false,
+    hiriSelfProfileLocks: collectPersonaSelfProfileLocks("hiri"),
     panelAtFileContextEnabled: document.getElementById("panelAtFileContextEnabled")?.checked !== false,
     channelHintChipsEnabled: document.getElementById("channelHintChipsEnabled")?.checked !== false,
     personaAvatarEnabled: document.getElementById("personaAvatarEnabled")?.checked !== false,

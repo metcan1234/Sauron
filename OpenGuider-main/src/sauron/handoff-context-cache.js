@@ -2,6 +2,12 @@ const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
 const { buildWorkspaceTreeHint } = require("./workspace-tree-snapshot");
+const {
+  resolveDeltaOverlapMin,
+  isChangedFilesOnlyEnabled,
+  shouldPreferFullTreeFallback,
+} = require("./token-ultra/token-ultra-v3-config");
+const { recordCompressionFallback } = require("./token-ultra/fallback-metrics");
 
 const CACHE_FILENAME = "handoff-context-cache.json";
 const DELTA_TREE_OPTIONS = { maxDepth: 2, maxEntries: 15, maxChars: 200 };
@@ -64,7 +70,79 @@ function shouldUseDeltaHandoff(settings = {}, workspacePath, goalText) {
   if (!cache?.lastGoal || !cache?.lastTreeHint) {
     return false;
   }
-  return tokenOverlapRatio(goalText, cache.lastGoal) >= 0.7;
+  const threshold = resolveDeltaOverlapMin(settings);
+  return tokenOverlapRatio(goalText, cache.lastGoal) >= threshold;
+}
+
+function buildChangedFilesHint(workspacePath, options = {}) {
+  const merged = { maxChars: 400, ...options };
+  const changed = collectGitChangedFiles(workspacePath);
+  if (!changed.length) {
+    return { hint: "", changedCount: 0 };
+  }
+  let body = [
+    "Changed files:",
+    ...changed.map((line) => `- ${line}`),
+    "Repo map pointer: .sauron/repo-map.json",
+  ].join("\n");
+  if (body.length > merged.maxChars) {
+    body = `${body.slice(0, Math.max(0, merged.maxChars - 1))}…`;
+  }
+  return { hint: body, changedCount: changed.length };
+}
+
+function buildGitContextBlock(workspacePath, maxChars = 600) {
+  const diff = collectGitDiffHunkSummary(workspacePath, maxChars);
+  if (diff) {
+    return diff;
+  }
+  const changed = collectGitChangedFiles(workspacePath);
+  if (!changed.length) {
+    return "";
+  }
+  let body = [
+    "Git changed files:",
+    ...changed.map((line) => `- ${line}`),
+  ].join("\n");
+  if (body.length > maxChars) {
+    body = `${body.slice(0, Math.max(0, maxChars - 1))}…`;
+  }
+  return body;
+}
+
+function appendGitContext(hint, workspacePath, maxChars = 600) {
+  const gitBlock = buildGitContextBlock(workspacePath, maxChars);
+  if (!gitBlock) {
+    return String(hint || "").trim();
+  }
+  const base = String(hint || "").trim();
+  if (!base) {
+    return gitBlock;
+  }
+  if (base.includes("Git diff hunk pointer:") || base.includes("Git changed files:")) {
+    return base;
+  }
+  return `${base}\n\n${gitBlock}`.trim();
+}
+
+function isDeltaHintQualitySufficient(hint = "", treeFallback = "") {
+  const text = String(hint || "").trim();
+  if (!text) {
+    return false;
+  }
+  if (text.includes("Git diff hunk pointer:") || text.includes("Git changed files:")) {
+    return true;
+  }
+  if (text.includes("Workspace delta:") && !text.includes("(no file changes since last handoff)")) {
+    return true;
+  }
+  if (text.includes("Changed files:")) {
+    return true;
+  }
+  if (text.includes("Workspace snapshot:") || text.includes("Workspace delta:")) {
+    return true;
+  }
+  return Boolean(String(treeFallback || "").trim());
 }
 
 function collectGitDiffHunkSummary(workspacePath, maxChars = 600) {
@@ -147,17 +225,50 @@ function buildDeltaWorkspaceHint(workspacePath, cache = {}, options = {}) {
 }
 
 function resolveWorkspaceHint(workspacePath, settings = {}, goalText = "", options = {}) {
-  const useDelta = shouldUseDeltaHandoff(settings, workspacePath, goalText);
-  if (!useDelta) {
+  const fullTree = buildWorkspaceTreeHint(workspacePath, options);
+  const useChangedFilesOnly = isChangedFilesOnlyEnabled(settings);
+  const changedFiles = useChangedFilesOnly ? buildChangedFilesHint(workspacePath, options) : null;
+  const preferFullTree = changedFiles
+    ? shouldPreferFullTreeFallback(settings, changedFiles.changedCount)
+    : false;
+
+  if (useChangedFilesOnly && !preferFullTree && changedFiles?.hint) {
+    const hint = appendGitContext(changedFiles.hint, workspacePath);
     return {
-      hint: buildWorkspaceTreeHint(workspacePath, options),
+      hint,
       deltaMode: false,
+      changedFilesOnly: true,
     };
   }
+
+  const useDelta = shouldUseDeltaHandoff(settings, workspacePath, goalText);
+  if (!useDelta) {
+    const hint = appendGitContext(fullTree, workspacePath);
+    return {
+      hint,
+      deltaMode: false,
+      changedFilesOnly: false,
+    };
+  }
+
   const cache = readHandoffContextCache(workspacePath);
+  let deltaHint = buildDeltaWorkspaceHint(workspacePath, cache, options);
+  if (!isDeltaHintQualitySufficient(deltaHint, fullTree)) {
+    recordCompressionFallback(workspacePath, "delta-quality-gate", settings.activeChannel || "workspace");
+    deltaHint = fullTree ? fullTree.replace(/^Workspace snapshot:/, "Workspace snapshot:") : fullTree;
+    const hint = appendGitContext(deltaHint, workspacePath);
+    return {
+      hint,
+      deltaMode: false,
+      qualityFallback: true,
+    };
+  }
+
+  const hint = appendGitContext(deltaHint, workspacePath);
   return {
-    hint: buildDeltaWorkspaceHint(workspacePath, cache, options),
+    hint,
     deltaMode: true,
+    changedFilesOnly: false,
   };
 }
 
@@ -186,7 +297,12 @@ module.exports = {
   writeHandoffContextCache,
   shouldUseDeltaHandoff,
   buildDeltaWorkspaceHint,
+  buildChangedFilesHint,
+  buildGitContextBlock,
+  appendGitContext,
   collectGitDiffHunkSummary,
+  collectGitChangedFiles,
+  isDeltaHintQualitySufficient,
   resolveWorkspaceHint,
   updateHandoffContextCache,
 };

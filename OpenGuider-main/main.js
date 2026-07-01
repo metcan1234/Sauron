@@ -115,6 +115,7 @@ const { registerChatSessionsIpc } = require("./src/ipc/chat-sessions-ipc");
 const { registerAiIpc } = require("./src/ipc/ai-ipc");
 const { registerWorkspaceIpc } = require("./src/ipc/workspace-ipc");
 const { registerFinOpsIpc } = require("./src/ipc/finops-ipc");
+const { registerIncidentIpc } = require("./src/ipc/incident-ipc");
 const { registerBrowserIpc } = require("./src/ipc/browser-ipc");
 const { registerWebStudioIpc } = require("./src/ipc/web-studio-ipc");
 const { registerMicroGuideIpc } = require("./src/ipc/micro-guide-ipc");
@@ -398,11 +399,20 @@ function classifyErrorForUI(error) {
 
 function toUiErrorPayload(error, requestContext) {
   const base = classifyErrorForUI(error);
-  return {
+  const payload = {
     ...base,
     message: error?.message || "Unexpected error",
     requestId: requestContext?.requestId || null,
   };
+  if (typeof globalThis.__sauronHandleRuntimeIncident === "function") {
+    setImmediate(() => {
+      void globalThis.__sauronHandleRuntimeIncident(
+        { message: payload.message, code: payload.code },
+        { component: "panel", operation: requestContext?.channel || "panel-chat" },
+      ).catch(() => {});
+    });
+  }
+  return payload;
 }
 
 function applyPlatformSettingsGuards(settings) {
@@ -463,12 +473,13 @@ function enrichRuntimeSettings(settings = {}, options = {}) {
     activePersonaId: settings.activePersonaId || migrateLegacyPreset(settings.personalityPreset),
   };
   const { applyPluginProfileOverlay } = require("./src/routing/effective-settings");
+  const { applyPersonaSelfProfile } = require("./src/routing/persona-self-settings");
   const profileApplied = applyPluginProfileOverlay(
     normalizedSettings,
     normalizedSettings.activePluginProfile,
     { smartPluginProfileEnabled: normalizedSettings.smartPluginProfileEnabled },
   );
-  const effectiveSettings = profileApplied.settings;
+  const effectiveSettings = applyPersonaSelfProfile(profileApplied.settings, { includePersona });
   return {
     ...effectiveSettings,
     _pluginProfileOverlay: profileApplied.overlay,
@@ -1356,6 +1367,18 @@ function registerModularIpcHandlers() {
     persistFinOpsSettings: persistFinOpsSettings,
   });
 
+  const incidentRuntime = registerIncidentIpc({
+    ipcMain,
+    debugLog,
+    store,
+    getRuntimeSettings,
+    getFinOpsAlertWindows,
+    runSauronDoctor: () => runSauronDoctor(store),
+    installWorkspaceStack,
+    streamAIResponse,
+  });
+  globalThis.__sauronHandleRuntimeIncident = incidentRuntime.handleRuntimeIncident;
+
   registerChatSessionsIpc({
     ipcMain,
     dialog,
@@ -1449,6 +1472,7 @@ function registerModularIpcHandlers() {
     getCredentialSyncStatus,
     emitBudgetAlert,
     getFinOpsAlertWindows,
+    handleRuntimeIncident: incidentRuntime.handleRuntimeIncident,
     streamAIResponse,
   });
 
@@ -1529,6 +1553,7 @@ function registerModularIpcHandlers() {
     store,
     debugLog,
     getRuntimeSettings,
+    sessionManager,
   });
 
   registerBrowserIpc({
@@ -1946,6 +1971,18 @@ app.whenReady().then(async () => {
     getSettings: () => store.store,
     getWindows: getFinOpsAlertWindows,
     persistSettings: persistFinOpsSettings,
+  });
+  const {
+    configureAgentResilienceContext,
+    getAgentHealthSnapshot,
+  } = require("./src/sauron/agent-resilience");
+  configureAgentResilienceContext({
+    getWindows: getFinOpsAlertWindows,
+    onFailoverRecord: (record) => {
+      if (!store) return;
+      store.set("lastAgentFailover", record);
+      store.set("agentHealthSnapshot", getAgentHealthSnapshot());
+    },
   });
   startClineUsagePoller(() => store?.store || {});
   sessionManager = new SessionManager();

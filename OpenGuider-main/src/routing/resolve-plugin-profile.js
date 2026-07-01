@@ -65,6 +65,74 @@ function detectWebWorkspace(workspacePath = "") {
   return { profile: "general", score: 0, reason: "not_web_workspace" };
 }
 
+function scoreUnityBridgeActive(bridgeStatus = {}) {
+  if (bridgeStatus?.ok) {
+    return { profile: "game", score: 0.35, reason: "unity_bridge_active" };
+  }
+  return { profile: "general", score: 0, reason: "unity_bridge_inactive" };
+}
+
+function scoreHandoffComplexity(complexityHint = "") {
+  const hint = String(complexityHint || "").trim().toLowerCase();
+  if (hint === "high") {
+    return { profile: "code", score: 0.25, reason: "handoff_high_complexity" };
+  }
+  if (hint === "medium") {
+    return { profile: "code", score: 0.15, reason: "handoff_medium_complexity" };
+  }
+  return { profile: "general", score: 0, reason: "handoff_low_complexity" };
+}
+
+function scoreCsprojWorkspace(workspacePath = "") {
+  const resolved = String(workspacePath || "").trim();
+  if (!resolved || !fs.existsSync(resolved)) {
+    return { profile: "general", score: 0, reason: "no_workspace" };
+  }
+  try {
+    const entries = fs.readdirSync(resolved, { withFileTypes: true });
+    const hasCsproj = entries.some((entry) => entry.isFile() && /\.csproj$/i.test(entry.name));
+    const hasAssets = fs.existsSync(path.join(resolved, "Assets"));
+    if (hasCsproj && hasAssets) {
+      return { profile: "game", score: 0.62, reason: "csproj_unity_workspace" };
+    }
+    if (hasCsproj) {
+      return { profile: "code", score: 0.45, reason: "csproj_workspace" };
+    }
+  } catch {
+    // ignore unreadable workspace
+  }
+  return { profile: "general", score: 0, reason: "no_csproj" };
+}
+
+const sessionProfileCache = new Map();
+
+function rememberSessionProfile(sessionId = "", profile = "general", score = 0) {
+  const id = String(sessionId || "").trim();
+  if (!id) return;
+  sessionProfileCache.set(id, {
+    profile: normalizeProfileId(profile),
+    score: Number(score) || 0,
+    at: Date.now(),
+  });
+}
+
+function shouldStickToSessionProfile({
+  sessionId = "",
+  currentProfile = "general",
+  nextProfile = "general",
+  nextScore = 0,
+} = {}) {
+  const id = String(sessionId || "").trim();
+  if (!id || nextProfile === currentProfile) {
+    return false;
+  }
+  const cached = sessionProfileCache.get(id);
+  if (!cached || cached.profile !== normalizeProfileId(currentProfile)) {
+    return false;
+  }
+  return nextScore - cached.score < HYSTERESIS;
+}
+
 function pickBestCandidate(candidates = []) {
   const ranked = candidates
     .filter((entry) => entry && entry.profile !== "general" && entry.score > 0)
@@ -113,6 +181,9 @@ function resolvePluginProfile({
   currentProfile = "general",
   pluginProfileMode = "auto",
   lastSwitchAt = "",
+  bridgeStatus = null,
+  handoffComplexity = "",
+  sessionId = "",
 } = {}) {
   const normalizedCurrent = normalizeProfileId(currentProfile);
 
@@ -146,7 +217,13 @@ function resolvePluginProfile({
     scoreCodeIntent(trimmed),
     detectUnityWorkspace(workspacePath),
     detectWebWorkspace(workspacePath),
+    scoreCsprojWorkspace(workspacePath),
+    scoreHandoffComplexity(handoffComplexity),
   ];
+
+  if (bridgeStatus) {
+    candidates.push(scoreUnityBridgeActive(bridgeStatus));
+  }
 
   if (source === "channel" && channel) {
     const channelProfile = CHANNEL_PROFILE_MAP[channel];
@@ -158,7 +235,7 @@ function resolvePluginProfile({
   const best = pickBestCandidate(candidates);
   const currentCandidate = candidates.find((entry) => entry.profile === normalizedCurrent) || { score: 0 };
   const nextProfile = best.profile;
-  const switched = shouldSwitchProfile({
+  let switched = shouldSwitchProfile({
     currentProfile: normalizedCurrent,
     nextProfile,
     nextScore: best.score,
@@ -167,8 +244,27 @@ function resolvePluginProfile({
     force: source === "manual" || source === "channel",
   });
 
+  if (
+    switched
+    && shouldStickToSessionProfile({
+      sessionId,
+      currentProfile: normalizedCurrent,
+      nextProfile,
+      nextScore: best.score,
+    })
+  ) {
+    switched = false;
+  }
+
+  const resolvedProfile = switched ? nextProfile : normalizedCurrent;
+  if (switched) {
+    rememberSessionProfile(sessionId, resolvedProfile, best.score);
+  } else if (sessionId) {
+    rememberSessionProfile(sessionId, normalizedCurrent, currentCandidate.score || best.score);
+  }
+
   return {
-    profile: switched ? nextProfile : normalizedCurrent,
+    profile: resolvedProfile,
     previousProfile: normalizedCurrent,
     switched,
     reason: switched ? best.reason : "unchanged",
@@ -213,4 +309,9 @@ module.exports = {
   scoreCodeIntent,
   detectUnityWorkspace,
   detectWebWorkspace,
+  scoreUnityBridgeActive,
+  scoreHandoffComplexity,
+  scoreCsprojWorkspace,
+  rememberSessionProfile,
+  shouldStickToSessionProfile,
 };

@@ -10,8 +10,6 @@ export function applyOptionalFeatureVisibility(doc, settings = {}) {
   const gooseOn = settings.gooseEnabled !== false;
   const gamedevOn = settings.gamedevEnabled !== false;
 
-  doc.getElementById("btn-web-preview")?.classList.toggle("hidden", !webStudioOn);
-  doc.getElementById("btn-code-studio")?.classList.toggle("hidden", !codeAgentOn);
   doc.getElementById("empty-cta-code-agent")?.classList.toggle("hidden", !codeAgentOn);
   doc.getElementById("web-studio-overlay")?.classList.toggle("feature-disabled", !webStudioOn);
   doc.getElementById("self-build-overlay")?.classList.toggle("feature-disabled", !selfBuildOn);

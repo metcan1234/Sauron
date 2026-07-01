@@ -113,6 +113,8 @@ export interface ExtensionState {
 	banners?: BannerCardData[]
 	welcomeBanners?: BannerCardData[]
 	openAiCodexIsAuthenticated?: boolean
+	sauronWelcomeChannel?: "workspace" | "gamedev" | null
+	sauronWelcomeLabel?: string | null
 }
 
 export interface ClineMessage {

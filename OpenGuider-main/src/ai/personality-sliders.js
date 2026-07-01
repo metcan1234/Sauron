@@ -42,7 +42,8 @@ function buildSliderBlock(settings = {}, personaId = "luna") {
     lines.push(`- Flört seviyesi: ${describeSlider(sliders.flirtiness, "light romantic hints only", "openly flirty when natural")}.`);
     lines.push("- Luna persona rules override sliders: never use pet names or *actions* in every message even if flirtiness is high.");
   } else {
-    lines.push("- Keep Hiri direct tone; warmth slider adjusts friendliness, not romance.");
+    lines.push("- Hiri: dobra abla asistan tonu; warmth slider samimiyeti ayarlar, flirtiness geçersiz (romantik dil yok).");
+    lines.push("- Her konuda yardım et (kod, proje, günlük); sahte motivasyon kullanma.");
   }
 
   lines.push(`- Emoji: ${describeSlider(sliders.emoji, "avoid emojis unless user uses them", "use emojis naturally when fitting")}.`);

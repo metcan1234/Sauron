@@ -25,6 +25,8 @@ const PRELOAD_ON_CHANNELS = [
   "browser-agent-status-changed",
   "browser-agent-download-progress",
   "finops-budget-alert",
+  "agent-failover-alert",
+  "incident-alert",
   "pipeline-updated",
   "panel-opened",
   "code-agent-step-updated",

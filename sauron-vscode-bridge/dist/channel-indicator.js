@@ -37,6 +37,11 @@ exports.registerChannelIndicator = registerChannelIndicator;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const vscode = __importStar(require("vscode"));
+const CLINE_EXTENSION_ID = "saoudrizwan.claude-dev";
+function refreshClineWelcomeState() {
+    const cline = vscode.extensions.getExtension(CLINE_EXTENSION_ID)?.exports;
+    void cline?.refreshWebviewState?.();
+}
 const CHANNEL_UI = {
     workspace: {
         text: "$(code) ⌘ ÇALIŞMA KISMI",
@@ -90,7 +95,10 @@ function registerChannelIndicator(context) {
         for (const folder of vscode.workspace.workspaceFolders ?? []) {
             const pattern = new vscode.RelativePattern(folder, ".sauron/active-channel.json");
             const watcher = vscode.workspace.createFileSystemWatcher(pattern);
-            const refresh = () => update(folder.uri.fsPath);
+            const refresh = () => {
+                update(folder.uri.fsPath);
+                refreshClineWelcomeState();
+            };
             watcher.onDidCreate(refresh);
             watcher.onDidChange(refresh);
             watcher.onDidDelete(refresh);

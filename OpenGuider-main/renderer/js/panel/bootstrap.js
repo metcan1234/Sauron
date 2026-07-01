@@ -11,10 +11,8 @@ import { createCodeAgentSummaryController } from "./code-agent-summary.js";
 import { createPersonaAvatarController } from "./persona-avatar.js";
 import { createVoiceChatModeController } from "./voice-chat-mode.js";
 import { createGamedevQuickSetupController } from "./gamedev-quick-setup.js";
-import { createGamedevBridgeStatusController } from "./gamedev-bridge-status.js";
 import { createGamedevSceneViewController } from "./gamedev-scene-view.js";
 import { createPluginProfileController } from "./plugin-profile.js";
-import { createLunaRelationshipBadgeController } from "./luna-relationship-badge.js";
 import { runEnhancedOnboarding } from "./onboarding-enhanced.js";
 import { createMessagingController } from "./messaging.js";
 import { createPlanView } from "./plan-view.js";
@@ -182,7 +180,6 @@ export function createPanelController({
   const codeAgentSummary = createCodeAgentSummaryController({ doc, ui });
   const contextPicker = createContextPickerController({ api, doc, dom, log, state });
   const gamedevQuickSetup = createGamedevQuickSetupController({ api, doc, state, ui, log });
-  const gamedevBridgeStatus = createGamedevBridgeStatusController({ api, doc, state, log });
   const gamedevSceneView = createGamedevSceneViewController({ api, doc, state, log });
   const voiceChatMode = createVoiceChatModeController({ api, doc, dom, ptt, state, ui, log });
   let lastBrowserExecutionSnapshot = null;
@@ -196,8 +193,6 @@ export function createPanelController({
   function handleProfileApplied(_meta, effectiveSettings = {}) {
     applyOptionalFeatureVisibility(doc, effectiveSettings);
     channelControls?.applyChannelFeatureVisibility?.(effectiveSettings);
-    void ui.refreshCodeReadinessBadge();
-    void gamedevBridgeStatus.refresh();
     void gamedevSceneView.refresh();
   }
 
@@ -911,7 +906,6 @@ export function createPanelController({
     onProfileApplied: handleProfileApplied,
   });
   syncPluginProfile = (params, options) => pluginProfile.resolveProfile(params, options);
-  const lunaRelationshipBadge = createLunaRelationshipBadgeController({ api, doc, log });
   const channelHints = createChannelHintsController({
     api,
     doc,
@@ -987,9 +981,6 @@ export function createPanelController({
       if (goal) {
         void messaging.startCodeAgentSession(goal);
       }
-    });
-    doc.getElementById("btn-code-studio")?.addEventListener("click", () => {
-      void api.invoke("open-code-studio");
     });
     doc.getElementById("btn-code-agent-cancel")?.addEventListener("click", () => {
       void messaging.cancelCodeAgent();
@@ -1276,10 +1267,7 @@ export function createPanelController({
     });
 
     api.on("ai-chunk", (chunk) => messaging.appendStreamChunk(chunk));
-    api.on("ai-done", (parsed) => {
-      messaging.onAIDone(parsed);
-      void lunaRelationshipBadge.refresh();
-    });
+    api.on("ai-done", (parsed) => messaging.onAIDone(parsed));
     api.on("ai-error", (errorMessage) => messaging.onAIError(errorMessage));
     api.on("tts-start", (base64Audio) => tts.handleTtsStart(base64Audio));
     api.on("tts-webspeech", (data) => tts.handleWebSpeech(data));
@@ -1307,18 +1295,13 @@ export function createPanelController({
         void updateWorkspaceButtonState();
         applyOptionalFeatureVisibility(doc, effectiveSettings);
         channelControls.applyChannelFeatureVisibility(effectiveSettings);
-        ui.renderWorkspaceBadge(effectiveSettings?.workspacePath || "");
         personaAvatar.render(effectiveSettings);
-        void lunaRelationshipBadge.refresh();
         doc.getElementById("btn-voice-chat-loop")?.classList.toggle(
           "hidden",
           effectiveSettings?.voiceChatLoopEnabled === false,
         );
         void contextPicker.refreshFiles();
         void channelControls.refreshChannelStatus();
-        void ui.refreshReadinessBadge();
-        void ui.refreshCodeReadinessBadge();
-        void gamedevBridgeStatus.refresh();
         void gamedevSceneView.refresh();
       });
     });
@@ -1328,9 +1311,35 @@ export function createPanelController({
       ui.showToast(message, payload?.level === "exhausted" || payload?.level === "warning");
     });
 
+    api.on("agent-failover-alert", (payload) => {
+      const message = payload?.message || "Agent değiştirildi.";
+      ui.showToast(message, true);
+    });
+
+    api.on("incident-alert", async (payload) => {
+      const message = payload?.hint || payload?.message || "Incident uyarısı";
+      ui.showToast(message, payload?.level === "warning" || payload?.requiresApproval === true);
+      if (payload?.requiresApproval && payload?.canApplyFix && payload?.approvalIncidentId) {
+        const apply = window.confirm(`${message}\n\nBilinen onarım adımlarını uygulayayım mı?`);
+        if (apply) {
+          try {
+            const result = await api.invoke("apply-incident-fix", {
+              incidentId: payload.approvalIncidentId,
+              approved: true,
+            });
+            ui.showToast(result?.ok ? "Onarım uygulandı." : (result?.error || "Onarım başarısız"), !result?.ok);
+          } catch (error) {
+            ui.showToast(error?.message || "Onarım başarısız", true);
+          }
+        }
+      }
+      if (payload?.navigate?.tab) {
+        api.invoke("open-settings").catch(() => {});
+      }
+    });
+
     api.on("finops-logs-changed", () => {
-      log("ipc:finops-logs-changed — refreshing badge");
-      void ui.refreshFinOpsBadge();
+      log("ipc:finops-logs-changed");
     });
 
     api.on("pipeline-updated", (payload) => {
@@ -1400,7 +1409,6 @@ export function createPanelController({
       updatePlanActionVisibility(normalizeAssistantMode(state.getSetting("assistantMode")), snapshot);
       updatePlanActionButtons(snapshot);
       void chatHistory.refreshSessionList();
-      void ui.refreshFinOpsBadge();
     });
 
     api.on("execution:substep-progress", (substep) => {
@@ -1501,17 +1509,11 @@ export function createPanelController({
         source: "startup",
         workspacePath: settings.workspacePath || "",
       }, { notify: false });
-      await lunaRelationshipBadge.refresh();
       const effectiveSettings = state.getSettings();
       applyOptionalFeatureVisibility(doc, effectiveSettings);
       channelControls.applyChannelFeatureVisibility(effectiveSettings);
-      ui.renderWorkspaceBadge(effectiveSettings.workspacePath || "");
       await channelControls.refreshChannelStatus();
       startHandoffHistoryRefresh();
-      await ui.refreshFinOpsBadge();
-      await ui.refreshReadinessBadge();
-      await ui.refreshCodeReadinessBadge();
-      await gamedevBridgeStatus.refresh();
       await gamedevSceneView.refresh();
       dom.textInput.focus();
       if (!settings?.onboardingCompleted) {

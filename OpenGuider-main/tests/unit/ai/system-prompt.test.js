@@ -52,7 +52,61 @@ describe("composeSystemPrompt", () => {
     assert.match(prompt, /ASSISTANT CHAT MODE:/);
     assert.match(prompt, /INTRO REQUEST:/);
     assert.match(prompt, /Introduce yourself briefly as Hiri/);
-    assert.match(prompt, /direct, no-nonsense abla tone/);
+    assert.match(prompt, /abla-assistant tone/);
+    assert.match(prompt, /daily questions/);
+  });
+
+  it("includes Hiri abla-assistant persona block with help domains", () => {
+    const prompt = composeSystemPrompt({
+      settings: {
+        activePersonaId: "hiri",
+        ownerName: "Can",
+      },
+    });
+
+    assert.match(prompt, /AKTİF PERSONA: HİRİ/);
+    assert.match(prompt, /her konuda yardım/i);
+    assert.match(prompt, /dobra, güvenilir abla asistanı/i);
+    assert.match(prompt, /Yerel Kod Agent/);
+    assert.match(prompt, /Romantik hitap, flört/);
+  });
+
+  it("uses Hiri-specific slider guidance without romance", () => {
+    const prompt = composeSystemPrompt({
+      settings: {
+        activePersonaId: "hiri",
+        personalitySliders: { warmth: 80, flirtiness: 90 },
+      },
+    });
+
+    assert.match(prompt, /dobra abla asistan tonu/);
+    assert.match(prompt, /romantik dil yok/);
+  });
+
+  it("includes persona self plan note when self profile is active", () => {
+    const prompt = composeSystemPrompt({
+      settings: {
+        activePersonaId: "luna",
+        _personaSelfProfileActive: true,
+        _personaSelfPersonaId: "luna",
+        _personaSelfPlanNote: "Can gece modunda, daha sıcak konuşuyorum.",
+      },
+    });
+    assert.match(prompt, /PERSONA SELF PLAN/);
+    assert.match(prompt, /daha sıcak konuşuyorum/);
+  });
+
+  it("includes persona feedback attention block when present", () => {
+    const prompt = composeSystemPrompt({
+      settings: {
+        activePersonaId: "hiri",
+        _personaSelfProfileActive: true,
+        _personaSelfPersonaId: "hiri",
+        _personaFeedbackAttention: "- Can daha dobra ve net ton istiyor.",
+      },
+    });
+    assert.match(prompt, /PERSONA FEEDBACK DİKKAT/);
+    assert.match(prompt, /dobra ve net ton/);
   });
 
   it("skips intro directive when introOnNewChat is disabled", () => {

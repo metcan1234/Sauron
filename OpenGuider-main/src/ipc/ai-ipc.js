@@ -30,7 +30,9 @@ function registerAiIpc({
 }) {
   const { buildMemoryChatHistory } = require("../session/memory-chat-context");
   const { maybeCompressMemoryChat } = require("../session/memory-chat-compressor");
+  const { maybeCompactPanelHistoryForRequest } = require("../session/panel-context-compactor");
   const { enrichTextWithAtFileContext } = require("../panel/at-file-context");
+  const { estimateTokensLite } = require("../sauron/finops/tiktoken-estimator");
   const { extractMemoryFactsFromTurn, mergeMemoryFacts } = require("../session/auto-memory-extract");
   const { resolveActivePersonaId } = require("../ai/personas");
   const {
@@ -44,6 +46,155 @@ function registerAiIpc({
     mergeExtractionIntoProfile,
     hasExtractionContent,
   } = require("../session/luna-relationship-extract");
+  const {
+    emptySelfProfile,
+    recordSelfTuneMessage,
+    shouldRunSelfTuningExtract,
+    getPersonaStoreKeys,
+    getPersonaSelfProfileState,
+    appendFeedbackLog,
+    appendFeedbackNotes,
+    clearPersonaFeedback,
+  } = require("../session/persona-self-profile");
+  const { syncPersonaSelfProfileToFile } = require("../session/persona-self-profile-file");
+  const {
+    extractPersonaSelfTuningFromTurn,
+    mergeExtractionIntoSelfProfile,
+    hasSelfTuningContent,
+  } = require("../session/persona-self-tuning-extract");
+  const {
+    detectExplicitPersonaFeedback,
+    applyFeedbackHintsToExtraction,
+    buildFeedbackMemoryFact,
+  } = require("../session/persona-feedback-detect");
+  const { app } = require("electron");
+  function syncSelfProfileFile(personaId, profile) {
+    try {
+      const userDataPath = app?.getPath?.("userData");
+      if (userDataPath) {
+        syncPersonaSelfProfileToFile(userDataPath, personaId, profile);
+      }
+    } catch (fileError) {
+      appLogger.warn("persona-self-profile-file sync failed", {
+        personaId,
+        error: fileError?.message || fileError,
+      });
+    }
+  }
+
+  function runPersonaSelfTuningExtractJob(activePersonaId, recordedProfile, text, assistantContent, feedbackContext = null) {
+    const keys = getPersonaStoreKeys(activePersonaId);
+    setImmediate(() => {
+      void (async () => {
+        try {
+          const taskSettings = await getRuntimeSettings(TASK_RUNTIME);
+          const locks = store.get(keys.locks) || {};
+          const extractController = new AbortController();
+          const extractTimer = setTimeout(() => extractController.abort(), 25000);
+          let extraction = await extractPersonaSelfTuningFromTurn({
+            personaId: activePersonaId,
+            userText: text,
+            assistantText: assistantContent,
+            currentProfile: store.get(keys.profile) || recordedProfile,
+            streamAIResponse,
+            settings: taskSettings,
+            signal: extractController.signal,
+          });
+          clearTimeout(extractTimer);
+
+          if (feedbackContext?.isFeedback) {
+            extraction = applyFeedbackHintsToExtraction(
+              extraction,
+              feedbackContext.hints || [],
+              activePersonaId,
+              store.get(keys.profile) || recordedProfile,
+            );
+          }
+
+          if (!hasSelfTuningContent(extraction) && !feedbackContext?.isFeedback) {
+            return;
+          }
+
+          let mergedProfile = mergeExtractionIntoSelfProfile(
+            store.get(keys.profile) || recordedProfile,
+            extraction,
+            activePersonaId,
+            locks,
+          );
+
+          if (feedbackContext?.isFeedback) {
+            mergedProfile = appendFeedbackLog(
+              mergedProfile,
+              {
+                userQuote: feedbackContext.userQuote,
+                adjustment: (feedbackContext.hints || []).join(", ") || (feedbackContext.notes || []).join("; "),
+                applied: extraction.planNote || "güncellendi",
+              },
+              activePersonaId,
+            );
+            mergedProfile = appendFeedbackNotes(mergedProfile, feedbackContext.notes || [], activePersonaId);
+            const memoryFact = buildFeedbackMemoryFact(activePersonaId, feedbackContext.notes || []);
+            if (memoryFact) {
+              const mergedFacts = mergeMemoryFacts(store.get("userMemoryFacts") || [], [memoryFact]);
+              store.set("userMemoryFacts", mergedFacts);
+            }
+          }
+
+          store.set(keys.profile, mergedProfile);
+          syncSelfProfileFile(activePersonaId, mergedProfile);
+          if (typeof broadcastSettingsChanged === "function") {
+            broadcastSettingsChanged();
+          }
+        } catch (selfTuneError) {
+          appLogger.warn(`${activePersonaId}-self-tuning-extract failed`, {
+            error: selfTuneError?.message || selfTuneError,
+          });
+        }
+      })();
+    });
+  }
+
+  function runPersonaSelfTuningHook(activePersonaId, settings, { text, assistantContent, isMemoryChat, introRequest }) {
+    if (activePersonaId !== "luna" && activePersonaId !== "hiri") {
+      return;
+    }
+    if (isMemoryChat || introRequest || !text || !assistantContent) {
+      return;
+    }
+
+    const keys = getPersonaStoreKeys(activePersonaId);
+    if (settings[keys.enabled] === false) {
+      return;
+    }
+
+    const recordedProfile = recordSelfTuneMessage(
+      store.get(keys.profile) || emptySelfProfile(activePersonaId),
+      activePersonaId,
+    );
+    store.set(keys.profile, recordedProfile);
+    syncSelfProfileFile(activePersonaId, recordedProfile);
+    if (typeof broadcastSettingsChanged === "function") {
+      broadcastSettingsChanged();
+    }
+
+    const feedbackContext = detectExplicitPersonaFeedback(text, activePersonaId);
+    if (feedbackContext.isFeedback) {
+      runPersonaSelfTuningExtractJob(
+        activePersonaId,
+        recordedProfile,
+        text,
+        assistantContent,
+        feedbackContext,
+      );
+    }
+
+    if (!shouldRunSelfTuningExtract(recordedProfile)) {
+      return;
+    }
+
+    runPersonaSelfTuningExtractJob(activePersonaId, recordedProfile, text, assistantContent, null);
+  }
+
   const TASK_RUNTIME = { includePersona: false };
   const PANEL_RUNTIME = { includePersona: true };
   const PERSONA_SWITCH_REPLY =
@@ -274,7 +425,7 @@ function registerAiIpc({
         ? "Merhaba."
         : text;
       if (settings.panelAtFileContextEnabled !== false && settings.workspacePath && enrichedText) {
-        const atFileResult = enrichTextWithAtFileContext(enrichedText, settings.workspacePath, true);
+        const atFileResult = enrichTextWithAtFileContext(enrichedText, settings.workspacePath, true, { settings });
         enrichedText = atFileResult.text;
       }
       if (layerManager && Array.isArray(images) && images.length > 0) {
@@ -290,6 +441,24 @@ function registerAiIpc({
           }
         } catch (preErr) {
           appLogger.warn("send-message pre-layer error (non-fatal)", { error: preErr });
+        }
+      }
+
+      if (!isMemoryChat && effectiveHistory?.length) {
+        try {
+          const compactedHistory = await maybeCompactPanelHistoryForRequest({
+            messages: sessionManager?.getSnapshot()?.messages || effectiveHistory,
+            settings: requestSettings,
+            isMemoryChat,
+            streamAIResponse,
+            signal: controller.signal,
+            sessionId: sessionManager?.getSnapshot()?.sessionId || "",
+          });
+          if (compactedHistory) {
+            effectiveHistory = compactedHistory;
+          }
+        } catch (compactError) {
+          appLogger.warn("panel-context-compact-failed", { error: compactError?.message || compactError });
         }
       }
 
@@ -367,6 +536,13 @@ function registerAiIpc({
       }
 
       const activePersonaId = resolveActivePersonaId(settings);
+      runPersonaSelfTuningHook(activePersonaId, settings, {
+        text,
+        assistantContent,
+        isMemoryChat,
+        introRequest,
+      });
+
       if (
         activePersonaId === "luna"
         && settings.lunaRelationshipEnabled !== false
@@ -545,6 +721,95 @@ function registerAiIpc({
     }
     const settings = await getRuntimeSettings(PANEL_RUNTIME);
     return getLunaRelationshipState(settings);
+  });
+
+  ipcMain.handle("get-luna-self-profile-state", async () => {
+    debugLog("ipc:get-luna-self-profile-state");
+    const settings = await getRuntimeSettings(PANEL_RUNTIME);
+    const state = getPersonaSelfProfileState(settings, "luna");
+    try {
+      const userDataPath = app?.getPath?.("userData");
+      if (userDataPath) {
+        state.filePath = require("../session/persona-self-profile-file").getSelfProfileFilePath(userDataPath, "luna");
+      }
+    } catch {
+      // ignore
+    }
+    return state;
+  });
+
+  ipcMain.handle("reset-luna-self-profile", async () => {
+    debugLog("ipc:reset-luna-self-profile");
+    const freshProfile = emptySelfProfile("luna");
+    store.set("lunaSelfProfile", freshProfile);
+    syncSelfProfileFile("luna", freshProfile);
+    if (typeof broadcastSettingsChanged === "function") {
+      broadcastSettingsChanged();
+    }
+    const settings = await getRuntimeSettings(PANEL_RUNTIME);
+    return getPersonaSelfProfileState(settings, "luna");
+  });
+
+  ipcMain.handle("get-hiri-self-profile-state", async () => {
+    debugLog("ipc:get-hiri-self-profile-state");
+    const settings = await getRuntimeSettings(PANEL_RUNTIME);
+    const state = getPersonaSelfProfileState(settings, "hiri");
+    try {
+      const userDataPath = app?.getPath?.("userData");
+      if (userDataPath) {
+        state.filePath = require("../session/persona-self-profile-file").getSelfProfileFilePath(userDataPath, "hiri");
+      }
+    } catch {
+      // ignore
+    }
+    return state;
+  });
+
+  ipcMain.handle("reset-hiri-self-profile", async () => {
+    debugLog("ipc:reset-hiri-self-profile");
+    const freshProfile = emptySelfProfile("hiri");
+    store.set("hiriSelfProfile", freshProfile);
+    syncSelfProfileFile("hiri", freshProfile);
+    if (typeof broadcastSettingsChanged === "function") {
+      broadcastSettingsChanged();
+    }
+    const settings = await getRuntimeSettings(PANEL_RUNTIME);
+    return getPersonaSelfProfileState(settings, "hiri");
+  });
+
+  ipcMain.handle("reset-luna-persona-feedback", async () => {
+    debugLog("ipc:reset-luna-persona-feedback");
+    const cleared = clearPersonaFeedback(store.get("lunaSelfProfile") || emptySelfProfile("luna"), "luna");
+    store.set("lunaSelfProfile", cleared);
+    syncSelfProfileFile("luna", cleared);
+    if (typeof broadcastSettingsChanged === "function") {
+      broadcastSettingsChanged();
+    }
+    const settings = await getRuntimeSettings(PANEL_RUNTIME);
+    return getPersonaSelfProfileState(settings, "luna");
+  });
+
+  ipcMain.handle("reset-hiri-persona-feedback", async () => {
+    debugLog("ipc:reset-hiri-persona-feedback");
+    const cleared = clearPersonaFeedback(store.get("hiriSelfProfile") || emptySelfProfile("hiri"), "hiri");
+    store.set("hiriSelfProfile", cleared);
+    syncSelfProfileFile("hiri", cleared);
+    if (typeof broadcastSettingsChanged === "function") {
+      broadcastSettingsChanged();
+    }
+    const settings = await getRuntimeSettings(PANEL_RUNTIME);
+    return getPersonaSelfProfileState(settings, "hiri");
+  });
+
+  ipcMain.handle("estimate-message-tokens", async (_event, payload = {}) => {
+    const text = String(payload?.text || "");
+    const history = Array.isArray(payload?.history) ? payload.history : [];
+    const settings = await getRuntimeSettings(PANEL_RUNTIME);
+    const modelHint = String(settings.aiModel || settings.aiProvider || "");
+    const historyText = history.map((entry) => String(entry?.content || "")).join("\n");
+    const totalText = [historyText, text].filter(Boolean).join("\n");
+    const estimatedTokens = estimateTokensLite(totalText, modelHint);
+    return { estimatedTokens, ok: true };
   });
 }
 

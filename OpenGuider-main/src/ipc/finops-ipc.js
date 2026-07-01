@@ -22,11 +22,24 @@ function registerFinOpsIpc({
       const {
         buildLowAgentWalletAlerts,
         buildExhaustedAgentAlerts,
+        buildSoftEconomySuggestionAlert,
+        applySoftAutoEconomy,
       } = require("../sauron/finops/agent-usage");
 
       const exhaustedAlerts = buildExhaustedAgentAlerts(summary.agentWallets);
       for (const alert of exhaustedAlerts) {
         emitBudgetAlert(getFinOpsAlertWindows, alert);
+      }
+
+      const softEconomyAlert = buildSoftEconomySuggestionAlert(summary.agentWallets, runtimeSettings);
+      if (softEconomyAlert) {
+        emitBudgetAlert(getFinOpsAlertWindows, softEconomyAlert);
+        if (softEconomyAlert.autoEconomyEnabled && typeof persistFinOpsSettings === "function") {
+          const patched = applySoftAutoEconomy(runtimeSettings);
+          if (patched._tokenUltraAutoEconomyApplied) {
+            await persistFinOpsSettings({ finopsCostOptimizerMode: "economy" }).catch(() => {});
+          }
+        }
       }
 
       const lowAlerts = buildLowAgentWalletAlerts(summary.agentWallets, runtimeSettings);

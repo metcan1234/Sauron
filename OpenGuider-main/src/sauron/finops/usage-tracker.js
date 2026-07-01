@@ -4,6 +4,7 @@ const path = require("path");
 const { createLogger } = require("../../logger");
 const { summarizeByAgent, buildAgentWalletSummary, summarizeAgentChannelBreakdown } = require("./agent-usage");
 const { inferChannel, summarizeByChannel } = require("./tiktoken-estimator");
+const { readFallbackMetrics } = require("../token-ultra/fallback-metrics");
 const { readTokenUltraCache } = require("../token-ultra/delta-store");
 
 const logger = createLogger("usage-tracker");
@@ -173,10 +174,12 @@ async function getUsageSummary(settings = {}, options = {}) {
   const agentWallets = buildAgentWalletSummary(settings, byAgent, agentChannelBreakdown);
   const workspacePath = String(settings.workspacePath || "").trim();
   const tokenUltraCache = workspacePath ? readTokenUltraCache(workspacePath) : null;
+  const fallbackMetrics = workspacePath ? readFallbackMetrics(workspacePath) : { fallbackCount: 0, events: [] };
   const tokenUltraStats = {
     estimatedCharsSaved: Number(tokenUltraCache?.savings?.estimatedCharsSaved) || 0,
     handoffCount: Number(tokenUltraCache?.savings?.handoffCount) || 0,
     lastHandoffId: tokenUltraCache?.lastHandoffId || null,
+    fallbackCount: Number(fallbackMetrics.fallbackCount) || 0,
   };
   const clineReadonlyEntries = entries.filter((entry) => entry.operation === "cline-task-readonly");
   const clineReadonlyEntryCount = clineReadonlyEntries.length;

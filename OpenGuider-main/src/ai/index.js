@@ -1,5 +1,8 @@
 const { captureUsageFromStreamEvent } = require("../sauron/finops/token-counter");
 const { recordLlmUsage, prepareLlmCall, BudgetExceededError } = require("../sauron/finops/llm-tracker");
+const { applyPromptCacheToSettings } = require("../sauron/token-ultra/prompt-cache");
+const { resolveAgentWalletState } = require("../sauron/finops/agent-usage");
+const { executeWithAgentResilience } = require("../sauron/agent-resilience");
 const { streamDeepSeek } = require("./deepseek");
 const { DEFAULT_SYSTEM_PROMPT } = require("./default-prompt");
 
@@ -472,10 +475,25 @@ async function runProviderStream({ text, images, history, settings, onChunk, sig
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
-async function streamAIResponse({ text, images, history, settings, onChunk, signal, operation = "chat", complexityHint = "low", sessionId = "" }) {
+async function streamAIResponse({
+  text,
+  images,
+  history,
+  settings,
+  onChunk,
+  signal,
+  operation = "chat",
+  complexityHint = "low",
+  sessionId = "",
+  onFailover,
+}) {
   let liveSettings;
   try {
-    liveSettings = await prepareLlmCall(settings || {}, { operation, complexityHint });
+    const cachedSettings = applyPromptCacheToSettings({
+      ...(settings || {}),
+      resolvedSystemPrompt: resolveSystemPrompt(settings || {}),
+    });
+    liveSettings = await prepareLlmCall(cachedSettings, { operation, complexityHint });
   } catch (error) {
     if (error instanceof BudgetExceededError || error?.name === "BudgetExceededError") {
       const message = error.message || "AI budget exceeded.";
@@ -487,26 +505,39 @@ async function streamAIResponse({ text, images, history, settings, onChunk, sign
     throw error;
   }
 
-  const provider = liveSettings.aiProvider || "claude";
-  const model = liveSettings.aiModel || "default";
   const promptText = buildPromptEstimate(text, history, images);
   const startMs = Date.now();
-  const ledgerOperation = liveSettings._finopsCoreOverlay
-    ? `${operation}-${liveSettings._finopsCoreOverlay.agentId || liveSettings._finopsCoreOverlay.coreModelTier}`
-    : operation;
+  const { agentWallets } = await resolveAgentWalletState(liveSettings).catch(() => ({ agentWallets: null }));
 
-  const { text: fullText, providerUsage } = await runProviderStream({
-    text,
-    images,
-    history,
+  const { result, settings: resolvedSettings, failoverInfo } = await executeWithAgentResilience({
     settings: liveSettings,
-    onChunk,
-    signal,
+    agentWallets,
+    notifyEnabled: liveSettings.agentFailoverNotifyEnabled !== false,
+    runStream: async (attemptSettings) => runProviderStream({
+      text,
+      images,
+      history,
+      settings: attemptSettings,
+      onChunk,
+      signal,
+    }),
   });
+
+  if (failoverInfo && typeof onFailover === "function") {
+    onFailover(failoverInfo);
+  }
+
+  const fullText = result.text;
+  const providerUsage = result.providerUsage;
+  const provider = resolvedSettings.aiProvider || "claude";
+  const model = resolvedSettings.aiModel || "default";
+  const ledgerOperation = resolvedSettings._finopsCoreOverlay
+    ? `${operation}-${resolvedSettings._finopsCoreOverlay.agentId || resolvedSettings._finopsCoreOverlay.coreModelTier}`
+    : operation;
 
   setImmediate(() => {
     recordLlmUsage({
-      settings: liveSettings,
+      settings: resolvedSettings,
       operation: ledgerOperation,
       provider,
       model,

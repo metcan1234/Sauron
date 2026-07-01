@@ -9,8 +9,18 @@ interface HomeHeaderProps {
 	shouldShowQuickWins?: boolean
 }
 
+const SAURON_WELCOME_COLORS: Record<string, string> = {
+	gamedev: "#a855f7",
+	workspace: "#ea580c",
+}
+
 const HomeHeader = ({ shouldShowQuickWins = false }: HomeHeaderProps) => {
-	const { environment, lazyTeammateModeEnabled } = useExtensionState()
+	const {
+		environment,
+		lazyTeammateModeEnabled,
+		sauronWelcomeChannel,
+		sauronWelcomeLabel,
+	} = useExtensionState()
 
 	const handleTakeATour = async () => {
 		try {
@@ -20,10 +30,18 @@ const HomeHeader = ({ shouldShowQuickWins = false }: HomeHeaderProps) => {
 		}
 	}
 
-	// Lazy Teammate Mode takes priority, then December festive logo, then default
-	const isDecember = new Date().getMonth() === 11 // 11 = December (0-indexed)
+	const isDecember = new Date().getMonth() === 11
 	const LogoComponent = lazyTeammateModeEnabled ? ClineLogoTired : isDecember ? ClineLogoSanta : ClineLogoVariable
-	const headingText = lazyTeammateModeEnabled ? "I guess I'm here to help" : "What can I do for you?"
+
+	let headingText = "What can I do for you?"
+	let headingColor: string | undefined
+
+	if (!lazyTeammateModeEnabled && sauronWelcomeChannel && sauronWelcomeLabel) {
+		headingText = sauronWelcomeLabel
+		headingColor = SAURON_WELCOME_COLORS[sauronWelcomeChannel]
+	} else if (lazyTeammateModeEnabled) {
+		headingText = "I guess I'm here to help"
+	}
 
 	return (
 		<div className="flex flex-col items-center mb-5">
@@ -31,7 +49,11 @@ const HomeHeader = ({ shouldShowQuickWins = false }: HomeHeaderProps) => {
 				<LogoComponent className="size-20" environment={environment} />
 			</div>
 			<div className="text-center flex items-center justify-center px-4">
-				<h1 className="m-0 font-bold">{headingText}</h1>
+				<h1
+					className="m-0 font-bold"
+					style={headingColor ? { color: headingColor } : undefined}>
+					{headingText}
+				</h1>
 			</div>
 			{shouldShowQuickWins && (
 				<div className="mt-4">

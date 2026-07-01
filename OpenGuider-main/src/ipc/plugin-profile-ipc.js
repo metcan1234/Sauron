@@ -3,6 +3,7 @@ const {
   resolvePluginProfile,
   commitPluginProfile,
 } = require("../routing/resolve-plugin-profile");
+const { getCachedBridgeStatus } = require("../routing/plugin-profile-context");
 const { normalizeProfileId, listPluginProfiles } = require("../routing/plugin-profiles");
 
 function registerPluginProfileIpc({
@@ -10,6 +11,7 @@ function registerPluginProfileIpc({
   store,
   debugLog,
   getRuntimeSettings,
+  sessionManager,
 }) {
   ipcMain.handle("get-plugin-profile-state", async () => {
     debugLog("ipc:get-plugin-profile-state");
@@ -30,6 +32,15 @@ function registerPluginProfileIpc({
       };
     }
 
+    let bridgeStatus = params.bridgeStatus || null;
+    if (!bridgeStatus && (params.channel === "gamedev" || params.probeBridge === true)) {
+      try {
+        bridgeStatus = await getCachedBridgeStatus();
+      } catch {
+        bridgeStatus = null;
+      }
+    }
+
     const resolution = resolvePluginProfile({
       text: params.text || "",
       workspacePath: params.workspacePath || baseSettings.workspacePath || "",
@@ -39,6 +50,11 @@ function registerPluginProfileIpc({
       currentProfile: baseSettings.activePluginProfile,
       pluginProfileMode: baseSettings.pluginProfileMode,
       lastSwitchAt: baseSettings.pluginProfileLastSwitchAt,
+      bridgeStatus,
+      handoffComplexity: params.handoffComplexity || "",
+      sessionId: params.sessionId
+        || sessionManager?.getSnapshot?.()?.sessionId
+        || "",
     });
 
     const commit = commitPluginProfile(store, resolution, baseSettings);

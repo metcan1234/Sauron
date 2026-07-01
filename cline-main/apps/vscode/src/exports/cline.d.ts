@@ -104,4 +104,9 @@ export interface ClineAPI {
 	 * Short summary of the most recently completed/cleared task.
 	 */
 	getLastTaskSummary(): string | null
+
+	/**
+	 * Refreshes webview state (e.g. after Sauron channel marker changes).
+	 */
+	refreshWebviewState?(): Promise<void>
 }
