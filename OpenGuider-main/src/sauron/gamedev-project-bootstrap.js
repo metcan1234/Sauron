@@ -5,6 +5,8 @@ const { detectProjectEngine } = require("./gamedev-engine-discovery");
 const { ensureEngineCompat } = require("./gamedev-engine-compat");
 const { writeGamedevMcpConfig } = require("./gamedev-mcp-config");
 const { probeGamedevBridgeForEngine } = require("./gamedev-bridge-probe");
+const { installFunplayMcpPlugin, isFunplayPluginInstalled } = require("./gamedev-unreal-installer");
+const { ensureEditorBridgeReady } = require("./gamedev-editor-launcher");
 
 function readJson(filePath) {
   try {
@@ -38,36 +40,22 @@ function ensureUnityMcpPackage(workspacePath) {
   return { ok: true, skipped: false, reason: "package-added", manifestPath };
 }
 
-function ensureUnrealFunplayBootstrap(workspacePath) {
-  const pluginRoot = path.join(workspacePath, "Plugins", "FunplayMCP");
-  const marker = path.join(pluginRoot, "FunplayMCP.uplugin");
-  const hasUproject = fs.readdirSync(workspacePath, { withFileTypes: true })
+async function ensureUnrealFunplayPlugin(workspacePath, settings = {}) {
+  const resolved = String(workspacePath || "").trim();
+  const hasUproject = fs.readdirSync(resolved, { withFileTypes: true })
     .some((entry) => entry.isFile() && entry.name.endsWith(".uproject"));
   if (!hasUproject) {
     return { ok: false, skipped: true, reason: "not-unreal-project" };
   }
 
-  if (fs.existsSync(marker)) {
-    return { ok: true, skipped: true, reason: "plugin-present", pluginRoot };
+  if (settings.gamedevAutoPluginInstall === false) {
+    if (isFunplayPluginInstalled(resolved)) {
+      return { ok: true, skipped: true, reason: "plugin-present-auto-install-disabled" };
+    }
+    return { ok: false, skipped: true, reason: "plugin-missing-auto-install-disabled" };
   }
 
-  fs.mkdirSync(pluginRoot, { recursive: true });
-  const readme = path.join(pluginRoot, "SAURON_INSTALL_FUNPLAY.md");
-  fs.writeFileSync(readme, [
-    "# Funplay MCP for Unreal — Sauron bootstrap",
-    "",
-    "Bu klasör Sauron tarafından oluşturuldu. Tam kurulum için:",
-    "",
-    "1. https://github.com/FunplayAI/funplay-unreal-mcp/releases adresinden zip indir",
-    "2. Zip içindeki `FunplayMCP/` klasörünü bu `Plugins/FunplayMCP/` üzerine kopyala",
-    "3. Unreal Editor → Edit → Plugins → Funplay MCP for Unreal → Enable",
-    "4. Tools → Funplay MCP → Start",
-    "",
-    "Ardından Sauron Game Dev → Tek tık fix çalıştır.",
-    "",
-  ].join("\n"), "utf8");
-
-  return { ok: true, skipped: false, reason: "bootstrap-readme", pluginRoot, readme };
+  return installFunplayMcpPlugin(resolved, settings);
 }
 
 function resolveEngineForWorkspace(workspacePath, settings = {}, engineOverride = null) {
@@ -101,12 +89,17 @@ async function ensureGamedevProjectReady(workspacePath, settings = {}, engineOve
     const unityPkg = ensureUnityMcpPackage(resolved);
     steps.push({ id: "unity-mcp-package", ok: unityPkg.ok, message: unityPkg.reason });
   }
+
   if (engine === "unreal") {
-    const unrealPlugin = ensureUnrealFunplayBootstrap(resolved);
-    steps.push({ id: "unreal-funplay-bootstrap", ok: unrealPlugin.ok, message: unrealPlugin.reason });
+    const unrealPlugin = await ensureUnrealFunplayPlugin(resolved, settings);
+    steps.push({
+      id: "unreal-funplay-install",
+      ok: unrealPlugin.ok,
+      message: unrealPlugin.reason || unrealPlugin.error || "unreal-plugin",
+    });
   }
 
-  const bridge = await probeGamedevBridgeForEngine(engine, { workspacePath: resolved });
+  let bridge = await probeGamedevBridgeForEngine(engine, { workspacePath: resolved });
   steps.push({
     id: "bridge-probe",
     ok: bridge.ok,
@@ -114,6 +107,25 @@ async function ensureGamedevProjectReady(workspacePath, settings = {}, engineOve
       ? `${engine} bridge ${bridge.transport} (${bridge.port || bridge.endpoint})`
       : bridge.summary || "bridge-offline",
   });
+
+  if (!bridge.ok && settings.gamedevAutoEditorLaunch !== false) {
+    const editorReady = await ensureEditorBridgeReady(engine, resolved, settings, {
+      timeoutMs: settings.gamedevBridgeWaitMs || 90000,
+    });
+    if (Array.isArray(editorReady.steps)) {
+      steps.push(...editorReady.steps.map((step) => ({ ...step, id: `editor-${step.id}` })));
+    }
+    if (editorReady.probe) {
+      bridge = editorReady.probe;
+    }
+    steps.push({
+      id: "bridge-after-launch",
+      ok: bridge.ok === true,
+      message: bridge.ok
+        ? `${engine} bridge ready after editor launch`
+        : editorReady.error || "bridge-still-offline",
+    });
+  }
 
   const mcpWrite = writeGamedevMcpConfig(resolved, settings, engine, {
     bridgePort: bridge.port || null,
@@ -124,19 +136,24 @@ async function ensureGamedevProjectReady(workspacePath, settings = {}, engineOve
     message: mcpWrite.ok ? `mcp-config (${mcpWrite.writtenPaths?.length || 0})` : mcpWrite.error,
   });
 
+  const bridgeOptional = bridge.ok !== true;
+  const ok = mcpWrite.ok;
+
   return {
-    ok: mcpWrite.ok,
+    ok,
     engine,
     workspacePath: resolved,
     bridge,
+    bridgeOptional,
     steps,
     mcpWrite,
+    warnings: steps.filter((step) => step.ok === false && step.id !== "bridge-probe" && step.id !== "bridge-after-launch"),
   };
 }
 
 module.exports = {
   ensureUnityMcpPackage,
-  ensureUnrealFunplayBootstrap,
+  ensureUnrealFunplayPlugin,
   resolveEngineForWorkspace,
   ensureGamedevProjectReady,
 };

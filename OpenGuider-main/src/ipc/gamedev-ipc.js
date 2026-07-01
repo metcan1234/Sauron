@@ -241,6 +241,14 @@ function registerGamedevIpc({
       engine: engine || settings.gamedevActiveEngine,
     });
   });
+
+  ipcMain.handle("ensure-gamedev-editor-ready", async (_event, { workspacePath, engine } = {}) => {
+    const settings = await getRuntimeSettings();
+    const resolved = resolveWorkspacePath(workspacePath);
+    const activeEngine = normalizeGamedevEngine(engine || settings.gamedevActiveEngine || "unity");
+    const { ensureEditorBridgeReady } = require("../sauron/gamedev-editor-launcher");
+    return ensureEditorBridgeReady(activeEngine, resolved, settings);
+  });
 }
 
 module.exports = {

@@ -140,9 +140,42 @@ function checkGamedevCompatManifest(settings = {}, workspacePath = "") {
   };
 }
 
+function checkGamedevUnrealPluginInstalled(settings = {}, workspacePath = "") {
+  const resolved = String(workspacePath || settings.workspacePath || "").trim();
+  if (!resolved) {
+    return {
+      id: "gamedev-unreal-plugin",
+      status: "warn",
+      message: "Funplay plugin kontrolu icin workspace gerekli",
+      fixHint: "Calisma Kismi secin",
+      tier: "optional",
+    };
+  }
+
+  const { isFunplayPluginInstalled } = require("./gamedev-unreal-installer");
+  if (isFunplayPluginInstalled(resolved)) {
+    return {
+      id: "gamedev-unreal-plugin",
+      status: "pass",
+      message: "FunplayMCP plugin kurulu",
+      fixHint: "",
+      tier: "optional",
+    };
+  }
+
+  return {
+    id: "gamedev-unreal-plugin",
+    status: "warn",
+    message: "FunplayMCP plugin eksik",
+    fixHint: "Game Dev acin — Sauron otomatik indirip kurar (internet gerekir)",
+    tier: "optional",
+  };
+}
+
 module.exports = {
   checkGamedevEngineBridge,
   checkGamedevEngineBridgeSync,
   checkGamedevProjectEngineMatch,
   checkGamedevCompatManifest,
+  checkGamedevUnrealPluginInstalled,
 };

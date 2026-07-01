@@ -14,6 +14,7 @@ const { isCursorCliPath } = require("./vscode-launcher");
 const channelRuntime = require("./channel-runtime");
 const { discoverGooseBinary, isLikelyGooseDesktopPath, isExecutableFile } = require("./goose-binary-resolver");
 const { probeGamedevMcpEntry } = require("./gamedev-path-resolver");
+const { normalizeGamedevEngine } = require("./gamedev-config");
 const { resolveUsageLogPath } = require("./finops/usage-tracker");
 
 // ── Vision model support ──────────────────────────────────────────────────────
@@ -995,6 +996,10 @@ function runSauronDoctor(store, options = {}) {
   pushCheck(checks, checkGamedevEngineBridgeSync(runtimeSettings, workspacePath));
   pushCheck(checks, checkGamedevProjectEngineMatch(runtimeSettings, workspacePath));
   pushCheck(checks, checkGamedevCompatManifest(runtimeSettings, workspacePath));
+  if (normalizeGamedevEngine(runtimeSettings.gamedevActiveEngine || "unity") === "unreal") {
+    const { checkGamedevUnrealPluginInstalled } = require("./gamedev-health");
+    pushCheck(checks, checkGamedevUnrealPluginInstalled(runtimeSettings, workspacePath));
+  }
 
   // ── Additional channel-specific checks ───────────────────────────────
   pushCheck(checks, checkGooseBinary(runtimeSettings));
