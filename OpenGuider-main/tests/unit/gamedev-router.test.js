@@ -18,6 +18,6 @@ test("resolveGamedevMode defaults to economy", () => {
 });
 
 test("resolveGamedevClineAgent prefers deepseek", () => {
-  const agent = resolveGamedevClineAgent({});
+  const agent = resolveGamedevClineAgent({ finopsCostOptimizerEnabled: false });
   assert.equal(agent.providerId, "deepseek");
 });

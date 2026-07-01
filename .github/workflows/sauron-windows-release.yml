@@ -32,6 +32,13 @@ jobs:
         shell: pwsh
         run: npm ci
 
+      - name: Build gamedev-all-in-one MCP
+        shell: pwsh
+        run: |
+          npm ci
+          npm run build
+        working-directory: OpenGuider-main/extensions/gamedev-all-in-one
+
       - name: Build Windows installer
         shell: pwsh
         env:

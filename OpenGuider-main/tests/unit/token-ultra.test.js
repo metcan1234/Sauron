@@ -65,7 +65,18 @@ test("bundled goose paths include monorepo locations", () => {
 });
 
 test("resolvePreferredEngine falls back to settings", () => {
-  const resolved = resolvePreferredEngine({ gamedevActiveEngine: "unreal" });
-  assert.equal(resolved.engine, "unreal");
-  assert.equal(resolved.source, "settings");
+  const engineProbe = require("../../src/sauron/gamedev-engine-probe");
+  const originalDetect = engineProbe.detectRunningGameEngine;
+  engineProbe.detectRunningGameEngine = () => ({
+    engine: null,
+    process: null,
+    detected: false,
+  });
+  try {
+    const resolved = engineProbe.resolvePreferredEngine({ gamedevActiveEngine: "unreal" });
+    assert.equal(resolved.engine, "unreal");
+    assert.equal(resolved.source, "settings");
+  } finally {
+    engineProbe.detectRunningGameEngine = originalDetect;
+  }
 });

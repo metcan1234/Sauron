@@ -41,7 +41,7 @@ function detectRunningGameEngine() {
 
 function resolvePreferredEngine(settings = {}) {
   const configured = String(settings.gamedevActiveEngine || "unity").trim().toLowerCase();
-  const detected = detectRunningGameEngine();
+  const detected = module.exports.detectRunningGameEngine();
   if (detected.detected && detected.engine) {
     return {
       engine: detected.engine,

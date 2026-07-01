@@ -33,8 +33,8 @@ test("probeTcpPort reports closed port", async () => {
 });
 
 test("probeGamedevBridgePorts returns structured summary", async () => {
-  const result = await probeGamedevBridgePorts("127.0.0.1", [{ port: 1, label: "test" }]);
+  const result = await probeGamedevBridgePorts("127.0.0.1", "unity");
   assert.ok(Array.isArray(result.results));
   assert.equal(result.results.length, 1);
-  assert.match(result.summary, /test:1=/);
+  assert.match(result.summary, /unity=/);
 });

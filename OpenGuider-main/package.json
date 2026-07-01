@@ -72,11 +72,14 @@
         "from": "extensions/gamedev-all-in-one",
         "to": "gamedev-all-in-one",
         "filter": [
-          "**/*",
-          "!node_modules/**/*",
-          "!src/**/*",
-          "!tests/**/*"
+          "dist/**/*",
+          "package.json",
+          "package-lock.json"
         ]
+      },
+      {
+        "from": "extensions/gamedev-all-in-one/node_modules",
+        "to": "gamedev-all-in-one/node_modules"
       }
     ],
     "afterPack": "scripts/after-pack.js",

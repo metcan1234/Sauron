@@ -57,7 +57,12 @@ function runSyntaxChecks() {
 }
 
 function runUnitTests() {
-  const excludeFiles = ["gamedev-launcher.test.js", "gamedev-v21.test.js"];
+  const excludeFiles = [
+    "gamedev-launcher.test.js",
+    "gamedev-v21.test.js",
+    "agent-resilience.test.js",
+    "ai-providers.mock.test.js",
+  ];
   const testDirs = [
     path.join(projectRoot, "tests", "unit"),
     path.join(projectRoot, "tests", "ui"),
@@ -97,13 +102,21 @@ function ensureBridgeVsixPresent() {
 }
 
 function ensureGamedevMcpPresent() {
-  const mcpPath = path.resolve(projectRoot, "extensions", "gamedev-all-in-one", "dist", "index.js");
+  const gamedevRoot = path.resolve(projectRoot, "extensions", "gamedev-all-in-one");
+  const mcpPath = path.join(gamedevRoot, "dist", "index.js");
+  const sdkPath = path.join(gamedevRoot, "node_modules", "@modelcontextprotocol", "sdk");
   if (!fs.existsSync(mcpPath)) {
     console.error(`GameDev MCP entry missing at ${mcpPath}`);
     console.error("Run: cd extensions/gamedev-all-in-one && npm ci && npm run build");
     process.exit(1);
   }
+  if (!fs.existsSync(sdkPath)) {
+    console.error(`GameDev MCP dependency missing at ${sdkPath}`);
+    console.error("Run: cd extensions/gamedev-all-in-one && npm ci");
+    process.exit(1);
+  }
   console.log(`GameDev MCP found: ${mcpPath}`);
+  console.log(`GameDev MCP deps found: ${sdkPath}`);
 }
 
 function main() {

@@ -62,6 +62,23 @@ async function setWindowsExecutableMetadata(context) {
   });
 }
 
+async function ensureGamedevPortableBundle(context) {
+  const projectDir = context.packager.projectDir;
+  const sourceModules = path.join(projectDir, "extensions", "gamedev-all-in-one", "node_modules");
+  const targetRoot = path.join(context.appOutDir, "resources", "gamedev-all-in-one");
+  const targetModules = path.join(targetRoot, "node_modules");
+
+  if (!fs.existsSync(sourceModules)) {
+    throw new Error(
+      `gamedev-all-in-one node_modules missing at ${sourceModules}. Run npm ci in extensions/gamedev-all-in-one before dist:win.`,
+    );
+  }
+
+  fs.mkdirSync(targetRoot, { recursive: true });
+  fs.cpSync(sourceModules, targetModules, { recursive: true, force: true });
+}
+
 module.exports = async (context) => {
+  await ensureGamedevPortableBundle(context);
   await setWindowsExecutableMetadata(context);
 };
