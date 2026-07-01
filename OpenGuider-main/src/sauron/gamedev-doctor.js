@@ -103,7 +103,7 @@ function appendGamedevChecks(checks, store, settings = {}) {
 
     try {
       const { readGameDesignBrief } = require("./gamedev-prompt-compiler");
-      const { listWireRecipeFiles } = require("./unity-wire-recipes");
+      const { listWireRecipeFiles } = require("./gamedev-wire-recipes");
       const brief = readGameDesignBrief(workspacePath);
       push({
         id: "gamedev-brief",
@@ -118,7 +118,7 @@ function appendGamedevChecks(checks, store, settings = {}) {
       push({
         id: "gamedev-wire-recipes",
         status: recipeCount >= 21 ? "pass" : "warn",
-        message: `Wire recipe kapsamı: ${recipeCount} dosya`,
+        message: `Wire recipe kapsamı: ${recipeCount} dosya (unity+unreal)`,
         fixHint: recipeCount >= 21 ? "" : "Sauron sürümünü güncelleyin — wire recipe paketi eksik.",
       });
 
