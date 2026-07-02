@@ -60,7 +60,7 @@ const schema = {
   regenerateCurrentStepShortcut: { type:"string", default:"Ctrl+Alt+7" },
   executionMode: { type:"string", enum:["hitl","auto"], default:"hitl" },
   trustLevel: { type:"string", enum:["paranoid","balanced","autopilot"], default:"balanced" },
-  browserAgentEnabled: { type:"boolean", default:true },
+  browserAgentEnabled: { type:"boolean", default:false },
   browserHeadless: { type:"boolean", default:false },
   webStudioEnabled: { type:"boolean", default:true },
   selfBuildEnabled: { type:"boolean", default:true },

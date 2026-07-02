@@ -21,10 +21,11 @@ function isTempWorkspacePath(workspacePath) {
 }
 
 function getDefaultWorkspacePath() {
+  const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
   const candidates = [
-    path.join(os.homedir(), "OneDrive", "Desktop", "SauronWorkspace"),
-    path.join(os.homedir(), "Desktop", "SauronWorkspace"),
+    path.join(localAppData, "Sauron", "workspace"),
     path.join(os.homedir(), "Documents", "SauronWorkspace"),
+    path.join(os.homedir(), "Desktop", "SauronWorkspace"),
   ];
   for (const candidate of candidates) {
     try {

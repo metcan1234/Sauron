@@ -2025,24 +2025,33 @@ app.whenReady().then(async () => {
   createWidgetWindow();
   showWidgetOnStartup();
 
-  // ── Register & initialize plugins [NEW] ───────────────────────────
+  // ── Register & initialize plugins (deferred until panel IPC is ready) ──
   try {
     registry.register(new BrowserPlugin());
-    const runtimeSettings = await getRuntimeSettings();
-    const browserEnabled = store.get('browserAgentEnabled') !== false;
-    if (browserEnabled) {
-      buildBrowserPluginConfig(runtimeSettings).then((config) => registry.initializeAll(config)).then(() => {
-        const status = registry.getStatus('browser') === 'ok' ? 'running' : 'stopped';
+    const initBrowserPlugin = async () => {
+      const ready = await waitForPanelReady(15000);
+      if (!ready) {
+        appLogger.warn("browser-plugin-init-deferred-panel-not-ready");
+      }
+      const runtimeSettings = await getRuntimeSettings();
+      const browserEnabled = store.get("browserAgentEnabled") !== false;
+      if (!browserEnabled) {
+        emitBrowserAgentStatus("stopped");
+        return;
+      }
+      try {
+        const config = await buildBrowserPluginConfig(runtimeSettings);
+        await registry.initializeAll(config);
+        const status = registry.getStatus("browser") === "ok" ? "running" : "stopped";
         emitBrowserAgentStatus(status);
-      }).catch((err) => {
-        appLogger.error('plugin-init-failed', { error: err?.message });
+      } catch (err) {
+        appLogger.error("plugin-init-failed", { error: err?.message });
         emitBrowserAgentStatus(`crashed: ${err?.message}`);
-      });
-    } else {
-      emitBrowserAgentStatus("stopped");
-    }
+      }
+    };
+    void initBrowserPlugin();
   } catch (err) {
-    appLogger.error('plugin-registration-failed', { error: err?.message });
+    appLogger.error("plugin-registration-failed", { error: err?.message });
   }
 
   // ── Channel-runtime: stale session sweep + audit log rotation ───────
