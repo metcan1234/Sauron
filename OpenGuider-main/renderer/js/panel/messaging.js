@@ -649,9 +649,16 @@ export function createMessagingController({
       }
     } catch (error) {
       log("route-outgoing-message error", error);
+      ui.showToast(error?.message || "Mesaj yönlendirilemedi", true);
+      return;
     }
 
-    await sendAssistantMessage(text, options, rawText);
+    try {
+      await sendAssistantMessage(text, options, rawText);
+    } catch (error) {
+      log("send-assistant-message error", error);
+      ui.showToast(error?.message || "Mesaj gönderilemedi", true);
+    }
   }
 
   async function regenerateLastResponse() {

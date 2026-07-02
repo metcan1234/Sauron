@@ -990,13 +990,13 @@ export function createPanelController({
     if (stopBtn) {
       stopBtn.addEventListener("click", messaging.cancelMessage);
     }
-    dom.btnPlanPrev.addEventListener("click", () => invokePlanAction("previous-step"));
-    dom.btnPlanDone.addEventListener("click", () => invokePlanAction("mark-step-done"));
-    dom.btnPlanSkip.addEventListener("click", () => invokePlanAction("skip-current-step"));
-    dom.btnPlanHelp.addEventListener("click", () => invokePlanAction("request-step-help"));
-    dom.btnPlanRegenerate.addEventListener("click", () => invokePlanAction("regenerate-current-step"));
-    dom.btnPlanRecheck.addEventListener("click", () => invokePlanAction("recheck-current-step"));
-    dom.btnPlanCancel.addEventListener("click", () => api.invoke("cancel-active-plan"));
+    dom.btnPlanPrev?.addEventListener("click", () => invokePlanAction("previous-step"));
+    dom.btnPlanDone?.addEventListener("click", () => invokePlanAction("mark-step-done"));
+    dom.btnPlanSkip?.addEventListener("click", () => invokePlanAction("skip-current-step"));
+    dom.btnPlanHelp?.addEventListener("click", () => invokePlanAction("request-step-help"));
+    dom.btnPlanRegenerate?.addEventListener("click", () => invokePlanAction("regenerate-current-step"));
+    dom.btnPlanRecheck?.addEventListener("click", () => invokePlanAction("recheck-current-step"));
+    dom.btnPlanCancel?.addEventListener("click", () => api.invoke("cancel-active-plan"));
 
     if (dom.btnCaptureScreen) {
       dom.btnCaptureScreen.addEventListener("click", () => messaging.captureScreenshot());
@@ -1463,9 +1463,18 @@ export function createPanelController({
     try {
       applyI18nToDocument(doc);
       const settings = await api.invoke("get-settings");
-      const session = await api.invoke("get-active-session");
       state.setRawSettings(settings);
       state.setSettings(settings);
+      dom.sendBtn.disabled = false;
+      dom.pttBtn.disabled = false;
+      bindEvents();
+      gamedevQuickSetup.bindEvents();
+      pluginProfile.bindEvents();
+      chatHistory.bindEvents();
+      setupIPCListeners();
+      log("init:events-bound");
+
+      const session = await api.invoke("get-active-session");
       state.setSessionSnapshot(session);
       ui.buildProviderSelector();
       ui.buildModelSelector();
@@ -1484,15 +1493,8 @@ export function createPanelController({
         sessionSnapshot: state.getSessionSnapshot(),
       });
       updatePlanActionVisibility(assistantMode, session);
-      dom.sendBtn.disabled = false;
-      dom.pttBtn.disabled = false;
       state.setIncludeScreen(settings?.includeScreenshotByDefault === true);
       syncIncludeScreenBadge();
-      bindEvents();
-      gamedevQuickSetup.bindEvents();
-      pluginProfile.bindEvents();
-      chatHistory.bindEvents();
-      setupIPCListeners();
       personaAvatar.render(settings);
       doc.getElementById("btn-voice-chat-loop")?.classList.toggle(
         "hidden",
@@ -1503,23 +1505,22 @@ export function createPanelController({
         ui.showOnboarding();
         void runEnhancedOnboarding({ api, doc, settings });
       }
-      await ensureRuntimePermissions();
-      await updateWorkspaceButtonState();
-      await pluginProfile.resolveProfile({
+      void ensureRuntimePermissions();
+      void updateWorkspaceButtonState();
+      void pluginProfile.resolveProfile({
         source: "startup",
         workspacePath: settings.workspacePath || "",
-      }, { notify: false });
-      const effectiveSettings = state.getSettings();
-      applyOptionalFeatureVisibility(doc, effectiveSettings);
-      channelControls.applyChannelFeatureVisibility(effectiveSettings);
-      await channelControls.refreshChannelStatus();
+      }, { notify: false }).then(() => {
+        const effectiveSettings = state.getSettings();
+        applyOptionalFeatureVisibility(doc, effectiveSettings);
+        channelControls.applyChannelFeatureVisibility(effectiveSettings);
+      });
+      void channelControls.refreshChannelStatus();
       startHandoffHistoryRefresh();
-      await gamedevSceneView.refresh();
+      void gamedevSceneView.refresh();
       dom.textInput.focus();
-      if (!settings?.onboardingCompleted) {
-        // onboarding overlay handles first-run; skip auto intro
-      } else if (!(session?.messages || []).length) {
-        await intro.maybeShowIntro(settings, session?.messages || []);
+      if (settings?.onboardingCompleted && !(session?.messages || []).length) {
+        void intro.maybeShowIntro(settings, session?.messages || []);
       }
       log("init:complete");
     } catch (error) {

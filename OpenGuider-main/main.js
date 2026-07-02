@@ -819,22 +819,36 @@ function revealPanelImmediate(panel, x, y) {
   return true;
 }
 
+function toFinitePanelCoord(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.round(parsed) : Math.round(Number(fallback) || 0);
+}
+
 function animatePanelIn(targetX, targetY) {
   if (!panelWindow || panelWindow.isDestroyed()) {
     return;
   }
+
+  const x = toFinitePanelCoord(targetX, 0);
+  const y = toFinitePanelCoord(targetY, 0);
 
   if (panelOpenAnimationTimer) {
     clearInterval(panelOpenAnimationTimer);
     panelOpenAnimationTimer = null;
   }
 
-  const startY = targetY - 10;
+  const startY = y - 10;
   const steps = 8;
   let step = 0;
-  panelWindow.setPosition(targetX, startY);
-  panelWindow.setOpacity(0);
-  panelWindow.show();
+  try {
+    panelWindow.setPosition(x, startY);
+    panelWindow.setOpacity(0);
+    panelWindow.show();
+  } catch (error) {
+    appLogger?.warn?.("animate-panel-in:initial-failed", { error: error?.message, x, y });
+    revealPanelImmediate(panelWindow, x, y);
+    return;
+  }
 
   panelOpenAnimationTimer = setInterval(() => {
     if (!panelWindow || panelWindow.isDestroyed()) {
@@ -842,19 +856,26 @@ function animatePanelIn(targetX, targetY) {
       panelOpenAnimationTimer = null;
       return;
     }
-    step += 1;
-    const progress = Math.min(1, step / steps);
-    const eased = 1 - (1 - progress) * (1 - progress);
-    const nextY = Math.round(startY + (targetY - startY) * eased);
-    panelWindow.setPosition(targetX, nextY);
-    panelWindow.setOpacity(progress);
+    try {
+      step += 1;
+      const progress = Math.min(1, step / steps);
+      const eased = 1 - (1 - progress) * (1 - progress);
+      const nextY = Math.round(startY + (y - startY) * eased);
+      panelWindow.setPosition(x, nextY);
+      panelWindow.setOpacity(progress);
 
-    if (progress >= 1) {
+      if (progress >= 1) {
+        clearInterval(panelOpenAnimationTimer);
+        panelOpenAnimationTimer = null;
+        panelWindow.setPosition(x, y);
+        panelWindow.setOpacity(1);
+        notifyPanelOpened(panelWindow);
+      }
+    } catch (error) {
       clearInterval(panelOpenAnimationTimer);
       panelOpenAnimationTimer = null;
-      panelWindow.setPosition(targetX, targetY);
-      panelWindow.setOpacity(1);
-      notifyPanelOpened(panelWindow);
+      appLogger?.warn?.("animate-panel-in:tick-failed", { error: error?.message, x, y });
+      revealPanelImmediate(panelWindow, x, y);
     }
   }, 16);
 }
