@@ -138,13 +138,10 @@ function main() {
   console.log(`  Version: ${version}`);
   console.log("═══════════════════════════════════════════\n");
 
-  step("1 / 7 — Prebuild integrity check");
-  run("node", ["scripts/check-build-integrity.js"]);
-
-  step("2 / 7 — Building gamedev-all-in-one MCP");
+  step("1 / 7 — Building gamedev-all-in-one MCP");
   ensureGamedevMcpBuilt();
 
-  step("3 / 7 — Building Bridge VSIX");
+  step("2 / 7 — Building Bridge VSIX");
   if (!fs.existsSync(path.join(BRIDGE_DIR, "node_modules"))) {
     console.log("  → Installing sauron-vscode-bridge dependencies...");
     run("npm", ["install"], { cwd: BRIDGE_DIR });
@@ -157,6 +154,9 @@ function main() {
   }
   const vsixSize = (fs.statSync(VSIX_SOURCE).size / 1024).toFixed(1);
   console.log(`  → VSIX produced: ${vsixSize} KB`);
+
+  step("3 / 7 — Prebuild integrity check");
+  run("node", ["scripts/check-build-integrity.js"]);
 
   step("4 / 7 — Copying VSIX to resources/bridge/");
   fs.mkdirSync(VSIX_TARGET_DIR, { recursive: true });

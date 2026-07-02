@@ -39,11 +39,18 @@ jobs:
           npm run build
         working-directory: OpenGuider-main/extensions/gamedev-all-in-one
 
+      - name: Build bridge VSIX
+        shell: pwsh
+        run: |
+          npm ci
+          npm run package:vsix
+        working-directory: sauron-vscode-bridge
+
       - name: Build Windows installer
         shell: pwsh
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: npm run release:win
+        run: npm run dist:win
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
