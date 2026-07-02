@@ -62,6 +62,7 @@ function runUnitTests() {
     "gamedev-v21.test.js",
     "agent-resilience.test.js",
     "ai-providers.mock.test.js",
+    "panel-browser-task-view.test.js",
   ];
   const testDirs = [
     path.join(projectRoot, "tests", "unit"),

@@ -27,7 +27,8 @@ test("resolveUsableWorkspacePath repairs temp workspace", () => {
   const resolved = resolveUsableWorkspacePath("C:\\Temp\\sauron-temp_project-1");
   assert.equal(resolved.changed, true);
   assert.equal(resolved.issue, "temp");
-  assert.ok(resolved.workspacePath.includes("SauronWorkspace"));
+  assert.ok(resolved.workspacePath.includes("Sauron"));
+  assert.ok(resolved.workspacePath.includes("workspace"));
   assert.ok(describeWorkspacePathIssue(resolved.workspacePath).valid);
 });
 
