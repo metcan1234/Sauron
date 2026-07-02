@@ -92,8 +92,29 @@ async function executeWithAgentResilience({
   throw lastError || new Error("agent-resilience-exhausted");
 }
 
+let resilienceContext = {
+  getWindows: () => [],
+  onFailoverRecord: () => {},
+};
+
+function configureAgentResilienceContext(context = {}) {
+  resilienceContext = {
+    getWindows: typeof context.getWindows === "function" ? context.getWindows : () => [],
+    onFailoverRecord: typeof context.onFailoverRecord === "function" ? context.onFailoverRecord : () => {},
+  };
+}
+
+function getAgentHealthSnapshot() {
+  return {
+    status: "ok",
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 module.exports = {
   executeWithAgentResilience,
   isFailoverEligible,
   buildAgentAttemptChain,
+  configureAgentResilienceContext,
+  getAgentHealthSnapshot,
 };
