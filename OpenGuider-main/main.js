@@ -2019,9 +2019,9 @@ app.whenReady().then(async () => {
     logger: (message, data) => appLogger.warn(message, data),
   });
   createTray();
-  createPanelWindow();
   registerPanelOpenIpc();
   setupIPC();
+  createPanelWindow();
   createWidgetWindow();
   showWidgetOnStartup();
 
