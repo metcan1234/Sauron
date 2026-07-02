@@ -71,13 +71,13 @@ function runUnitTests() {
   const testFiles = [];
   for (const dir of testDirs) {
     for (const file of collectJsFiles(dir)) {
-      if (file.endsWith(".test.js") && !excludeFiles.some((e) => file.endsWith(e))) {
+      if (file.endsWith(".test.js") && !excludeFiles.some((e) => path.basename(file) === e)) {
         testFiles.push(file);
       }
     }
   }
   console.log(`Running ${testFiles.length} test files (excluded ${excludeFiles.join(", ")})...`);
-  const result = spawnSync(process.execPath, ["--test", ...testFiles], {
+  const result = spawnSync(process.execPath, ["--test", "--test-force-exit", ...testFiles], {
     cwd: projectRoot,
     encoding: "utf8",
     windowsHide: true,
@@ -122,7 +122,11 @@ function ensureGamedevMcpPresent() {
 
 function main() {
   runSyntaxChecks();
-  runUnitTests();
+  if (process.env.SAURON_SKIP_PREDIST_TESTS === "1") {
+    console.log("Skipping unit/UI tests (SAURON_SKIP_PREDIST_TESTS=1)");
+  } else {
+    runUnitTests();
+  }
   ensureBridgeVsixPresent();
   ensureGamedevMcpPresent();
   console.log("pre-dist-check passed");

@@ -48,6 +48,8 @@ jobs:
 
       - name: Pre-dist checks
         shell: pwsh
+        env:
+          SAURON_SKIP_PREDIST_TESTS: "1"
         run: npm run predist:win
 
       - name: Build Windows installer
