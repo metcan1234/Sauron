@@ -175,6 +175,20 @@ let windowManager = null;
 let trayController = null;
 let panelReady = false;
 let panelOpenIpcRegistered = false;
+let ipcHandlersReady = false;
+let appBootComplete = false;
+let pendingSecondInstanceOpen = false;
+
+function ensureIpcHandlersReady() {
+  if (ipcHandlersReady) {
+    return;
+  }
+  if (!store) {
+    return;
+  }
+  registerPanelOpenIpc();
+  setupIPC();
+}
 
 function ensureWindowManager() {
   if (windowManager) {
@@ -237,6 +251,11 @@ function resizeCursorOverlayToVirtualBounds() {
 }
 
 function createPanelWindow() {
+  ensureIpcHandlersReady();
+  if (!ipcHandlersReady) {
+    appLogger?.warn?.("create-panel-window:blocked-ipc-not-ready");
+    return;
+  }
   panelReady = false;
   isPanelVisible = false;
   ensureWindowManager().createPanelWindow();
@@ -881,6 +900,11 @@ function animatePanelIn(targetX, targetY) {
 }
 
 function ensurePanelWindow() {
+  ensureIpcHandlersReady();
+  if (!ipcHandlersReady) {
+    appLogger?.warn?.("ensure-panel-window:blocked-ipc-not-ready");
+    return null;
+  }
   if (!panelWindow || panelWindow.isDestroyed()) {
     createPanelWindow();
   }
@@ -1643,6 +1667,9 @@ function registerChannelRuntimeIpc() {
 }
 
 function setupIPC() {
+  if (ipcHandlersReady) {
+    return;
+  }
   registerChannelRuntimeIpc();
 
   // ── Settings ─────────────────────────────────────────────────────────────
@@ -1940,6 +1967,13 @@ function setupIPC() {
     debugLog("ipc:hide-cursor");
     hideCursorOverlay();
   });
+
+  ipcHandlersReady = true;
+  if (appLogger) {
+    appLogger.info("ipc:handlers-ready");
+  } else {
+    debugLog("ipc:handlers-ready");
+  }
 }
 
 // ── ElevenLabs TTS (direct API key) ──────────────────────────────────────────
@@ -2040,8 +2074,7 @@ app.whenReady().then(async () => {
     logger: (message, data) => appLogger.warn(message, data),
   });
   createTray();
-  registerPanelOpenIpc();
-  setupIPC();
+  ensureIpcHandlersReady();
   createPanelWindow();
   createWidgetWindow();
   showWidgetOnStartup();
@@ -2149,11 +2182,21 @@ app.whenReady().then(async () => {
   }
 
   debugLog("app:ready complete");
+  appBootComplete = true;
+  if (pendingSecondInstanceOpen) {
+    pendingSecondInstanceOpen = false;
+    void openOpenGuiderPanel({ source: "second-instance" });
+  }
 });
 
 app.on("second-instance", () => {
   console.log("[Sauron] second-instance: mevcut örnek paneli açıyor");
-  openOpenGuiderPanel({ source: "second-instance" });
+  if (!appBootComplete) {
+    pendingSecondInstanceOpen = true;
+    return;
+  }
+  ensureIpcHandlersReady();
+  void openOpenGuiderPanel({ source: "second-instance" });
 });
 
 // ── Graceful shutdown with plugin cleanup [NEW] ──────────────────────

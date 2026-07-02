@@ -120,8 +120,31 @@ function ensureGamedevMcpPresent() {
   console.log(`GameDev MCP deps found: ${sdkPath}`);
 }
 
+function assertMainIpcStartupOrder() {
+  const mainPath = path.join(projectRoot, "main.js");
+  const source = fs.readFileSync(mainPath, "utf8");
+  const bootIdx = source.indexOf("app.whenReady");
+  if (bootIdx < 0) {
+    console.error("main.js missing app.whenReady block");
+    process.exit(1);
+  }
+  const bootBlock = source.slice(bootIdx, bootIdx + 12000);
+  const ipcReadyIdx = bootBlock.indexOf("ensureIpcHandlersReady()");
+  const panelIdx = bootBlock.indexOf("createPanelWindow()");
+  if (ipcReadyIdx < 0 || panelIdx < 0 || ipcReadyIdx >= panelIdx) {
+    console.error("main.js IPC startup order invalid (ensureIpcHandlersReady must precede createPanelWindow)");
+    process.exit(1);
+  }
+  if (!source.includes("ipcHandlersReady")) {
+    console.error("main.js missing ipcHandlersReady barrier");
+    process.exit(1);
+  }
+  console.log("main.js IPC startup order OK");
+}
+
 function main() {
   runSyntaxChecks();
+  assertMainIpcStartupOrder();
   if (process.env.SAURON_SKIP_PREDIST_TESTS === "1") {
     console.log("Skipping unit/UI tests (SAURON_SKIP_PREDIST_TESTS=1)");
   } else {

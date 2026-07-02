@@ -20,6 +20,7 @@ import { createPttController } from "./ptt.js";
 import { createPanelState } from "./state.js";
 import { createTtsPlaybackController } from "./tts.js";
 import { createPanelUI, queryPanelDom } from "./ui.js";
+import { safeInvoke } from "./ipc-safe-invoke.js";
 
 const BROWSER_EXECUTION_TERMINAL_STATUSES = new Set(["success", "failed", "aborted"]);
 const MODE_BAR_HIDE_DELAY_MS = 150;
@@ -1462,7 +1463,7 @@ export function createPanelController({
     log("init:start");
     try {
       applyI18nToDocument(doc);
-      const settings = await api.invoke("get-settings");
+      const settings = await safeInvoke(api, "get-settings");
       state.setRawSettings(settings);
       state.setSettings(settings);
       dom.sendBtn.disabled = false;
@@ -1474,7 +1475,7 @@ export function createPanelController({
       setupIPCListeners();
       log("init:events-bound");
 
-      const session = await api.invoke("get-active-session");
+      const session = await safeInvoke(api, "get-active-session");
       state.setSessionSnapshot(session);
       ui.buildProviderSelector();
       ui.buildModelSelector();
