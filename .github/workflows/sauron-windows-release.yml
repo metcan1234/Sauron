@@ -46,11 +46,15 @@ jobs:
           npm run package:vsix
         working-directory: sauron-vscode-bridge
 
+      - name: Pre-dist checks
+        shell: pwsh
+        run: npm run predist:win
+
       - name: Build Windows installer
         shell: pwsh
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: npm run dist:win
+        run: npx electron-builder --win nsis
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2

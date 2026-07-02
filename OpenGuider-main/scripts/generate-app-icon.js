@@ -1,7 +1,13 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const sharp = require("sharp");
+
+let sharp;
+try {
+  sharp = require("sharp");
+} catch {
+  sharp = null;
+}
 
 const projectRoot = path.resolve(__dirname, "..");
 const assetsDir = path.join(projectRoot, "renderer", "assets");
@@ -407,7 +413,20 @@ async function main() {
   }
 
   if (!fs.existsSync(openSourcePath)) {
+    if (fs.existsSync(icoPath)) {
+      console.log(`Logo source missing; keeping existing ${icoPath}`);
+      return;
+    }
     console.error(`Open logo source not found: ${openSourcePath}`);
+    process.exit(1);
+  }
+
+  if (!sharp) {
+    if (fs.existsSync(icoPath)) {
+      console.warn("sharp unavailable; keeping existing logo.ico");
+      return;
+    }
+    console.error("sharp is required to generate logo.ico for a clean build.");
     process.exit(1);
   }
 
